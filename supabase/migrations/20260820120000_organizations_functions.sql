@@ -42,7 +42,7 @@ returns table (
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select
     i.id,
@@ -62,7 +62,7 @@ create or replace function public.accept_organization_invitation(p_token text)
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   invitation public.organization_invitations%rowtype;
