@@ -53,3 +53,15 @@ Use standardized slash-style branch names for all new increments.
   password change, onboarding, and MFA actions are implemented.
 - Protected dashboard/settings routes redirect guests to login.
 - Safe redirects reject external and protocol-relative destinations.
+
+## Organizations Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- Create, rename, and delete organization; invite, resend, revoke, and accept invitations; update
+  member roles, remove members, leave, and transfer ownership are all implemented.
+- Cross-tenant access is enforced by RLS (and by SECURITY DEFINER functions for the operations RLS
+  alone cannot express — see `docs/SECURITY.md`), not solely by application-layer checks.
+- A member cannot leave as an organization's sole remaining owner.
+- Organization-scoped pages redirect guests to login and require the `organizations` feature flag.
+- Invitations do not depend on the (not-yet-implemented) email module — the invite link is surfaced
+  directly in the UI for the admin to send manually until `feat/email` lands.
