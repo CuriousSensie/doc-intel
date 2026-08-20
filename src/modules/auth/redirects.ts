@@ -12,7 +12,7 @@ export function getSafeRedirectPath(value: FormDataEntryValue | string | null | 
   return value;
 }
 
-export function withStatus(path: string, key: "error" | "message", value: string) {
+export function withStatus(path: string, key: "error" | "message" | "invite", value: string) {
   const url = new URL(path, appConfig.url);
   url.searchParams.set(key, value);
   return `${url.pathname}${url.search}`;
