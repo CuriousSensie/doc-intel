@@ -21,6 +21,20 @@ npm run dev
 3. Copy the service-role key into `.env.local`; never expose it to browser code.
 4. Run migrations with the Supabase CLI.
 5. Configure auth redirect URLs for local and production app URLs.
+6. Add `/auth/callback` to the redirect allow list for email verification, password reset, and
+   OAuth code exchange.
+
+## Authentication
+
+Supported auth flows:
+
+- Email/password registration and login.
+- Email verification resend.
+- Forgot/reset password.
+- Google and GitHub OAuth through Supabase provider configuration.
+- Optional TOTP MFA enrollment, challenge, and disable flows.
+- Profile setup during onboarding.
+- Password and session actions from account security settings.
 
 ## Stripe
 

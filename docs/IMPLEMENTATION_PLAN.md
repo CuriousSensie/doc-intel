@@ -5,27 +5,26 @@ conventional commits inside each branch.
 
 ## Branch Sequence
 
-1. `feat-foundation`: application scaffold, configuration, env validation, Supabase clients,
-   initial schema/RLS, shared UI, CI, and docs.
-2. `feat-auth`: registration, login, logout, verification, password recovery, OAuth, MFA,
+1. `feat/foundation`: application scaffold, configuration, env validation, Supabase clients,
+   initial schema/RLS, shared UI, and docs.
+2. `feat/auth`: registration, login, logout, verification, password recovery, OAuth, MFA,
    onboarding, account settings, route protection, and profile management.
-3. `feat-organizations`: organizations, members, roles, permissions, invitations, workspace
+3. `feat/organizations`: organizations, members, roles, permissions, invitations, workspace
    switching, and cross-tenant tests.
-4. `feat-email`: Resend provider abstraction, React Email templates, and safe development email
+4. `feat/email`: Resend provider abstraction, React Email templates, and safe development email
    mode.
-5. `feat-billing`: Stripe customers, Checkout, Customer Portal, subscriptions, webhooks,
+5. `feat/billing`: Stripe customers, Checkout, Customer Portal, subscriptions, webhooks,
    entitlements, usage limits, credits, and credit purchases.
-6. `feat-notifications`: in-app notifications, notification preferences, counts, pagination, and
+6. `feat/notifications`: in-app notifications, notification preferences, counts, pagination, and
    service APIs.
-7. `feat-files`: Supabase Storage workflows, avatar upload, file metadata, ownership, MIME/size
+7. `feat/files`: Supabase Storage workflows, avatar upload, file metadata, ownership, MIME/size
    validation, signed URLs, and cleanup hooks.
-8. `feat-admin`: admin dashboard, audit log service, user administration, application admin roles,
+8. `feat/admin`: admin dashboard, audit log service, user administration, application admin roles,
    and privileged mutation audit coverage.
-9. `docs-finalize`: final documentation, diagrams, setup checklist, audit fixes, and final
+9. `docs/finalize`: final documentation, diagrams, setup checklist, audit fixes, and final
    verification.
 
-Slash-style branch names are avoided in this local filesystem because Git could not create nested
-refs. Hyphenated names preserve the same module boundaries.
+Use standardized slash-style branch names for all new increments.
 
 ## Defaults
 
@@ -44,3 +43,13 @@ refs. Hyphenated names preserve the same module boundaries.
 - Supabase clients follow SSR cookie patterns and never expose service-role credentials to browser
   code.
 - Initial migrations define shared tables, indexes, triggers, and RLS policies for later modules.
+
+## Auth Acceptance Criteria
+
+- Auth pages render in a fresh clone before Supabase is configured.
+- Supabase credentials are required only when auth mutations or authenticated session reads need
+  real provider access.
+- Registration, login, logout, password reset, verification resend, OAuth callback, profile update,
+  password change, onboarding, and MFA actions are implemented.
+- Protected dashboard/settings routes redirect guests to login.
+- Safe redirects reject external and protocol-relative destinations.

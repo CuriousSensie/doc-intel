@@ -24,3 +24,11 @@
 
 The Supabase service-role key may only be used from server-only modules. Browser clients and Client
 Components must use the publishable key with RLS-scoped access.
+
+## Authentication
+
+- OAuth and email links exchange codes only through `/auth/callback`.
+- Redirect targets are constrained to local paths.
+- Guest-readable auth pages do not require Supabase configuration in a fresh clone.
+- Auth mutations fail early if required Supabase credentials are missing.
+- TOTP MFA uses Supabase Auth factors and authenticator assurance levels.

@@ -23,7 +23,8 @@ npm run build
 
 ## Current Increment
 
-This branch implements the foundation layer: app scaffold, typed configuration, env validation,
-Supabase SSR clients, initial schema/RLS, shared UI, docs, and baseline tests.
+This repository currently includes the foundation and auth increments: app scaffold, typed
+configuration, env validation, Supabase SSR clients, initial schema/RLS, shared UI, docs, baseline
+tests, auth forms, OAuth callback handling, onboarding, profile/security settings, and MFA flows.
 
 See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the full module sequence.

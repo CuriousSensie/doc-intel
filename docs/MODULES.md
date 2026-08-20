@@ -16,3 +16,9 @@
 | Outgoing Webhooks | Optional | Organizations |
 
 Analytics and API keys are intentionally skipped in this implementation pass.
+
+## Authentication
+
+The auth module uses Supabase Auth with SSR cookies. It provides registration, login, logout,
+verification resend, password reset, OAuth callback handling, profile onboarding, account security
+settings, and optional TOTP MFA.
