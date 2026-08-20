@@ -17,6 +17,7 @@ export const dashboardNavigation: NavigationItem[] = [
   { label: "Notifications", href: "/dashboard/notifications", feature: "notifications" },
   { label: "Files", href: "/dashboard/files", feature: "files" },
   { label: "Billing", href: "/settings/billing", feature: "billing" },
+  { label: "Organizations", href: "/organizations", feature: "organizations" },
   { label: "Team", href: "/settings/team", feature: "organizations" },
   { label: "Admin", href: "/admin", feature: "admin" }
 ];

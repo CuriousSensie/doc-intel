@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { AuthorizationError } from "@/lib/errors";
 import { requireFeature } from "@/modules/auth/authorization";
 import { firstZodError, formDataToObject } from "@/modules/auth/auth.schemas";
-import { withStatus } from "@/modules/auth/redirects";
+import { getSafeRedirectPath, withStatus } from "@/modules/auth/redirects";
 import { requireUser } from "@/modules/auth/session";
 import { clearActiveOrganization, setActiveOrganization } from "@/modules/organizations/active-organization";
 import {
@@ -259,6 +259,25 @@ export async function deleteOrganizationAction(formData: FormData) {
 
   await clearActiveOrganization();
   redirect(withStatus("/organizations", "message", "Organization deleted."));
+}
+
+export async function switchOrganizationAction(formData: FormData) {
+  const context = await requireUser("/organizations");
+  const organizationId = formData.get("organizationId");
+  const next = getSafeRedirectPath(formData.get("next"));
+
+  if (typeof organizationId !== "string") {
+    redirect(withStatus("/organizations", "error", "Missing organization"));
+  }
+
+  const membership = await getMembership(organizationId, context.user.id);
+
+  if (!membership) {
+    redirect(withStatus("/organizations", "error", "You are not a member of that organization"));
+  }
+
+  await setActiveOrganization(organizationId);
+  redirect(next);
 }
 
 export async function acceptInvitationAction(formData: FormData) {
