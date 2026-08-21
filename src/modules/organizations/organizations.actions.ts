@@ -3,10 +3,12 @@
 import { redirect } from "next/navigation";
 
 import { AuthorizationError } from "@/lib/errors";
+import { absoluteUrl } from "@/lib/utils";
 import { requireFeature } from "@/modules/auth/authorization";
 import { firstZodError, formDataToObject } from "@/modules/auth/auth.schemas";
 import { getSafeRedirectPath, withStatus } from "@/modules/auth/redirects";
 import { requireUser } from "@/modules/auth/session";
+import { sendEmail } from "@/modules/email/email.service";
 import { clearActiveOrganization, setActiveOrganization } from "@/modules/organizations/active-organization";
 import {
   createOrganizationSchema,
@@ -22,6 +24,7 @@ import {
   createOrganization,
   deleteOrganization,
   getMembership,
+  getOrganization,
   leaveOrganization,
   removeMember,
   revokeInvitation,
@@ -46,12 +49,40 @@ async function requireOrgRole(organizationId: string, userId: string, roles: Arr
   return membership;
 }
 
-async function issueInvitation(organizationId: string, invitedBy: string, email: string, role: AssignableRole) {
+async function issueInvitation(
+  organizationId: string,
+  inviter: { id: string; name: string },
+  email: string,
+  role: AssignableRole
+) {
   let target = withStatus("/settings/team", "message", "Invitation ready. Share the link below.");
 
   try {
-    const { token } = await createInvitation(organizationId, invitedBy, email, role);
+    const [{ token }, organization] = await Promise.all([
+      createInvitation(organizationId, inviter.id, email, role),
+      getOrganization(organizationId)
+    ]);
+
     target = withStatus(target, "invite", token);
+
+    const emailResult = await sendEmail({
+      to: email,
+      template: "organization-invitation",
+      variables: {
+        organizationName: organization?.name ?? "your organization",
+        inviterName: inviter.name,
+        role,
+        acceptUrl: absoluteUrl(`/invitations/${token}`)
+      }
+    });
+
+    target = withStatus(
+      target,
+      "message",
+      emailResult
+        ? "Invitation sent."
+        : "Invitation created, but the email could not be sent. Share the link below."
+    );
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -121,7 +152,12 @@ export async function inviteMemberAction(formData: FormData) {
     redirect(withStatus("/settings/team", "error", firstZodError(parsed.error)));
   }
 
-  await issueInvitation(organizationId, context.user.id, parsed.data.email, parsed.data.role);
+  await issueInvitation(
+    organizationId,
+    { id: context.user.id, name: context.profile?.name ?? context.user.email ?? "A team member" },
+    parsed.data.email,
+    parsed.data.role
+  );
 }
 
 export async function resendInvitationAction(formData: FormData) {
@@ -140,7 +176,12 @@ export async function resendInvitationAction(formData: FormData) {
   }
 
   await requireOrgRole(organizationId, context.user.id, ["owner", "admin"]);
-  await issueInvitation(organizationId, context.user.id, email, role);
+  await issueInvitation(
+    organizationId,
+    { id: context.user.id, name: context.profile?.name ?? context.user.email ?? "A team member" },
+    email,
+    role
+  );
 }
 
 export async function revokeInvitationAction(formData: FormData) {
