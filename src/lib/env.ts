@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const emailModeSchema = z.enum(["console", "resend", "dev-recipient"]);
+const emailProviderSchema = z.enum(["console", "smtp"]);
 
 export const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
@@ -11,10 +11,17 @@ export const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  RESEND_API_KEY: z.string().optional(),
+  EMAIL_PROVIDER: emailProviderSchema.default("console"),
   EMAIL_FROM: z.string().min(1).default("MVP Boilerplate <no-reply@example.com>"),
-  EMAIL_MODE: emailModeSchema.default("console"),
   EMAIL_DEV_RECIPIENT: z.string().email().optional().or(z.literal("")),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
   RATE_LIMIT_MODE: z.enum(["memory", "external"]).default("memory")
 });
 
