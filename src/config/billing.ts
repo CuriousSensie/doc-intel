@@ -1,4 +1,7 @@
-export type BillingOwner = "user" | "organization";
+import { env } from "@/lib/env";
+import { featureConfig } from "@/config/features";
+
+export type BillingOwnerType = "user" | "organization";
 
 export type PlanKey = "free" | "pro" | "team";
 
@@ -19,14 +22,29 @@ export type BillingPlan = {
   features: PlanFeatureMap;
 };
 
+export type CreditPack = {
+  key: string;
+  name: string;
+  credits: number;
+  priceCents: number;
+  stripePriceId?: string;
+};
+
+/**
+ * Which entity billing belongs to is derived from whether organizations are enabled, not an
+ * independent setting — a product either bills individual users (no organizations) or bills the
+ * organization on behalf of all its members (organizations enabled). Mixing the two is not a
+ * supported configuration.
+ */
+export const billingOwnerType: BillingOwnerType = featureConfig.organizations ? "organization" : "user";
+
 export const billingConfig = {
-  defaultOwner: "user" satisfies BillingOwner,
   currency: "usd",
   creditPacks: [
-    { key: "starter", name: "Starter credits", credits: 100, priceCents: 1000 },
-    { key: "growth", name: "Growth credits", credits: 500, priceCents: 4000 },
-    { key: "scale", name: "Scale credits", credits: 1000, priceCents: 7000 }
-  ],
+    { key: "starter", name: "Starter credits", credits: 100, priceCents: 1000, stripePriceId: env.STRIPE_PRICE_CREDITS_STARTER },
+    { key: "growth", name: "Growth credits", credits: 500, priceCents: 4000, stripePriceId: env.STRIPE_PRICE_CREDITS_GROWTH },
+    { key: "scale", name: "Scale credits", credits: 1000, priceCents: 7000, stripePriceId: env.STRIPE_PRICE_CREDITS_SCALE }
+  ] satisfies CreditPack[],
   plans: {
     free: {
       key: "free",
@@ -45,8 +63,8 @@ export const billingConfig = {
       name: "Pro",
       description: "For individual customers building real workflows.",
       priceMonthlyCents: 1900,
-      stripePriceIdMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
-      stripePriceIdYearly: process.env.STRIPE_PRICE_PRO_YEARLY,
+      stripePriceIdMonthly: env.STRIPE_PRICE_PRO_MONTHLY,
+      stripePriceIdYearly: env.STRIPE_PRICE_PRO_YEARLY,
       features: {
         teamMembers: 1,
         projects: 50,
@@ -59,8 +77,8 @@ export const billingConfig = {
       name: "Team",
       description: "For small companies using organizations and shared billing.",
       priceMonthlyCents: 4900,
-      stripePriceIdMonthly: process.env.STRIPE_PRICE_TEAM_MONTHLY,
-      stripePriceIdYearly: process.env.STRIPE_PRICE_TEAM_YEARLY,
+      stripePriceIdMonthly: env.STRIPE_PRICE_TEAM_MONTHLY,
+      stripePriceIdYearly: env.STRIPE_PRICE_TEAM_YEARLY,
       features: {
         teamMembers: 10,
         projects: 250,

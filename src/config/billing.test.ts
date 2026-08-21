@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { billingConfig } from "@/config/billing";
+import { billingConfig, billingOwnerType } from "@/config/billing";
+import { featureConfig } from "@/config/features";
 
 describe("billingConfig", () => {
-  it("defaults billing ownership to user accounts", () => {
-    expect(billingConfig.defaultOwner).toBe("user");
+  it("derives billing ownership from the organizations feature flag, not an independent setting", () => {
+    expect(billingOwnerType).toBe(featureConfig.organizations ? "organization" : "user");
   });
 
   it("keeps an organization-ready team plan available", () => {

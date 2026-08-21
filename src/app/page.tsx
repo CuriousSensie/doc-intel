@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Building2, CreditCard, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 
 import { appConfig } from "@/config/app";
+import { billingOwnerType } from "@/config/billing";
 import { moduleMatrix } from "@/config/modules";
 import { Button } from "@/components/ui/button";
 
@@ -79,7 +80,7 @@ export default function HomePage() {
           <dl className="grid grid-cols-3 gap-3 border-y border-border py-5 text-sm">
             <div>
               <dt className="text-muted">Default billing</dt>
-              <dd className="mt-1 font-semibold">{appConfig.billing.defaultOwner}</dd>
+              <dd className="mt-1 font-semibold capitalize">{billingOwnerType}</dd>
             </div>
             <div>
               <dt className="text-muted">Modules</dt>
