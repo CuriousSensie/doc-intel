@@ -4,7 +4,7 @@
 | --- | ---: | --- |
 | Authentication | Required | Supabase |
 | Profiles | Required | Auth |
-| Email | Required | Resend |
+| Email | Required | SMTP |
 | Organizations | Optional | Auth |
 | RBAC | Optional | Organizations |
 | Billing | Optional | Stripe |
@@ -53,7 +53,39 @@ tracked via an `active_org` cookie (`src/modules/organizations/active-organizati
 param, so other modules (billing, files) can read `getActiveOrganizationId()` without threading an
 org id through every route.
 
-**Known gap**: inviting a member creates the invitation record and returns a one-time invite link
-in the UI for the admin to copy and send manually — there is no email module yet. `feat/email` will
-wire `createInvitation`'s existing token to an actual send without changing this module's schema or
-service functions.
+**Note**: inviting a member creates the invitation record, sends the invitation email (see the
+Email module below), and still surfaces the one-time invite link in the UI so an admin has a
+fallback if delivery fails or SMTP isn't configured yet.
+
+## Email
+
+**Purpose**: required transactional email — currently just organization invitations; more
+templates get added alongside the module that triggers them (billing receipts, security alerts,
+etc.), not ahead of time.
+
+**Dependency**: none required to enable (the module is always on) — an SMTP mailbox is only needed
+if you want real delivery. Without one, `EMAIL_PROVIDER=console` logs rendered emails instead of
+sending them, so the app works out of the box in a fresh clone. See `docs/SETUP.md` for setup
+steps.
+
+**Configuration**: `EMAIL_PROVIDER` (`console` or `smtp`), `EMAIL_FROM`, `EMAIL_DEV_RECIPIENT`, and
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASSWORD` in `.env.local` (schema in
+`src/lib/env.ts`).
+
+**How to enable**: nothing to enable — it's required infrastructure, like Auth. Set
+`EMAIL_PROVIDER=smtp` plus the `SMTP_*` variables to send real email instead of logging it.
+
+**How to extend**:
+
+- Add a template: create a React Email component in `src/emails/` (wrap it in the shared
+  `EmailLayout` from `src/emails/layout.tsx` for consistent branding), then add an entry to the
+  `templates` registry in `src/modules/email/email.service.ts` with a `subject` function and the
+  variables type. `sendEmail({ to, template, variables })` is fully typed per template key.
+- Add a provider: implement the `EmailProvider` interface (`src/lib/email/types.ts` —
+  one `send(message)` method) in a new file under `src/lib/email/`, then add a case for it in
+  `getEmailProvider()`'s switch statement in `src/lib/email/index.ts` and a new `EMAIL_PROVIDER`
+  enum value in `src/lib/env.ts`. `ConsoleEmailProvider` and `SmtpEmailProvider` are the two
+  reference implementations — switching providers never touches `email.service.ts` or any caller.
+- `sendEmail()` never throws — a delivery failure is logged and returns `null` so callers (like
+  the organization invitation flow) can degrade gracefully instead of blocking the action that
+  triggered the email.

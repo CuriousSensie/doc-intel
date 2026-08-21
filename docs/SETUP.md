@@ -12,7 +12,7 @@ npm run dev
 
 - Supabase project for Auth, Postgres, and Storage.
 - Stripe account for Checkout, Billing, Customer Portal, and webhooks.
-- Resend account and verified sending domain for production email.
+- An SMTP mailbox (Hostinger or any provider) for production email.
 
 ## Supabase
 
@@ -43,8 +43,27 @@ Supported auth flows:
 3. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
 4. Forward local webhooks to `/api/webhooks/stripe` during development.
 
-## Resend
+## Email
 
-1. Verify a sending domain.
-2. Set `RESEND_API_KEY` and `EMAIL_FROM`.
-3. Keep `EMAIL_MODE=console` locally unless testing delivery intentionally.
+Local development defaults to `EMAIL_PROVIDER=console`, which logs rendered emails instead of
+sending them — no credentials required. Switch to real delivery with `EMAIL_PROVIDER=smtp` and the
+`SMTP_*` variables below.
+
+1. Set `EMAIL_FROM` to the address you want to send from (e.g. `"Your App <hello@yourdomain.com>"`).
+2. Set `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD` from your mailbox provider.
+3. Set `SMTP_PORT` and `SMTP_SECURE` together — they must match:
+   - Port `465` with `SMTP_SECURE=true` (implicit TLS), or
+   - Port `587` with `SMTP_SECURE=false` (STARTTLS).
+
+   Mismatching them is the most common cause of an SMTP connection failing with
+   "Greeting never received."
+4. Optionally set `EMAIL_DEV_RECIPIENT` to reroute every outgoing email to one inbox regardless of
+   the real recipient — useful for testing real delivery locally without emailing real users.
+
+### Hostinger example
+
+Hostinger email plans expose standard SMTP: `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`,
+`SMTP_SECURE=true`, with `SMTP_USER`/`SMTP_PASSWORD` set to the mailbox's own credentials. Any other
+SMTP provider works the same way — nothing in the app is Hostinger-specific. See
+`docs/SECURITY.md` for how the `EmailProvider` abstraction and dev-recipient override work, and
+`docs/MODULES.md` for how to add another provider (e.g. a transactional API like Resend) later.

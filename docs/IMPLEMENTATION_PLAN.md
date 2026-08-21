@@ -65,3 +65,19 @@ Use standardized slash-style branch names for all new increments.
 - Organization-scoped pages redirect guests to login and require the `organizations` feature flag.
 - Invitations do not depend on the (not-yet-implemented) email module — the invite link is surfaced
   directly in the UI for the admin to send manually until `feat/email` lands.
+
+## Email Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- A pluggable `EmailProvider` abstraction exists with two working implementations (`console`,
+  `smtp`) selected via `EMAIL_PROVIDER`; adding another provider never requires touching
+  `email.service.ts` or any caller.
+- `EMAIL_PROVIDER=console` (the default) requires no credentials and never sends real email, so a
+  fresh clone works without SMTP configured.
+- `EMAIL_DEV_RECIPIENT` reroutes every outgoing email to one inbox regardless of the real
+  recipient, independent of which provider is active.
+- Organization invitations send a real email (via the shared branded layout) when SMTP is
+  configured, and degrade gracefully — the invite record and copyable link still work — when it
+  isn't or when delivery fails.
+- Templates are strongly typed per `sendEmail({ to, template, variables })` call; SMTP credentials
+  are server-only and never logged.

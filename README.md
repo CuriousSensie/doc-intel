@@ -1,6 +1,6 @@
 # MVP Boilerplate
 
-Production-ready full-stack SaaS boilerplate built with Next.js, Supabase, Stripe, Resend, and
+Production-ready full-stack SaaS boilerplate built with Next.js, Supabase, Stripe, SMTP email, and
 TypeScript.
 
 ## Quick Start

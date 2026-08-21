@@ -69,3 +69,22 @@ future caller bypasses the service layer.
 Role-based UI checks in `organizations.actions.ts` (`requireOrgRole`) exist for clear error
 messages and are not the security boundary — RLS on `organizations`, `organization_members`, and
 `organization_invitations` is what actually prevents cross-tenant access.
+
+## Email
+
+`SMTP_USER`/`SMTP_PASSWORD` (and any future provider's API key) are server-only environment
+variables (`src/lib/env.ts`) and are never sent to the browser. `sendEmail()`
+(`src/modules/email/email.service.ts`) logs delivery failures via the structured `logger` but only
+ever logs the template name, recipient, and error message — never the SMTP credentials or the
+raw error object, matching rule 11 (do not log secrets).
+
+Local development defaults to `EMAIL_PROVIDER=console`, which logs the rendered email instead of
+sending it, so a fresh clone never emails a real person by accident. `EMAIL_DEV_RECIPIENT`, when
+set, reroutes every outgoing email to one inbox regardless of the real recipient — independent of
+which provider is active — so real SMTP delivery can be tested in development without emailing
+real users.
+
+A failed email send never blocks or rolls back the action that triggered it (e.g. inviting a
+member): `sendEmail()` catches its own errors and returns `null` rather than throwing, so the
+already-created database row (the invitation) is never left inconsistent with a half-completed
+side effect.

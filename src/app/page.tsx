@@ -24,7 +24,7 @@ const pillars = [
   {
     icon: Mail,
     title: "Transactional messaging",
-    body: "Resend provider abstraction, React Email templates, notification preferences, and safe development email mode."
+    body: "Pluggable SMTP/console email provider abstraction, React Email templates, notification preferences, and safe development email mode."
   },
   {
     icon: ShieldCheck,

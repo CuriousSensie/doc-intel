@@ -13,7 +13,7 @@ export type ModuleDefinition = {
 export const moduleMatrix: ModuleDefinition[] = [
   { key: "auth", name: "Authentication", status: "required", dependency: "Supabase" },
   { key: "profiles", name: "Profiles", status: "required", dependency: "Auth" },
-  { key: "email", name: "Email", status: "required", dependency: "Resend" },
+  { key: "email", name: "Email", status: "required", dependency: "SMTP" },
   {
     key: "organizations",
     name: "Organizations",
