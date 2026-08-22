@@ -174,3 +174,34 @@ If several features end up needing the same "notify these people via email and i
 consider centralizing into a small event-dispatch module (`event type -> channels`) at that
 point — not before, per temp.md §109's guidance against abstraction layers with only one real
 caller.
+
+## Files
+
+**Purpose**: Supabase Storage-backed file uploads with ownership, ownership-based access, MIME/size
+validation, and signed downloads — a generic `/dashboard/files` list plus the concrete avatar
+upload workflow on `/settings/profile`.
+
+**Dependency**: Supabase Storage. Uses the `files` table from the initial schema (select-own/select-org-member/select-admin,
+insert-owner, delete-owner-or-org-admin RLS — no update policy) plus the `avatars` (public) and
+`files` (private) Storage buckets created in
+`supabase/migrations/20260822090000_files_storage.sql`.
+
+**Configuration**: gated by `features.files`. Per-category size caps and MIME allowlists
+(`avatar`, `document`) live in `src/config/files.ts`, along with the signed-URL expiry used for
+private downloads.
+
+**How to enable**: set `FEATURE_FILES=true` (default). `/dashboard/files` and the avatar section
+on `/settings/profile` appear automatically once enabled.
+
+**How to extend**: `src/modules/files/files.service.ts` holds all Storage/DB access —
+`uploadFile`/`uploadAvatar` (validate via `src/lib/files/validate.ts`'s magic-byte sniffing, then
+write through the admin client), `listFiles` (cursor-paginated, reusing `src/lib/pagination.ts`
+through the user-scoped client so RLS does the visibility filtering), `deleteFile` (an
+app-level ownership/org-admin check via `canManageFile` before an atomic storage-object + row
+delete through the admin client), and `getFileDownloadUrl` (confirms visibility via the
+user-scoped client, then mints a signed URL through the admin client — see
+`src/app/api/files/[id]/download/route.ts`). Uploads are automatically scoped to the uploader's
+active organization when organizations are enabled (no per-upload "share with org" toggle exists
+yet — add one only once a real need for private-within-org files shows up). Deleting an
+org-scoped file as an org admin (not just the file's owner) reuses `can(role, "organization.files.manage")`
+from the Organizations module's RBAC, the same pattern as billing's permission checks.

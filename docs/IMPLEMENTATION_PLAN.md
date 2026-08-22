@@ -116,3 +116,22 @@ Use standardized slash-style branch names for all new increments.
 - At least one real producer exists (organization invitation acceptance notifies the org's
   owner/admins) — no notification-sending code without a real caller.
 - The unread count shown on the dashboard reflects the true total, not just the current page.
+
+## Files Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- All Storage writes (upload, delete, signed-URL minting) go through the service-role admin
+  client; no `storage.objects` RLS policies exist because nothing accesses Storage directly from
+  the browser.
+- Uploaded content is validated by magic-byte sniffing, not just the declared MIME type or
+  filename extension, and rejected if it exceeds its category's size cap or isn't on its
+  allowlist.
+- The `files` bucket is private — downloads only happen through a signed URL minted after
+  confirming the requesting user can see the row via RLS; the `avatars` bucket is public.
+- Listing is cursor-paginated, reusing the same generic cursor helper as Notifications.
+- Two real callers exist: the generic `/dashboard/files` list and the avatar upload workflow on
+  `/settings/profile` — no speculative third use case.
+- Deleting a file is gated by an application-level ownership/org-admin check
+  (`can(role, "organization.files.manage")`), reusing the Organizations module's RBAC.
+- Replacing an avatar uploads the new object, updates `profiles.avatar_url`, and only then
+  deletes the previous object — never leaving the profile pointing at a missing file.
