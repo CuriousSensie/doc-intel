@@ -3,12 +3,15 @@
 import { redirect } from "next/navigation";
 
 import { AuthorizationError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { absoluteUrl } from "@/lib/utils";
 import { requireFeature } from "@/modules/auth/authorization";
 import { firstZodError, formDataToObject } from "@/modules/auth/auth.schemas";
 import { getSafeRedirectPath, withStatus } from "@/modules/auth/redirects";
 import { requireUser } from "@/modules/auth/session";
+import type { AuthContext } from "@/modules/auth/session";
 import { sendEmail } from "@/modules/email/email.service";
+import { createNotification } from "@/modules/notifications/notifications.service";
 import { clearActiveOrganization, setActiveOrganization } from "@/modules/organizations/active-organization";
 import {
   createOrganizationSchema,
@@ -26,6 +29,7 @@ import {
   getMembership,
   getOrganization,
   leaveOrganization,
+  listMembers,
   removeMember,
   revokeInvitation,
   transferOwnership,
@@ -321,6 +325,32 @@ export async function switchOrganizationAction(formData: FormData) {
   redirect(next);
 }
 
+async function notifyOrganizationAdminsOfNewMember(organizationId: string, newMember: AuthContext) {
+  try {
+    const [organization, members] = await Promise.all([getOrganization(organizationId), listMembers(organizationId)]);
+    const recipients = members.filter(
+      (member) => (member.role === "owner" || member.role === "admin") && member.user_id !== newMember.user.id
+    );
+    const joinedName = newMember.profile?.name ?? newMember.user.email ?? "Someone";
+
+    await Promise.all(
+      recipients.map((member) =>
+        createNotification(member.user_id, {
+          type: "organization.member_joined",
+          title: "New team member",
+          message: `${joinedName} joined ${organization?.name ?? "your organization"}.`,
+          metadata: { organizationId, newMemberId: newMember.user.id }
+        })
+      )
+    );
+  } catch (error) {
+    logger.error("organizations.notify_admins_failed", {
+      organizationId,
+      errorMessage: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+}
+
 export async function acceptInvitationAction(formData: FormData) {
   const token = formData.get("token");
 
@@ -328,14 +358,16 @@ export async function acceptInvitationAction(formData: FormData) {
     redirect(withStatus("/dashboard", "error", "Missing invitation token"));
   }
 
-  await requireUser(`/invitations/${token}`);
+  const context = await requireUser(`/invitations/${token}`);
+  let organizationId: string;
 
   try {
-    const organizationId = await acceptInvitation(token);
+    organizationId = await acceptInvitation(token);
     await setActiveOrganization(organizationId);
   } catch (error) {
     redirectWithError(`/invitations/${token}`, error);
   }
 
+  await notifyOrganizationAdminsOfNewMember(organizationId, context);
   redirect(withStatus("/dashboard", "message", "Invitation accepted."));
 }
