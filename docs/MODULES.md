@@ -89,3 +89,58 @@ steps.
 - `sendEmail()` never throws — a delivery failure is logged and returns `null` so callers (like
   the organization invitation flow) can degrade gracefully instead of blocking the action that
   triggered the email.
+
+## Billing
+
+**Purpose**: Stripe subscriptions, Checkout, the Customer Portal, plan entitlements, and usage
+limits.
+
+**Dependency**: Stripe. Uses the `stripe_customers`, `subscriptions`, and `usage_counters` tables
+and the `increment_usage_counter` SECURITY DEFINER function from the initial schema and
+`supabase/migrations/20260821130000_billing_functions.sql`. All writes to these tables go through
+the service-role admin client (`src/lib/supabase/admin.ts`), not user-scoped RLS — see
+`docs/SECURITY.md`.
+
+**Configuration**: gated by `features.billing`. Plans, prices, and feature limits are defined in
+`src/config/billing.ts`; Stripe price ids come from `STRIPE_PRICE_*` env vars (`src/lib/env.ts`).
+**Who billing applies to is not independently configurable** — `billingOwnerType` in
+`src/config/billing.ts` is derived from `features.organizations`: organizations enabled means the
+active organization is billed and individual members never pay; disabled means every user is
+billed directly. See `src/modules/billing/owner.ts`'s `resolveBillingOwner()`, which is the single
+place this decision is made — every other billing/usage/credit function takes the resolved
+`BillingOwner` and never branches on the feature flag itself, so one `/settings/billing` page and
+one service layer serve both modes without duplicated code paths.
+
+**How to enable**: set `FEATURE_BILLING=true` (default) plus `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET`. See `docs/SETUP.md` for creating products/prices and configuring the
+webhook endpoint (`/api/webhooks/stripe`).
+
+**How to extend**: `src/modules/billing/billing.service.ts` holds Stripe customer resolution, plan
+resolution, and Checkout/Portal session creation; `usage.service.ts` holds usage-limit
+tracking; `billing.actions.ts` holds the server actions (gated by
+`can(role, "organization.billing.manage")` in org-mode, reusing the RBAC from the Organizations
+module — only owner/admin can manage billing, never a plain member). The webhook handler
+(`src/app/api/webhooks/stripe/route.ts`) is the source of truth for subscription state — never
+trust the Checkout success redirect alone.
+
+## Credits
+
+**Purpose**: a prepaid-usage ledger for products that sell credit packs or grant monthly credits
+alongside a subscription.
+
+**Dependency**: Billing. Uses the `credit_transactions` table (a pure ledger — never a mutable
+balance column, so the balance is always derivable and auditable) and the `consume_credits`
+SECURITY DEFINER function, which serializes concurrent consumption per owner via a Postgres
+advisory lock to prevent double-spending.
+
+**Configuration**: gated by `features.credits`. Credit packs (name, credit amount, price, Stripe
+price id) are defined in `billingConfig.creditPacks` (`src/config/billing.ts`); each paid plan's
+`features.credits` is granted automatically on every successful invoice via the Stripe webhook.
+
+**How to enable**: set `FEATURE_CREDITS=true` (default) and configure `STRIPE_PRICE_CREDITS_*` env
+vars for each pack you want purchasable.
+
+**How to extend**: `src/modules/billing/credits.service.ts` exports `getCreditBalance`,
+`grantCredits`, `consumeCredits`, `refundCredits`, and `adminAdjustCredits`. Only `consumeCredits`
+needs the atomic SQL function — granting credits is always a safe plain insert since there's no
+double-spend risk when adding to the ledger, only when subtracting from it.

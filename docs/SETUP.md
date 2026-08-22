@@ -38,10 +38,27 @@ Supported auth flows:
 
 ## Stripe
 
-1. Create products and prices matching `src/config/billing.ts`.
-2. Configure the Customer Portal in Stripe.
-3. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
-4. Forward local webhooks to `/api/webhooks/stripe` during development.
+Billing is optional (`FEATURE_BILLING`) and, when organizations are enabled, bills the active
+organization rather than individual users — see the Billing section of `docs/MODULES.md` for how
+that's decided.
+
+1. In the Stripe dashboard (test mode to start), create a product for each paid plan in
+   `src/config/billing.ts` (currently Pro and Team), each with a monthly and yearly recurring
+   price. Copy the price ids into `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`,
+   `STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_PRICE_TEAM_YEARLY`.
+2. Create a one-time price for each credit pack in `billingConfig.creditPacks`, and set
+   `STRIPE_PRICE_CREDITS_STARTER`/`_GROWTH`/`_SCALE`.
+3. Enable the Customer Portal (Settings → Billing → Customer Portal) so `/settings/billing`'s
+   "Manage billing" button works.
+4. Set `STRIPE_SECRET_KEY` from the dashboard's API keys page.
+5. Create a webhook endpoint pointing at `/api/webhooks/stripe` (in production, your real domain;
+   locally, use the Stripe CLI: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`,
+   which prints a signing secret for local use) subscribed to at least: `checkout.session.completed`,
+   `customer.subscription.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.paid`. Set `STRIPE_WEBHOOK_SECRET` from it.
+6. A plan with no price id configured shows a disabled "Contact us" button on `/pricing` and
+   `/settings/billing` instead of a broken Checkout link — that's expected until its price ids are
+   set, not a bug.
 
 ## Email
 

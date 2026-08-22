@@ -88,3 +88,45 @@ A failed email send never blocks or rolls back the action that triggered it (e.g
 member): `sendEmail()` catches its own errors and returns `null` rather than throwing, so the
 already-created database row (the invitation) is never left inconsistent with a half-completed
 side effect.
+
+## Billing
+
+`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are server-only and never sent to the browser.
+`stripe_customers`, `subscriptions`, and `credit_transactions` have **select-only** RLS policies
+(owner or admin) — no insert/update policy at all, by design. Every write to these tables goes
+through the service-role admin client (`src/lib/supabase/admin.ts`), from either the webhook
+handler or the billing/usage/credits service layer, never from a user-scoped client. This means
+the RLS layer alone cannot be bypassed by a client-side call to create or edit a subscription —
+only trusted server code can.
+
+The webhook handler (`src/app/api/webhooks/stripe/route.ts`) verifies every event's signature via
+`stripe.webhooks.constructEventAsync` before touching the database, and is idempotent: each event
+is recorded in `webhook_events` keyed by `(provider, event_id)`, and an event already marked
+`processed` is skipped on retry rather than reprocessed. Handlers return a 500 on unexpected
+errors so Stripe retries automatically; the dedupe check re-reads the event's stored `status`
+rather than re-inserting, so retries are safe.
+
+Stripe — not the browser redirect after Checkout — is the source of truth for subscription state.
+The Checkout success URL is purely a UI courtesy message; provisioning only happens once the
+webhook confirms it.
+
+Two atomic SQL functions exist because plain client-side reads-then-writes cannot safely guarantee
+correctness under concurrency (temp.md §64/§17):
+
+- `increment_usage_counter` — a single conditional `INSERT ... ON CONFLICT ... WHERE quantity +
+  amount <= limit`, so a burst of concurrent requests can't collectively exceed a plan's usage
+  limit. It also replaces `usage_counters`' original composite unique constraint (which included
+  nullable owner columns Postgres never treats as equal to each other) with two partial unique
+  indexes — see the migration for details.
+- `consume_credits` — `credit_transactions` is a pure ledger with no mutable balance column, so
+  checking "is there enough balance" and inserting the debit must happen atomically. The function
+  takes a per-owner Postgres advisory lock (`pg_advisory_xact_lock`, released automatically at the
+  end of the transaction) before summing the ledger and inserting, which serializes concurrent
+  consumption for the same owner and prevents double-spending without needing a mutable counter.
+
+Both functions are called via the admin client, so RLS bypass is intentional there too. Role-based
+checks in `billing.actions.ts` (`requireBillingPermission`, reusing `can(role,
+"organization.billing.manage")` from the Organizations module) exist for clear error messages and
+are not the security boundary in organization mode — the select-only RLS policies and the
+admin-client-only write path are what actually prevent one organization's members from touching
+another's billing data.

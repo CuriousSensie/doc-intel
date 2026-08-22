@@ -81,3 +81,24 @@ Use standardized slash-style branch names for all new increments.
   isn't or when delivery fails.
 - Templates are strongly typed per `sendEmail({ to, template, variables })` call; SMTP credentials
   are server-only and never logged.
+
+## Billing Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- Billing ownership (user vs. organization) is derived from `features.organizations`, never an
+  independently configurable setting — `resolveBillingOwner()` is the single place this is decided,
+  and every billing/usage/credit function takes the resolved owner rather than branching on the
+  feature flag itself.
+- Checkout, the Customer Portal, subscription webhooks (idempotent, signature-verified), plan
+  entitlements, usage limits, the credit ledger, and one-time credit-pack purchases are all
+  implemented.
+- Stripe — via the webhook handler — is the source of truth for subscription state, never the
+  Checkout success redirect.
+- Usage-limit increments and credit consumption are safe under concurrency (atomic SQL functions,
+  not read-then-write from application code).
+- All billing table writes go through the service-role admin client, matching the tables'
+  select-only RLS policies; in organization mode, only owner/admin members can manage billing
+  (`can(role, "organization.billing.manage")`), reusing the Organizations module's RBAC rather than
+  a new permission system.
+- `/settings/billing` and `/pricing` both work correctly whether `features.organizations` is on or
+  off, with no separate code paths for the two modes.
