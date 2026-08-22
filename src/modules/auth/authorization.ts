@@ -1,6 +1,8 @@
 import { AuthorizationError } from "@/lib/errors";
 import { billingConfig, type PlanKey } from "@/config/billing";
 import { type FeatureKey, isFeatureEnabled } from "@/config/features";
+import { getOwnerPlan } from "@/modules/billing/billing.service";
+import type { BillingOwner } from "@/modules/billing/owner";
 
 export function requireFeature(feature: FeatureKey) {
   if (!isFeatureEnabled(feature)) {
@@ -14,6 +16,16 @@ export function hasFeature(plan: PlanKey, feature: keyof (typeof billingConfig.p
 
 export function getLimit(plan: PlanKey, limit: keyof (typeof billingConfig.plans)[PlanKey]["features"]) {
   return billingConfig.plans[plan].features[limit];
+}
+
+export async function requireSubscription(owner: BillingOwner, allowedPlans: PlanKey[]): Promise<PlanKey> {
+  const plan = await getOwnerPlan(owner);
+
+  if (!allowedPlans.includes(plan)) {
+    throw new AuthorizationError(`This action requires one of the following plans: ${allowedPlans.join(", ")}`);
+  }
+
+  return plan;
 }
 
 export function can(role: "owner" | "admin" | "member", permission: string) {
