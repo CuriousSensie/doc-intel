@@ -124,6 +124,23 @@ export async function createCheckoutSession({
   return session.url;
 }
 
+export async function hasStripeCustomer(owner: BillingOwner): Promise<boolean> {
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("stripe_customers")
+    .select("id")
+    .eq("owner_type", owner.type)
+    .eq(ownerIdColumn(owner), owner.id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return Boolean(data);
+}
+
 export async function createPortalSession({
   owner,
   returnPath
