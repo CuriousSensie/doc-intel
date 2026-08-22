@@ -37,7 +37,7 @@ export default async function ProfileSettingsPage({
                 No avatar
               </div>
             )}
-            <form action={uploadAvatarAction} className="flex items-center gap-3" encType="multipart/form-data">
+            <form action={uploadAvatarAction} className="flex items-center gap-3">
               <input
                 accept={filesConfig.categories.avatar.allowedMimeTypes.join(",")}
                 className="text-sm"

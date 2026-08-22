@@ -38,7 +38,7 @@ export default async function FilesPage({
         <p className="mt-1 text-sm text-muted">
           Up to {formatSize(filesConfig.categories.document.maxSizeBytes)} per file.
         </p>
-        <form action={uploadFileAction} className="mt-6 grid gap-4" encType="multipart/form-data">
+        <form action={uploadFileAction} className="mt-6 grid gap-4">
           <FormMessage error={params.error} message={params.message} />
           <input
             accept={filesConfig.categories.document.allowedMimeTypes.join(",")}
