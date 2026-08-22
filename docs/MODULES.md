@@ -144,3 +144,33 @@ vars for each pack you want purchasable.
 `grantCredits`, `consumeCredits`, `refundCredits`, and `adminAdjustCredits`. Only `consumeCredits`
 needs the atomic SQL function — granting credits is always a safe plain insert since there's no
 double-spend risk when adding to the ledger, only when subtracting from it.
+
+## Notifications
+
+**Purpose**: in-app notifications — read/unread state, mark-one/mark-all-read, unread count,
+cursor-based pagination.
+
+**Dependency**: Auth. Uses the `notifications` table from the initial schema (select-own/update-own
+RLS only — no insert policy, since creation only ever happens through the service).
+
+**Configuration**: gated by `features.notifications`. `src/modules/notifications/notifications.service.ts`'s
+`createNotification` silently no-ops when the flag is off, so producers never need to check the
+flag themselves before calling it.
+
+**How to enable**: set `FEATURE_NOTIFICATIONS=true` (default). `/dashboard/notifications` is the
+inbox; `/settings/notifications` is a one-line redirect to it (there's no separate
+preferences page — nothing today needs one, so it wasn't built ahead of a real requirement).
+
+**How to extend**: call `createNotification(userId, { type, title, message, metadata })` from
+wherever a real event happens — see `notifyOrganizationAdminsOfNewMember` in
+`src/modules/organizations/organizations.actions.ts` for the reference pattern: a small
+per-event helper that resolves recipients and fires both the notification and (if relevant) an
+email, wrapped in its own try/catch so a notification failure never turns an already-successful
+action into an error response. `src/lib/pagination.ts`'s `encodeCursor`/`decodeCursor` are
+written generically enough for other paginated lists (files, audit logs) to reuse rather than
+each inventing its own cursor scheme.
+
+If several features end up needing the same "notify these people via email and in-app" shape,
+consider centralizing into a small event-dispatch module (`event type -> channels`) at that
+point — not before, per temp.md §109's guidance against abstraction layers with only one real
+caller.

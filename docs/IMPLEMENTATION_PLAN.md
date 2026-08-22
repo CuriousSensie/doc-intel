@@ -102,3 +102,17 @@ Use standardized slash-style branch names for all new increments.
   a new permission system.
 - `/settings/billing` and `/pricing` both work correctly whether `features.organizations` is on or
   off, with no separate code paths for the two modes.
+
+## Notifications Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- Notifications can only be created through the service (admin client, no insert RLS policy);
+  reading and marking-read use the normal user-scoped client since RLS already permits a user to
+  touch their own rows.
+- `createNotification` no-ops when `features.notifications` is off rather than requiring every
+  caller to check the flag.
+- Listing is cursor-paginated (not offset-based), reusing a generic cursor helper rather than a
+  notifications-specific one.
+- At least one real producer exists (organization invitation acceptance notifies the org's
+  owner/admins) — no notification-sending code without a real caller.
+- The unread count shown on the dashboard reflects the true total, not just the current page.

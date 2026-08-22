@@ -130,3 +130,12 @@ checks in `billing.actions.ts` (`requireBillingPermission`, reusing `can(role,
 are not the security boundary in organization mode — the select-only RLS policies and the
 admin-client-only write path are what actually prevent one organization's members from touching
 another's billing data.
+
+## Notifications
+
+`notifications` has select-own and update-own RLS policies but **no insert policy** — a user can
+read and mark-read their own notifications directly, but can never insert a row for themselves or
+anyone else. Creation only happens through `createNotification()` via the admin client, so an
+attacker cannot fabricate notifications (e.g. phishing-style "your password was reset, click
+here") by calling the table directly; only trusted server code decides what a user sees in their
+inbox.
