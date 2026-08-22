@@ -342,6 +342,34 @@ export type Database = {
         };
         Relationships: [];
       };
+      files: {
+        Row: {
+          id: string;
+          owner_id: string;
+          organization_id: string | null;
+          bucket: string;
+          path: string;
+          filename: string;
+          mime_type: string;
+          size: number;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          organization_id?: string | null;
+          bucket: string;
+          path: string;
+          filename: string;
+          mime_type: string;
+          size: number;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
