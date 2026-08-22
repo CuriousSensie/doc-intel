@@ -31,7 +31,12 @@ export async function requireSubscription(owner: BillingOwner, allowedPlans: Pla
 export function can(role: "owner" | "admin" | "member", permission: string) {
   const permissions: Record<typeof role, string[]> = {
     owner: ["organization.*"],
-    admin: ["organization.billing.manage", "organization.members.invite", "organization.settings.manage"],
+    admin: [
+      "organization.billing.manage",
+      "organization.members.invite",
+      "organization.settings.manage",
+      "organization.files.manage"
+    ],
     member: ["organization.read"]
   };
 
