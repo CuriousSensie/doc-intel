@@ -50,6 +50,7 @@ export type Database = {
           slug: string;
           logo_url: string | null;
           created_by: string | null;
+          suspended_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -59,6 +60,7 @@ export type Database = {
           slug: string;
           logo_url?: string | null;
           created_by?: string | null;
+          suspended_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -66,6 +68,7 @@ export type Database = {
           name?: string;
           slug?: string;
           logo_url?: string | null;
+          suspended_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -178,6 +181,7 @@ export type Database = {
           current_period_start: string | null;
           current_period_end: string | null;
           cancel_at_period_end: boolean;
+          platform_disabled_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -201,6 +205,7 @@ export type Database = {
           current_period_start?: string | null;
           current_period_end?: string | null;
           cancel_at_period_end?: boolean;
+          platform_disabled_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -219,6 +224,7 @@ export type Database = {
           current_period_start?: string | null;
           current_period_end?: string | null;
           cancel_at_period_end?: boolean;
+          platform_disabled_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -370,6 +376,34 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      audit_logs: {
+        Row: {
+          id: string;
+          actor_id: string | null;
+          organization_id: string | null;
+          action: string;
+          entity_type: string | null;
+          entity_id: string | null;
+          metadata: Json;
+          ip_address: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_id?: string | null;
+          organization_id?: string | null;
+          action: string;
+          entity_type?: string | null;
+          entity_id?: string | null;
+          metadata?: Json;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -420,6 +454,10 @@ export type Database = {
           p_metadata?: Json;
         };
         Returns: number;
+      };
+      purge_old_audit_logs: {
+        Args: Record<string, never>;
+        Returns: undefined;
       };
     };
     Enums: {
