@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { Provider } from "@supabase/supabase-js";
 
 import { appConfig } from "@/config/app";
+import { logEvent } from "@/lib/events";
 import { absoluteUrl } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 import { updateProfile } from "@/modules/users/profiles.service";
@@ -34,7 +35,7 @@ export async function registerAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -47,6 +48,10 @@ export async function registerAction(formData: FormData) {
 
   if (error) {
     redirectWithError("/register", error);
+  }
+
+  if (data.user) {
+    await logEvent({ actorId: data.user.id, action: "auth.user.registered" });
   }
 
   redirect(
@@ -67,13 +72,17 @@ export async function loginAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password
   });
 
   if (error) {
     redirectWithError("/login", error);
+  }
+
+  if (data.user) {
+    await logEvent({ actorId: data.user.id, action: "auth.login" });
   }
 
   const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -86,7 +95,13 @@ export async function loginAction(formData: FormData) {
 
 export async function logoutAction() {
   const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
   await supabase.auth.signOut();
+
+  if (data.user) {
+    await logEvent({ actorId: data.user.id, action: "auth.logout" });
+  }
+
   redirect("/");
 }
 
@@ -203,7 +218,7 @@ export async function completeOnboardingAction(formData: FormData) {
 }
 
 export async function changePasswordAction(formData: FormData) {
-  await requireUser("/settings/security");
+  const context = await requireUser("/settings/security");
   const parsed = resetPasswordSchema.safeParse(formDataToObject(formData));
 
   if (!parsed.success) {
@@ -219,6 +234,7 @@ export async function changePasswordAction(formData: FormData) {
     redirectWithError("/settings/security", error);
   }
 
+  await logEvent({ actorId: context.user.id, action: "auth.password_changed" });
   redirect(withStatus("/settings/security", "message", "Password changed."));
 }
 
@@ -244,7 +260,7 @@ export async function startMfaEnrollmentAction() {
 }
 
 export async function verifyMfaEnrollmentAction(formData: FormData) {
-  await requireUser("/mfa/enroll");
+  const context = await requireUser("/mfa/enroll");
   const parsed = mfaCodeSchema.safeParse(formDataToObject(formData));
 
   if (!parsed.success || !parsed.data.factorId) {
@@ -270,6 +286,7 @@ export async function verifyMfaEnrollmentAction(formData: FormData) {
     redirectWithError("/mfa/enroll", verified.error);
   }
 
+  await logEvent({ actorId: context.user.id, action: "auth.mfa.enabled" });
   redirect(withStatus("/settings/security", "message", "MFA enabled."));
 }
 
@@ -309,7 +326,7 @@ export async function verifyMfaChallengeAction(formData: FormData) {
 }
 
 export async function disableMfaAction(formData: FormData) {
-  await requireUser("/settings/security");
+  const context = await requireUser("/settings/security");
   const factorId = formData.get("factorId");
 
   if (typeof factorId !== "string") {
@@ -323,5 +340,6 @@ export async function disableMfaAction(formData: FormData) {
     redirectWithError("/settings/security", error);
   }
 
+  await logEvent({ actorId: context.user.id, action: "auth.mfa.disabled" });
   redirect(withStatus("/settings/security", "message", "MFA disabled."));
 }

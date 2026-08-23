@@ -7,6 +7,7 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const actor = { user: { id: "user-1" }, profile: null } as AuthContext;
 
 afterEach(() => {
+  vi.doUnmock("@/lib/events");
   vi.doUnmock("@/lib/supabase/admin");
   vi.doUnmock("@/lib/supabase/server");
   vi.doUnmock("@/modules/organizations/active-organization");
@@ -66,6 +67,7 @@ describe("deleteFile", () => {
     const remove = vi.fn().mockResolvedValue({ error: null });
     const deleteEq = vi.fn().mockResolvedValue({ error: null });
 
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
     vi.doMock("@/lib/supabase/server", () => ({
       createClient: async () => ({
         from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) })
@@ -101,6 +103,7 @@ describe("deleteFile", () => {
     const maybeSingle = vi.fn().mockResolvedValue({ data: file, error: null });
     const remove = vi.fn();
 
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
     vi.doMock("@/lib/supabase/server", () => ({
       createClient: async () => ({
         from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) })
@@ -133,6 +136,7 @@ describe("deleteFile", () => {
     const remove = vi.fn().mockResolvedValue({ error: null });
     const deleteEq = vi.fn().mockResolvedValue({ error: null });
 
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
     vi.doMock("@/lib/supabase/server", () => ({
       createClient: async () => ({
         from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) })

@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 
 import { billingConfig } from "@/config/billing";
 import { requireEnv } from "@/lib/env";
+import { logEvent } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripeClient } from "@/lib/stripe/client";
@@ -85,6 +86,15 @@ async function upsertSubscription(
   if (error) {
     throw error;
   }
+
+  await logEvent({
+    actorId: null,
+    action: "billing.subscription.updated",
+    entityType: "subscription",
+    entityId: subscription.id,
+    organizationId: owner.type === "organization" ? owner.id : null,
+    metadata: { ownerType: owner.type, ownerId: owner.id, status: subscription.status, planKey }
+  });
 }
 
 async function handleCheckoutSessionCompleted(admin: AdminClient, session: Stripe.Checkout.Session) {
@@ -114,6 +124,14 @@ async function handleCheckoutSessionCompleted(admin: AdminClient, session: Strip
     }
 
     await grantCredits(owner, pack.credits, "purchase", { reference: session.id });
+    await logEvent({
+      actorId: null,
+      action: "billing.credits.purchased",
+      entityType: "credit_pack",
+      entityId: pack.key,
+      organizationId: owner.type === "organization" ? owner.id : null,
+      metadata: { ownerType: owner.type, ownerId: owner.id, credits: pack.credits }
+    });
   }
 }
 

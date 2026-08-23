@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { AuthorizationError } from "@/lib/errors";
+import { logEvent } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { absoluteUrl } from "@/lib/utils";
 import { requireFeature } from "@/modules/auth/authorization";
@@ -69,6 +70,13 @@ async function issueInvitation(
 
     target = withStatus(target, "invite", token);
 
+    await logEvent({
+      actorId: inviter.id,
+      action: "organization.invitation.sent",
+      entityType: "organization_invitation",
+      organizationId
+    });
+
     const emailResult = await sendEmail({
       to: email,
       template: "organization-invitation",
@@ -96,7 +104,7 @@ async function issueInvitation(
 
 export async function createOrganizationAction(formData: FormData) {
   requireFeature("organizations");
-  await requireUser("/organizations/new");
+  const context = await requireUser("/organizations/new");
   const parsed = createOrganizationSchema.safeParse(formDataToObject(formData));
 
   if (!parsed.success) {
@@ -106,6 +114,13 @@ export async function createOrganizationAction(formData: FormData) {
   try {
     const organizationId = await createOrganization(parsed.data.name, parsed.data.slug || undefined);
     await setActiveOrganization(organizationId);
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.created",
+      entityType: "organization",
+      entityId: organizationId,
+      organizationId
+    });
   } catch (error) {
     redirectWithError("/organizations/new", error);
   }
@@ -221,6 +236,14 @@ export async function updateMemberRoleAction(formData: FormData) {
 
   try {
     await updateMemberRole(parsed.data.memberId, parsed.data.role);
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.member.role_changed",
+      entityType: "organization_member",
+      entityId: parsed.data.memberId,
+      organizationId,
+      metadata: { role: parsed.data.role }
+    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -241,6 +264,13 @@ export async function removeMemberAction(formData: FormData) {
 
   try {
     await removeMember(parsed.data.memberId);
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.member.removed",
+      entityType: "organization_member",
+      entityId: parsed.data.memberId,
+      organizationId
+    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -258,6 +288,13 @@ export async function leaveOrganizationAction(formData: FormData) {
 
   try {
     await leaveOrganization(organizationId, context.user.id);
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.member.left",
+      entityType: "organization",
+      entityId: organizationId,
+      organizationId
+    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -279,6 +316,14 @@ export async function transferOwnershipAction(formData: FormData) {
 
   try {
     await transferOwnership(organizationId, parsed.data.newOwnerId);
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.ownership_transferred",
+      entityType: "organization",
+      entityId: organizationId,
+      organizationId,
+      metadata: { newOwnerId: parsed.data.newOwnerId }
+    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -297,6 +342,13 @@ export async function deleteOrganizationAction(formData: FormData) {
   await requireOrgRole(organizationId, context.user.id, ["owner"]);
 
   try {
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.deleted",
+      entityType: "organization",
+      entityId: organizationId,
+      organizationId
+    });
     await deleteOrganization(organizationId);
   } catch (error) {
     redirectWithError("/settings/team", error);
@@ -364,6 +416,13 @@ export async function acceptInvitationAction(formData: FormData) {
   try {
     organizationId = await acceptInvitation(token);
     await setActiveOrganization(organizationId);
+    await logEvent({
+      actorId: context.user.id,
+      action: "organization.invitation.accepted",
+      entityType: "organization",
+      entityId: organizationId,
+      organizationId
+    });
   } catch (error) {
     redirectWithError(`/invitations/${token}`, error);
   }

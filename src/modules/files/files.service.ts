@@ -5,6 +5,7 @@ import type { AuthContext } from "@/modules/auth/session";
 import { isFeatureEnabled } from "@/config/features";
 import { type FileCategory, filesConfig } from "@/config/files";
 import { AuthorizationError, NotFoundError } from "@/lib/errors";
+import { logEvent } from "@/lib/events";
 import { validateFile } from "@/lib/files/validate";
 import { decodeCursor, encodeCursor } from "@/lib/pagination";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
@@ -80,6 +81,15 @@ export async function uploadFile(
     throw insertError;
   }
 
+  await logEvent({
+    actorId: actor.user.id,
+    action: "file.uploaded",
+    entityType: "file",
+    entityId: data.id,
+    organizationId,
+    metadata: { filename: input.filename, mimeType, size: input.size }
+  });
+
   return data;
 }
 
@@ -122,6 +132,8 @@ export async function uploadAvatar(
   if (previousPath) {
     await admin.storage.from(config.bucket).remove([previousPath]);
   }
+
+  await logEvent({ actorId: actor.user.id, action: "avatar.uploaded", entityType: "profile", entityId: actor.user.id });
 
   return publicUrlData.publicUrl;
 }
@@ -214,6 +226,15 @@ export async function deleteFile(actor: AuthContext, fileId: string): Promise<vo
   if (deleteError) {
     throw deleteError;
   }
+
+  await logEvent({
+    actorId: actor.user.id,
+    action: "file.deleted",
+    entityType: "file",
+    entityId: fileId,
+    organizationId: file.organization_id,
+    metadata: { filename: file.filename }
+  });
 }
 
 export async function getFileDownloadUrl(fileId: string): Promise<string> {
