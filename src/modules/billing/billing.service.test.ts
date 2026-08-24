@@ -31,9 +31,11 @@ describe("getOwnerPlan", () => {
             eq: () => ({
               eq: () => ({
                 in: () => ({
-                  order: () => ({
-                    limit: () => ({
-                      maybeSingle: () => Promise.resolve({ data: null, error: null })
+                  is: () => ({
+                    order: () => ({
+                      limit: () => ({
+                        maybeSingle: () => Promise.resolve({ data: null, error: null })
+                      })
                     })
                   })
                 })

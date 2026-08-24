@@ -10,7 +10,7 @@ function ownerColumns(owner: BillingOwner) {
     : { owner_type: "organization" as const, user_id: null, organization_id: owner.id };
 }
 
-function ownerIdColumn(owner: BillingOwner) {
+export function ownerIdColumn(owner: BillingOwner) {
   return owner.type === "user" ? ("user_id" as const) : ("organization_id" as const);
 }
 
@@ -59,6 +59,7 @@ export async function getOwnerPlan(owner: BillingOwner): Promise<PlanKey> {
     .eq("owner_type", owner.type)
     .eq(ownerIdColumn(owner), owner.id)
     .in("status", ["active", "trialing"])
+    .is("platform_disabled_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
