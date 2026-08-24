@@ -4,6 +4,7 @@ import { decodeCursor, encodeCursor } from "@/lib/pagination";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/modules/auth/session";
+import { deleteOrganizationAdmin } from "@/modules/admin/organizations.service";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -133,20 +134,7 @@ export async function deleteUserAdmin(actorId: string, userId: string): Promise<
     }
 
     if ((count ?? 0) === 0) {
-      const { error: deleteOrgError } = await admin.from("organizations").delete().eq("id", organizationId);
-
-      if (deleteOrgError) {
-        throw deleteOrgError;
-      }
-
-      await logEvent({
-        actorId,
-        action: "organization.deleted",
-        entityType: "organization",
-        entityId: organizationId,
-        organizationId,
-        metadata: { reason: "sole_owner_deleted" }
-      });
+      await deleteOrganizationAdmin(actorId, organizationId, { reason: "sole_owner_deleted" });
     }
   }
 
