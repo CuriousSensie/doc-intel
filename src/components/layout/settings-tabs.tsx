@@ -11,8 +11,8 @@ export function SettingsTabs({ items }: { items: NavigationItem[] }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Settings sections" className="border-b border-border bg-panel">
-      <div className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-6">
+    <nav aria-label="Settings sections" className="border-b border-border">
+      <div className="mx-auto flex max-w-3xl gap-1 overflow-x-auto">
         {items.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
 

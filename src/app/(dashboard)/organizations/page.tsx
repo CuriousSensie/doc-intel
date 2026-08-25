@@ -25,11 +25,13 @@ export default async function OrganizationsPage({
   ]);
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl gap-5 px-6 py-10">
+    <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Organizations</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+              Organizations
+            </p>
             <h1 className="mt-3 text-3xl font-black">Your organizations</h1>
           </div>
           <Button asChild>
@@ -78,6 +80,6 @@ export default async function OrganizationsPage({
           ))
         )}
       </section>
-    </main>
+    </div>
   );
 }

@@ -5,12 +5,14 @@ import { isFeatureEnabled } from "@/config/features";
 import { settingsNavigation } from "@/config/navigation";
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
-  const items = settingsNavigation.filter((item) => !item.feature || isFeatureEnabled(item.feature));
+  const items = settingsNavigation.filter(
+    (item) => !item.feature || isFeatureEnabled(item.feature)
+  );
 
   return (
-    <div className="min-h-screen">
+    <div>
       <SettingsTabs items={items} />
-      {children}
+      <div className="pt-6">{children}</div>
     </div>
   );
 }

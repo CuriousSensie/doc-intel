@@ -34,7 +34,8 @@ export default async function BillingSettingsPage({
   ]);
 
   const canManageBilling =
-    owner.type === "user" || Boolean(membership && can(membership.role, "organization.billing.manage"));
+    owner.type === "user" ||
+    Boolean(membership && can(membership.role, "organization.billing.manage"));
   const showPortalButton = canManageBilling && (await hasStripeCustomer(owner));
 
   const otherPlans = (Object.values(billingConfig.plans) as BillingPlan[]).filter(
@@ -42,7 +43,7 @@ export default async function BillingSettingsPage({
   );
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl gap-5 px-6 py-10">
+    <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
         <h1 className="mt-3 text-3xl font-black">Billing</h1>
@@ -56,7 +57,8 @@ export default async function BillingSettingsPage({
         </div>
         {!canManageBilling ? (
           <p className="mt-4 rounded-md border border-border bg-panel-strong px-3 py-2 text-sm text-muted">
-            Only an organization owner or admin can manage billing. Contact one of them to make changes.
+            Only an organization owner or admin can manage billing. Contact one of them to make
+            changes.
           </p>
         ) : null}
       </section>
@@ -84,7 +86,9 @@ export default async function BillingSettingsPage({
             {otherPlans.map((plan) => (
               <div className="rounded-md border border-border p-4" key={plan.key}>
                 <p className="font-semibold">{plan.name}</p>
-                <p className="mt-1 text-sm text-muted">${(plan.priceMonthlyCents / 100).toFixed(0)} / month</p>
+                <p className="mt-1 text-sm text-muted">
+                  ${(plan.priceMonthlyCents / 100).toFixed(0)} / month
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {plan.stripePriceIdMonthly ? (
                     <form action={createCheckoutAction}>
@@ -135,6 +139,6 @@ export default async function BillingSettingsPage({
           </div>
         ) : null}
       </section>
-    </main>
+    </div>
   );
 }

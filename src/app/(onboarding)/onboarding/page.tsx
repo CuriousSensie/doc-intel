@@ -24,7 +24,12 @@ export default async function OnboardingPage({
         <form action={completeOnboardingAction} className="mt-6 grid gap-4">
           <FormMessage error={params.error} />
           <TextField defaultValue={profile?.name ?? ""} label="Name" name="name" required />
-          <TextField defaultValue={profile?.timezone ?? "UTC"} label="Timezone" name="timezone" required />
+          <TextField
+            defaultValue={profile?.timezone ?? "UTC"}
+            label="Timezone"
+            name="timezone"
+            required
+          />
           <TextField defaultValue={profile?.locale ?? "en"} label="Locale" name="locale" required />
           <Button type="submit">Finish onboarding</Button>
         </form>

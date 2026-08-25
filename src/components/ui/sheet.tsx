@@ -47,7 +47,8 @@ const sheetVariants = cva(
 );
 
 interface SheetContentProps
-  extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>,
+  extends
+    React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>,
     VariantProps<typeof sheetVariants> {}
 
 const SheetContent = React.forwardRef<
@@ -56,7 +57,11 @@ const SheetContent = React.forwardRef<
 >(({ side = "right", className, children, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
-    <DialogPrimitive.Content className={cn(sheetVariants({ side }), className)} ref={ref} {...props}>
+    <DialogPrimitive.Content
+      className={cn(sheetVariants({ side }), className)}
+      ref={ref}
+      {...props}
+    >
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-muted opacity-70 outline-none transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 disabled:pointer-events-none">
         <X aria-hidden="true" className="size-4" />
@@ -96,7 +101,11 @@ const SheetDescription = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, ...props }, ref) => (
-  <DialogPrimitive.Description className={cn("text-sm text-muted", className)} ref={ref} {...props} />
+  <DialogPrimitive.Description
+    className={cn("text-sm text-muted", className)}
+    ref={ref}
+    {...props}
+  />
 ));
 SheetDescription.displayName = DialogPrimitive.Description.displayName;
 

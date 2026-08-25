@@ -31,7 +31,7 @@ export default async function FilesPage({
   const { items, nextCursor } = await listFiles({ cursor: params.cursor });
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl gap-5 px-6 py-10">
+    <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Dashboard</p>
         <h1 className="mt-3 text-3xl font-black">Files</h1>
@@ -89,10 +89,12 @@ export default async function FilesPage({
       {nextCursor ? (
         <div className="flex justify-center">
           <Button asChild variant="outline">
-            <Link href={`/dashboard/files?cursor=${encodeURIComponent(nextCursor)}`}>Next page</Link>
+            <Link href={`/dashboard/files?cursor=${encodeURIComponent(nextCursor)}`}>
+              Next page
+            </Link>
           </Button>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 }

@@ -65,7 +65,9 @@ export function AppTopbar({
                 )}
               />
             ) : null}
-            <span className="sr-only">{unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}</span>
+            <span className="sr-only">
+              {unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
+            </span>
           </Link>
         </Button>
       ) : null}

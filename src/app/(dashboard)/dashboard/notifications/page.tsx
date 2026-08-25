@@ -4,7 +4,10 @@ import { FormMessage } from "@/components/forms/form-message";
 import { Button } from "@/components/ui/button";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
-import { markAllAsReadAction, markAsReadAction } from "@/modules/notifications/notifications.actions";
+import {
+  markAllAsReadAction,
+  markAsReadAction
+} from "@/modules/notifications/notifications.actions";
 import { getUnreadCount, listNotifications } from "@/modules/notifications/notifications.service";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +27,13 @@ export default async function NotificationsPage({
   ]);
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl gap-5 px-6 py-10">
+    <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Dashboard</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+              Dashboard
+            </p>
             <h1 className="mt-3 text-3xl font-black">Notifications</h1>
             <p className="mt-1 text-sm text-muted">
               {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up."}
@@ -68,7 +73,9 @@ export default async function NotificationsPage({
                   ) : null}
                 </p>
                 <p className="mt-1 text-sm text-muted">{notification.message}</p>
-                <p className="mt-2 text-xs text-muted">{new Date(notification.created_at).toLocaleString()}</p>
+                <p className="mt-2 text-xs text-muted">
+                  {new Date(notification.created_at).toLocaleString()}
+                </p>
               </div>
               {!notification.read_at ? (
                 <form action={markAsReadAction}>
@@ -86,10 +93,12 @@ export default async function NotificationsPage({
       {nextCursor ? (
         <div className="flex justify-center">
           <Button asChild variant="outline">
-            <Link href={`/dashboard/notifications?cursor=${encodeURIComponent(nextCursor)}`}>Next page</Link>
+            <Link href={`/dashboard/notifications?cursor=${encodeURIComponent(nextCursor)}`}>
+              Next page
+            </Link>
           </Button>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 }

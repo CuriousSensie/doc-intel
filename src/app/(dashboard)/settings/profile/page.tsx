@@ -14,10 +14,13 @@ export default async function ProfileSettingsPage({
 }: {
   searchParams: Promise<{ error?: string; message?: string }>;
 }) {
-  const [{ profile, user }, params] = await Promise.all([requireUser("/settings/profile"), searchParams]);
+  const [{ profile, user }, params] = await Promise.all([
+    requireUser("/settings/profile"),
+    searchParams
+  ]);
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-6 py-10">
+    <div className="mx-auto max-w-2xl">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
         <h1 className="mt-3 text-3xl font-black">Profile</h1>
@@ -55,11 +58,16 @@ export default async function ProfileSettingsPage({
         <form action={updateProfileAction} className="mt-6 grid gap-4">
           <FormMessage error={params.error} message={params.message} />
           <TextField defaultValue={profile?.name ?? ""} label="Name" name="name" required />
-          <TextField defaultValue={profile?.timezone ?? "UTC"} label="Timezone" name="timezone" required />
+          <TextField
+            defaultValue={profile?.timezone ?? "UTC"}
+            label="Timezone"
+            name="timezone"
+            required
+          />
           <TextField defaultValue={profile?.locale ?? "en"} label="Locale" name="locale" required />
           <Button type="submit">Save profile</Button>
         </form>
       </section>
-    </main>
+    </div>
   );
 }

@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 
 function EmptyTeamState() {
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl place-items-center px-6 py-10">
+    <div className="mx-auto max-w-3xl">
       <section className="w-full rounded-lg border border-border bg-panel p-6 text-center shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
         <h1 className="mt-3 text-3xl font-black">Team</h1>
@@ -38,7 +38,7 @@ function EmptyTeamState() {
           <Link href="/organizations/new">Create organization</Link>
         </Button>
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -75,16 +75,19 @@ export default async function TeamSettingsPage({
   const inviteLink = params.invite ? absoluteUrl(`/invitations/${params.invite}`) : null;
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl gap-5 px-6 py-10">
+    <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
         <h1 className="mt-3 text-3xl font-black">Team</h1>
-        <p className="mt-3 leading-7 text-muted">Manage members and invitations for {organization.name}.</p>
+        <p className="mt-3 leading-7 text-muted">
+          Manage members and invitations for {organization.name}.
+        </p>
         <div className="mt-6 grid gap-3">
           <FormMessage error={params.error} message={params.message} />
           {inviteLink ? (
             <p className="break-all rounded-md border border-border bg-panel-strong px-3 py-2 text-sm">
-              Invite link (send this to the invitee): <span className="font-mono">{inviteLink}</span>
+              Invite link (send this to the invitee):{" "}
+              <span className="font-mono">{inviteLink}</span>
             </p>
           ) : null}
         </div>
@@ -95,7 +98,12 @@ export default async function TeamSettingsPage({
           <h2 className="text-xl font-black">Organization settings</h2>
           <form action={updateOrganizationAction} className="mt-5 grid gap-4">
             <input name="organizationId" type="hidden" value={organization.id} />
-            <TextField defaultValue={organization.name} label="Organization name" name="name" required />
+            <TextField
+              defaultValue={organization.name}
+              label="Organization name"
+              name="name"
+              required
+            />
             <TextField
               defaultValue={organization.logo_url ?? ""}
               hint="Optional. File uploads land with the files module."
@@ -112,7 +120,10 @@ export default async function TeamSettingsPage({
       {canManage ? (
         <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
           <h2 className="text-xl font-black">Invite a member</h2>
-          <form action={inviteMemberAction} className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <form
+            action={inviteMemberAction}
+            className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+          >
             <input name="organizationId" type="hidden" value={organization.id} />
             <TextField label="Email" name="email" required type="email" />
             <label className="grid gap-2 text-sm font-semibold">
@@ -143,7 +154,8 @@ export default async function TeamSettingsPage({
                 <div>
                   <p className="font-semibold">{invitation.email}</p>
                   <p className="text-sm capitalize text-muted">
-                    {invitation.role} &middot; expires {new Date(invitation.expires_at).toLocaleDateString()}
+                    {invitation.role} &middot; expires{" "}
+                    {new Date(invitation.expires_at).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -178,7 +190,9 @@ export default async function TeamSettingsPage({
               key={member.id}
             >
               <div>
-                <p className="font-semibold">{member.profile?.name ?? member.profile?.email ?? "Unknown"}</p>
+                <p className="font-semibold">
+                  {member.profile?.name ?? member.profile?.email ?? "Unknown"}
+                </p>
                 <p className="text-sm capitalize text-muted">{member.role}</p>
               </div>
               {canManage && member.user_id !== context.user.id && member.role !== "owner" ? (
@@ -186,7 +200,11 @@ export default async function TeamSettingsPage({
                   <form action={updateMemberRoleAction}>
                     <input name="organizationId" type="hidden" value={organization.id} />
                     <input name="memberId" type="hidden" value={member.id} />
-                    <input name="role" type="hidden" value={member.role === "admin" ? "member" : "admin"} />
+                    <input
+                      name="role"
+                      type="hidden"
+                      value={member.role === "admin" ? "member" : "admin"}
+                    />
                     <Button size="sm" type="submit" variant="outline">
                       Make {member.role === "admin" ? "member" : "admin"}
                     </Button>
@@ -256,7 +274,9 @@ export default async function TeamSettingsPage({
           <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold">Delete organization</p>
-              <p className="text-sm text-muted">This permanently removes the organization and its data.</p>
+              <p className="text-sm text-muted">
+                This permanently removes the organization and its data.
+              </p>
             </div>
             <form action={deleteOrganizationAction}>
               <input name="organizationId" type="hidden" value={organization.id} />
@@ -267,6 +287,6 @@ export default async function TeamSettingsPage({
           </div>
         ) : null}
       </section>
-    </main>
+    </div>
   );
 }

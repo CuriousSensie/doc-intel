@@ -131,7 +131,12 @@ export function AppSidebar({ items }: { items: NavigationItem[] }) {
         <SidebarNavLinks collapsed={collapsed} items={items} />
         {collapsed ? (
           <div className="flex shrink-0 justify-center border-t border-border p-2">
-            <Button aria-label="Expand sidebar" onClick={toggleCollapsed} size="icon" variant="ghost">
+            <Button
+              aria-label="Expand sidebar"
+              onClick={toggleCollapsed}
+              size="icon"
+              variant="ghost"
+            >
               <PanelLeftOpen aria-hidden className="size-4" />
             </Button>
           </div>

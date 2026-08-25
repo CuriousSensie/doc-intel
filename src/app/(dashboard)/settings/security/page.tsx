@@ -23,7 +23,7 @@ export default async function SecuritySettingsPage({
   const totpFactors = factors.data?.totp ?? [];
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-3xl gap-5 px-6 py-10">
+    <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
         <h1 className="mt-3 text-3xl font-black">Security</h1>
@@ -53,9 +53,15 @@ export default async function SecuritySettingsPage({
             </form>
           ) : (
             totpFactors.map((factor) => (
-              <form action={disableMfaAction} className="flex items-center justify-between gap-4" key={factor.id}>
+              <form
+                action={disableMfaAction}
+                className="flex items-center justify-between gap-4"
+                key={factor.id}
+              >
                 <input name="factorId" type="hidden" value={factor.id} />
-                <span className="text-sm font-semibold">{factor.friendly_name ?? "Authenticator app"}</span>
+                <span className="text-sm font-semibold">
+                  {factor.friendly_name ?? "Authenticator app"}
+                </span>
                 <Button type="submit" variant="outline">
                   Disable
                 </Button>
@@ -73,6 +79,6 @@ export default async function SecuritySettingsPage({
           </Button>
         </form>
       </section>
-    </main>
+    </div>
   );
 }
