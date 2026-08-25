@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { appConfig } from "@/config/app";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appConfig.url),
@@ -21,12 +22,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <a className="skip-link" href="#main">
-          Skip to content
-        </a>
-        {children}
+        <ThemeProvider>
+          <a className="skip-link" href="#main">
+            Skip to content
+          </a>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
