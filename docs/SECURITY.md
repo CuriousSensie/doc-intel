@@ -166,3 +166,60 @@ Deleting a file is gated by an application-level check (`canManageFile` in
 `can(role, "organization.files.manage")` — run before the admin client performs the storage
 object removal and row delete together, so a file can never end up deleted from Storage but not
 the database (or vice versa) due to a bypassable RLS check.
+
+## Admin
+
+Application-admin status (`profiles.is_app_admin`) is a plain boolean, checked directly by
+`requireAdmin()` — it is never derived from organization role or any other signal (temp.md §44),
+so an organization owner/admin gets zero application-admin privileges by default. There is
+deliberately no self-service path to becoming the first admin (no UI, no signup flag) — the only
+way is a direct database update, which requires infrastructure-level access already.
+
+Every admin-issued mutation writes through the service-role admin client, exactly like billing
+and notifications — `profiles`, `organizations`, and `subscriptions` have no RLS policy that lets
+one user modify another's row (or, for `organizations`, lets a non-owner delete it), so these
+mutations are only reachable through trusted server code, gated by `requireAdmin()` +
+`requireFeature("admin")` in `src/app/(admin)/layout.tsx`.
+
+**Self-lockout guards**: `src/modules/admin/users.service.ts` throws if an admin tries to
+suspend, revoke their own admin status from, or delete their own account. There's no recovery
+flow if the only admin locks themselves out, so this is a hard guard in code, not a documented
+warning.
+
+**Organization suspension is an RLS-level block, not an application-side check.** A suspended
+organization's `suspended_at` is read by `is_organization_member()` and `has_organization_role()`
+— the two SECURITY DEFINER helpers essentially every org-scoped RLS policy is built on
+(`organizations`, `organization_members`, `organization_invitations`, `stripe_customers`,
+`subscriptions`, `credit_transactions`, `usage_counters`, `files`, `audit_logs`). The moment an
+org is suspended, every one of those policies stops granting access to its non-admin members —
+there is no per-route guard to remember, and no way to bypass it short of going through
+`is_app_admin()` (which every policy also allows, so admins can still un-suspend it).
+
+**Deletion relies on the schema's existing `on delete cascade` foreign keys**, not hand-rolled
+multi-table cleanup: `deleteUserAdmin`/`deleteOrganizationAdmin` each perform exactly one root-row
+delete (`auth.users` via the Supabase Admin Auth API, or `organizations` directly) and let
+Postgres cascade the rest. `audit_logs.organization_id` is the one FK that's `on delete set null`
+rather than cascade, so the audit trail for a deleted organization survives with that column
+nulled out. Because of that FK, every deletion path logs the event **before** deleting the row —
+logging after would fail to insert (silently, since `logEvent()` never throws) once the
+referenced organization no longer exists. The one non-trivial deletion rule: deleting a user who
+is the **sole owner** of an organization deletes that organization first, so it's never left
+ownerless.
+
+**The subscription platform override is a pure entitlement gate, not a Stripe action** — toggling
+`subscriptions.platform_disabled_at` never calls the Stripe API and never touches
+`cancel_at_period_end`. It only changes what `getOwnerPlan()` returns in-app.
+
+## Audit Logs
+
+`logEvent()` (`src/lib/events/index.ts`) is the **only** way an `audit_logs` row is created —
+the table has select-only RLS (`is_app_admin()`, or an org owner/admin for their own org's rows)
+and no insert policy at all, so a client can never fabricate an audit entry; only the admin
+client, via `auditLogSink`, can write one. A sink failure (including the audit-log insert itself)
+is caught inside `logEvent()` and logged, never thrown back into the caller — an audit-logging
+hiccup can never turn an otherwise-successful action into an error response.
+
+`audit_logs` rows are retained for **30 days**. `purge_old_audit_logs()` (a SECURITY DEFINER SQL
+function added in `supabase/migrations/20260823090000_admin.sql`) deletes anything older than
+that, but **no scheduler invokes it yet** — this is a deliberate, known gap: wiring up `pg_cron`
+(or an external scheduler hitting an admin-only route) is follow-up work, not silently forgotten.

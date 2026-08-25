@@ -135,3 +135,31 @@ Use standardized slash-style branch names for all new increments.
   (`can(role, "organization.files.manage")`), reusing the Organizations module's RBAC.
 - Replacing an avatar uploads the new object, updates `profiles.avatar_url`, and only then
   deletes the previous object — never leaving the profile pointing at a missing file.
+
+## Admin Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- Application-admin status (`profiles.is_app_admin`) is a plain boolean, never inferred from
+  organization role; `requireAdmin()` + `requireFeature("admin")` are enforced once, in
+  `src/app/(admin)/layout.tsx`, for the whole admin section.
+- Every admin-issued mutation (user suspend/unsuspend/delete/admin-grant, organization
+  suspend/unsuspend/delete, credit adjustment, subscription platform override) writes through the
+  service-role admin client and calls `logEvent()`.
+- Self-lockout guards block an admin from suspending, de-adminning, or deleting their own
+  account — there is no recovery path if the only admin locks themselves out.
+- Organization suspension blocks non-admin members' access to that org's data at the RLS level
+  (via `is_organization_member`/`has_organization_role`), not via a per-route application check.
+- User and organization deletion rely on the schema's existing FK cascades for cleanup, with one
+  explicit exception: deleting a user who solely owns an organization deletes that organization
+  first, so it's never left ownerless.
+- The subscription platform override never calls Stripe or touches `cancel_at_period_end` — it
+  only changes what `getOwnerPlan()` resolves to in-app.
+- A generic `logEvent()` dispatcher (`src/lib/events/`) fans events out to a list of `EventSink`s
+  (console, `audit_logs`); adding a new destination requires writing one sink and registering it,
+  not touching any existing call site. A sink's failure never blocks another sink or the caller.
+- Audit coverage extends beyond admin-issued mutations to the existing security/state-changing
+  flows in auth, organizations, billing (webhook-driven), and files — read-only actions are not
+  logged.
+- `audit_logs` creation only ever happens through `logEvent()` (no insert RLS policy); rows are
+  retained for 30 days via `purge_old_audit_logs()`, though no scheduler invokes it yet
+  (documented, deliberate follow-up).

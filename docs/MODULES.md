@@ -205,3 +205,80 @@ active organization when organizations are enabled (no per-upload "share with or
 yet — add one only once a real need for private-within-org files shows up). Deleting an
 org-scoped file as an org admin (not just the file's owner) reuses `can(role, "organization.files.manage")`
 from the Organizations module's RBAC, the same pattern as billing's permission checks.
+
+## Admin
+
+**Purpose**: an application-admin dashboard — user administration (search, suspend/unsuspend,
+grant/revoke admin, delete), organization administration (suspend/unsuspend, delete), and a
+platform-level subscription enable/disable override, all gated behind application-admin status.
+
+**Dependency**: Auth. Application-admin status is `profiles.is_app_admin`, a plain boolean —
+**never inferred from organization role** (temp.md §44). `requireAdmin()`/`requireFeature("admin")`
+(both pre-existing) are enforced once, for the whole section, in `src/app/(admin)/layout.tsx`
+rather than repeated on every admin page.
+
+**Configuration**: gated by `features.admin`.
+
+**How to enable**: set `FEATURE_ADMIN=true` (default), then flip a user's `profiles.is_app_admin`
+to `true` directly in the database (there's no self-service way to become the first admin, by
+design — see `docs/SECURITY.md`).
+
+**How to extend**: `src/modules/admin/users.service.ts` and `src/modules/admin/organizations.service.ts`
+hold the privileged mutations; `src/modules/admin/billing.service.ts` holds the subscription
+platform-override; `src/modules/admin/admin.actions.ts` wraps each in a server action. Every
+mutation here goes through the admin client and calls `logEvent()` — see **Audit Logs** below.
+
+Two behaviors worth knowing before extending this module:
+
+- **Organization suspension is enforced at the RLS level**, not by an application-side guard you
+  could forget to add. `is_organization_member`/`has_organization_role` (the two SECURITY DEFINER
+  helpers nearly every org-scoped RLS policy is built on) now also require the organization isn't
+  suspended, so suspending one instantly cuts off every non-admin member's access to that org and
+  everything scoped to it (members, invitations, billing, files) without touching a single route.
+- **Self-lockout guards** (`users.service.ts`) block an admin from suspending, de-adminning, or
+  deleting their own account — there's no recovery path if the only admin locks themselves out,
+  so this is enforced in code rather than left as an operational risk.
+- **Deletion relies on existing FK cascades**, not hand-rolled cleanup — `deleteUserAdmin` and
+  `deleteOrganizationAdmin` each do one root-row delete and let the schema's `on delete cascade`
+  foreign keys remove everything else. The one hand-written edge case: deleting a user who is the
+  **sole owner** of an organization deletes that organization first, so it's never left ownerless.
+- **The subscription platform override never calls Stripe.** `setSubscriptionPlatformStatus`
+  toggles `subscriptions.platform_disabled_at`, and `getOwnerPlan()`
+  (`src/modules/billing/billing.service.ts`) filters it out — a disabled owner reads as the
+  `"free"` plan in-app while their real Stripe subscription and `cancel_at_period_end` are
+  untouched. It's a pure entitlement gate, not a cancellation.
+
+Credit adjustment (reusing the existing `adminAdjustCredits`) and the subscription override both
+target a `BillingOwner`, so they only appear on `/admin/users` in user-billing mode or
+`/admin/organizations` in organization-billing mode — never both, no mode-specific branching
+beyond that one condition, the same convention `/settings/billing` already follows.
+
+## Audit Logs
+
+**Purpose**: a generic, pluggable event-logging dispatcher — not admin-only. `logEvent()`
+(`src/lib/events/index.ts`) fans an event out to every configured `EventSink`; today that's
+`consoleSink` (via `src/lib/logger.ts`) and `auditLogSink` (writes to the `audit_logs` table).
+**To add a new destination** (Slack, analytics, anything else), write one more `EventSink` object
+and push it into the `sinks` array in `src/lib/events/index.ts` — no existing call site changes.
+A sink's failure is caught and logged, never blocking another sink or the caller (same
+never-throw convention as `sendEmail()`).
+
+**Dependency**: Admin, for the read side (`/admin/audit-log`). The write side
+(`src/lib/events/`) has no dependency on the admin module at all, precisely so any module can
+call `logEvent()` without creating one.
+
+**Configuration**: not feature-flagged — `logEvent()` always runs; whether an event is worth
+logging is a call-site decision, not a config toggle. `audit_logs` rows are retained for 30 days;
+see `docs/SECURITY.md` for the retention mechanism.
+
+**How to extend**: call `logEvent({ actorId, action, entityType?, entityId?, organizationId?,
+metadata? })` from any real mutation worth an audit trail — action names are dot-namespaced
+(`auth.login`, `organization.member.removed`, `admin.user.suspended`, `billing.subscription.updated`,
+`file.deleted`, etc.). Current callers: every admin-issued mutation in this module, plus the most
+security/state-changing existing flows in auth (`auth.actions.ts`), organizations
+(`organizations.actions.ts`), the Stripe webhook handler (actor is `null` for these — system/Stripe-
+initiated), and files (`files.service.ts`). Read-only actions (listing, viewing) are intentionally
+not logged. If an event's `organization_id` references an organization about to be deleted in the
+same action, log it **before** the delete — `audit_logs.organization_id` is a real foreign key, and
+inserting after the org is gone would fail (see `deleteOrganizationAdmin` in
+`src/modules/admin/organizations.service.ts` for the reference ordering).
