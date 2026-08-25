@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { appConfig } from "@/config/app";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appConfig.url),
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             Skip to content
           </a>
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
