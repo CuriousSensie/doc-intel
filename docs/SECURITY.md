@@ -1,5 +1,9 @@
 # Security
 
+For the exact RLS policies and indexes referenced throughout this doc, see the per-table
+reference in [DATABASE.md](DATABASE.md#tables-reference). For the request-flow diagrams showing
+where the RLS-scoped vs. admin client gets used, see [ARCHITECTURE.md](ARCHITECTURE.md#request-flow).
+
 ## Core Rules
 
 1. Never trust client-provided user IDs.

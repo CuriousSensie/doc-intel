@@ -1,5 +1,9 @@
 # Modules
 
+This is the narrative doc — what each module does, when to enable/disable it, and how to extend
+it. For exact function signatures, see [API_REFERENCE.md](API_REFERENCE.md); for the schema
+those functions read/write, see [DATABASE.md](DATABASE.md).
+
 | Module | Default | Dependency |
 | --- | ---: | --- |
 | Authentication | Required | Supabase |
@@ -12,7 +16,7 @@
 | Files | Optional | Supabase Storage |
 | Notifications | Optional | Auth |
 | Admin | Optional | Auth |
-| Audit Logs | Recommended | Admin |
+| Audit Logs | Recommended | Auth (the write side, `src/lib/events/`, has no dependency on Admin — only the `/admin/audit-log` read UI does) |
 | Outgoing Webhooks | Optional | Organizations |
 
 Analytics and API keys are intentionally skipped in this implementation pass.

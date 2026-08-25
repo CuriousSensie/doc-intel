@@ -163,3 +163,27 @@ Use standardized slash-style branch names for all new increments.
 - `audit_logs` creation only ever happens through `logEvent()` (no insert RLS policy); rows are
   retained for 30 days via `purge_old_audit_logs()`, though no scheduler invokes it yet
   (documented, deliberate follow-up).
+
+## docs/finalize Acceptance Criteria
+
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` pass.
+- `README.md` is a real entry point: tech stack, project structure, module table, quick start,
+  and links to every doc below — not just install/dev commands.
+- `docs/ARCHITECTURE.md` includes a request-flow diagram, an auth flow diagram, and a billing flow
+  diagram (Mermaid, embedded in the doc), plus the key architectural decisions and why each one
+  was made.
+- `docs/DATABASE.md` exists with a full Mermaid ER diagram covering every table, a column
+  reference, the enum/function/Storage-bucket lists, and the migration history — the schema is no
+  longer only discoverable by reading the migration files directly.
+- `docs/API_REFERENCE.md` exists with every exported function/type from `src/modules/**`,
+  `src/lib/**`, and `src/config/**` — a dev can look up an exact signature without opening the
+  source file.
+- `docs/SETUP.md` covers OAuth provider configuration, deployment (not just local dev), and a
+  New Product Checklist for starting a real product from this boilerplate — the three gaps temp.md
+  explicitly calls out.
+- Every script name, environment variable, and migration filename referenced across the docs was
+  verified against the actual source (`package.json`, `src/lib/env.ts`,
+  `supabase/migrations/`), not recalled from memory or copied from an earlier, possibly-stale doc.
+- `docs/MODULES.md` and `docs/SECURITY.md` cross-link to `API_REFERENCE.md`/`DATABASE.md` rather
+  than duplicating their content, and any inaccuracy the accuracy pass found (e.g. a stale
+  module-dependency table row) is fixed, not just noted.
