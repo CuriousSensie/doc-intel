@@ -22,8 +22,7 @@ export default async function ProfileSettingsPage({
   return (
     <div className="mx-auto max-w-2xl">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
-        <h1 className="mt-3 text-3xl font-black">Profile</h1>
+        <h1 className="text-3xl font-black">Profile</h1>
         <p className="mt-3 leading-7 text-muted">{user.email}</p>
 
         {isFeatureEnabled("files") ? (

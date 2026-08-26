@@ -25,8 +25,7 @@ export default async function SecuritySettingsPage({
   return (
     <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
-        <h1 className="mt-3 text-3xl font-black">Security</h1>
+        <h1 className="text-3xl font-black">Security</h1>
         <div className="mt-6">
           <FormMessage error={params.error} message={params.message} />
         </div>

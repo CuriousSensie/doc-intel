@@ -31,8 +31,7 @@ function EmptyTeamState() {
   return (
     <div className="mx-auto max-w-3xl">
       <section className="w-full rounded-lg border border-border bg-panel p-6 text-center shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
-        <h1 className="mt-3 text-3xl font-black">Team</h1>
+        <h1 className="text-3xl font-black">Team</h1>
         <p className="mt-3 leading-7 text-muted">You are not part of an organization yet.</p>
         <Button asChild className="mt-6">
           <Link href="/organizations/new">Create organization</Link>
@@ -77,8 +76,7 @@ export default async function TeamSettingsPage({
   return (
     <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Settings</p>
-        <h1 className="mt-3 text-3xl font-black">Team</h1>
+        <h1 className="text-3xl font-black">Team</h1>
         <p className="mt-3 leading-7 text-muted">
           Manage members and invitations for {organization.name}.
         </p>

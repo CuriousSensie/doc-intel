@@ -24,13 +24,15 @@ export default async function AdminOrganizationsPage({
   searchParams: Promise<{ cursor?: string; q?: string; error?: string; message?: string }>;
 }) {
   const params = await searchParams;
-  const { items, nextCursor } = await listOrganizationsAdmin({ cursor: params.cursor, search: params.q });
+  const { items, nextCursor } = await listOrganizationsAdmin({
+    cursor: params.cursor,
+    search: params.q
+  });
 
   return (
     <div className="grid gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Admin</p>
-        <h1 className="mt-3 text-3xl font-black">Organizations</h1>
+        <h1 className="text-3xl font-black">Organizations</h1>
         <form action="/admin/organizations" className="mt-5 flex gap-3">
           <TextField defaultValue={params.q ?? ""} label="Search by name" name="q" />
           <Button className="self-end" type="submit" variant="outline">
@@ -44,10 +46,15 @@ export default async function AdminOrganizationsPage({
 
       <section className="grid gap-3">
         {items.length === 0 ? (
-          <p className="rounded-lg border border-border bg-panel p-6 text-muted">No organizations found.</p>
+          <p className="rounded-lg border border-border bg-panel p-6 text-muted">
+            No organizations found.
+          </p>
         ) : (
           items.map((organization) => (
-            <div className="rounded-lg border border-border bg-panel p-4 shadow-sm" key={organization.id}>
+            <div
+              className="rounded-lg border border-border bg-panel p-4 shadow-sm"
+              key={organization.id}
+            >
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                 <div>
                   <p className="font-semibold">
@@ -61,7 +68,13 @@ export default async function AdminOrganizationsPage({
                   <p className="text-sm text-muted">{organization.slug}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <form action={organization.suspended_at ? unsuspendOrganizationAction : suspendOrganizationAction}>
+                  <form
+                    action={
+                      organization.suspended_at
+                        ? unsuspendOrganizationAction
+                        : suspendOrganizationAction
+                    }
+                  >
                     <input name="organizationId" type="hidden" value={organization.id} />
                     <Button size="sm" type="submit" variant="outline">
                       {organization.suspended_at ? "Unsuspend" : "Suspend"}
@@ -81,7 +94,12 @@ export default async function AdminOrganizationsPage({
                   {isFeatureEnabled("credits") ? (
                     <form action={adjustCreditsAction} className="flex items-end gap-2">
                       <input name="organizationId" type="hidden" value={organization.id} />
-                      <TextField label="Credit adjustment" name="amount" placeholder="e.g. 100 or -50" type="number" />
+                      <TextField
+                        label="Credit adjustment"
+                        name="amount"
+                        placeholder="e.g. 100 or -50"
+                        type="number"
+                      />
                       <Button size="sm" type="submit" variant="outline">
                         Adjust credits
                       </Button>

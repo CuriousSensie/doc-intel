@@ -16,8 +16,7 @@ export default async function AdminAuditLogPage({
   return (
     <div className="grid gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Admin</p>
-        <h1 className="mt-3 text-3xl font-black">Audit Log</h1>
+        <h1 className="text-3xl font-black">Audit Log</h1>
         <p className="mt-3 leading-7 text-muted">
           Security and state-changing events across the app. Rows older than 30 days are purged.
         </p>
@@ -25,7 +24,9 @@ export default async function AdminAuditLogPage({
 
       <section className="grid gap-3">
         {items.length === 0 ? (
-          <p className="rounded-lg border border-border bg-panel p-6 text-muted">No events recorded yet.</p>
+          <p className="rounded-lg border border-border bg-panel p-6 text-muted">
+            No events recorded yet.
+          </p>
         ) : (
           items.map((entry) => (
             <div className="rounded-lg border border-border bg-panel p-4 shadow-sm" key={entry.id}>
@@ -35,7 +36,9 @@ export default async function AdminAuditLogPage({
               </div>
               <p className="mt-1 text-sm text-muted">
                 actor: {entry.actor_id ?? "system"}
-                {entry.entity_type ? ` · ${entry.entity_type}${entry.entity_id ? `:${entry.entity_id}` : ""}` : ""}
+                {entry.entity_type
+                  ? ` · ${entry.entity_type}${entry.entity_id ? `:${entry.entity_id}` : ""}`
+                  : ""}
                 {entry.organization_id ? ` · org:${entry.organization_id}` : ""}
               </p>
             </div>
@@ -46,7 +49,9 @@ export default async function AdminAuditLogPage({
       {nextCursor ? (
         <div className="flex justify-center">
           <Button asChild variant="outline">
-            <Link href={`/admin/audit-log?cursor=${encodeURIComponent(nextCursor)}`}>Next page</Link>
+            <Link href={`/admin/audit-log?cursor=${encodeURIComponent(nextCursor)}`}>
+              Next page
+            </Link>
           </Button>
         </div>
       ) : null}

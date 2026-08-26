@@ -33,8 +33,7 @@ export default async function FilesPage({
   return (
     <div className="mx-auto grid max-w-3xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Dashboard</p>
-        <h1 className="mt-3 text-3xl font-black">Files</h1>
+        <h1 className="text-3xl font-black">Files</h1>
         <p className="mt-1 text-sm text-muted">
           Up to {formatSize(filesConfig.categories.document.maxSizeBytes)} per file.
         </p>

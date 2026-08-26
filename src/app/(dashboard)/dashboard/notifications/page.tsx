@@ -31,10 +31,7 @@ export default async function NotificationsPage({
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-              Dashboard
-            </p>
-            <h1 className="mt-3 text-3xl font-black">Notifications</h1>
+            <h1 className="text-3xl font-black">Notifications</h1>
             <p className="mt-1 text-sm text-muted">
               {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up."}
             </p>

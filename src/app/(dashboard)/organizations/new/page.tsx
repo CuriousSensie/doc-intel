@@ -22,10 +22,7 @@ export default async function NewOrganizationPage({
         <Link className="text-sm font-semibold text-muted" href="/organizations">
           Back to organizations
         </Link>
-        <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-          Organizations
-        </p>
-        <h1 className="mt-3 text-3xl font-black">Create organization</h1>
+        <h1 className="mt-6 text-3xl font-black">Create organization</h1>
         <p className="mt-3 leading-7 text-muted">
           You will be the owner and can invite teammates once it is created.
         </p>

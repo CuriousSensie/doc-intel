@@ -9,16 +9,24 @@ export const dynamic = "force-dynamic";
 async function loadStats() {
   const admin = createAdminClient();
 
-  const [{ count: userCount }, organizationCount, subscriptionCount, recentSignups] = await Promise.all([
-    admin.from("profiles").select("id", { count: "exact", head: true }),
-    isFeatureEnabled("organizations")
-      ? admin.from("organizations").select("id", { count: "exact", head: true })
-      : Promise.resolve({ count: null }),
-    isFeatureEnabled("billing")
-      ? admin.from("subscriptions").select("id", { count: "exact", head: true }).in("status", ["active", "trialing"])
-      : Promise.resolve({ count: null }),
-    admin.from("profiles").select("id, email, name, created_at").order("created_at", { ascending: false }).limit(5)
-  ]);
+  const [{ count: userCount }, organizationCount, subscriptionCount, recentSignups] =
+    await Promise.all([
+      admin.from("profiles").select("id", { count: "exact", head: true }),
+      isFeatureEnabled("organizations")
+        ? admin.from("organizations").select("id", { count: "exact", head: true })
+        : Promise.resolve({ count: null }),
+      isFeatureEnabled("billing")
+        ? admin
+            .from("subscriptions")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["active", "trialing"])
+        : Promise.resolve({ count: null }),
+      admin
+        .from("profiles")
+        .select("id, email, name, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5)
+    ]);
 
   return {
     userCount: userCount ?? 0,
@@ -34,8 +42,7 @@ export default async function AdminDashboardPage() {
   return (
     <div className="grid gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Admin</p>
-        <h1 className="mt-3 text-3xl font-black">Dashboard</h1>
+        <h1 className="text-3xl font-black">Dashboard</h1>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           <div className="rounded-md border border-border p-4">
             <p className="text-sm text-muted">Users</p>
@@ -82,7 +89,9 @@ export default async function AdminDashboardPage() {
                   <p className="font-semibold">{profile.name ?? profile.email}</p>
                   <p className="text-sm text-muted">{profile.email}</p>
                 </div>
-                <p className="text-sm text-muted">{new Date(profile.created_at).toLocaleDateString()}</p>
+                <p className="text-sm text-muted">
+                  {new Date(profile.created_at).toLocaleDateString()}
+                </p>
               </div>
             ))
           )}

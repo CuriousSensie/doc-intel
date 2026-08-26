@@ -31,8 +31,7 @@ export default async function AdminUsersPage({
   return (
     <div className="grid gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Admin</p>
-        <h1 className="mt-3 text-3xl font-black">Users</h1>
+        <h1 className="text-3xl font-black">Users</h1>
         <form action="/admin/users" className="mt-5 flex gap-3">
           <TextField defaultValue={params.q ?? ""} label="Search by email" name="q" />
           <Button className="self-end" type="submit" variant="outline">
@@ -77,7 +76,11 @@ export default async function AdminUsersPage({
                     </form>
                     <form action={setAppAdminAction}>
                       <input name="userId" type="hidden" value={user.id} />
-                      <input name="isAdmin" type="hidden" value={user.is_app_admin ? "false" : "true"} />
+                      <input
+                        name="isAdmin"
+                        type="hidden"
+                        value={user.is_app_admin ? "false" : "true"}
+                      />
                       <Button size="sm" type="submit" variant="outline">
                         {user.is_app_admin ? "Revoke admin" : "Make admin"}
                       </Button>
@@ -97,7 +100,12 @@ export default async function AdminUsersPage({
                   {isFeatureEnabled("credits") ? (
                     <form action={adjustCreditsAction} className="flex items-end gap-2">
                       <input name="userId" type="hidden" value={user.id} />
-                      <TextField label="Credit adjustment" name="amount" placeholder="e.g. 100 or -50" type="number" />
+                      <TextField
+                        label="Credit adjustment"
+                        name="amount"
+                        placeholder="e.g. 100 or -50"
+                        type="number"
+                      />
                       <Button size="sm" type="submit" variant="outline">
                         Adjust credits
                       </Button>

@@ -1,10 +1,12 @@
 import type { FeatureKey } from "@/config/features";
 
 export type NavigationIcon =
+  | "ArrowLeft"
   | "Bell"
   | "Building2"
   | "CreditCard"
   | "FolderKanban"
+  | "History"
   | "LayoutDashboard"
   | "Lock"
   | "Paperclip"
@@ -38,6 +40,14 @@ export const dashboardNavigation: NavigationItem[] = [
   { label: "Organizations", href: "/organizations", feature: "organizations", icon: "Building2" },
   { label: "Team", href: "/settings/team", feature: "organizations", icon: "Users" },
   { label: "Admin", href: "/admin", feature: "admin", icon: "ShieldCheck" }
+];
+
+export const adminNavigation: NavigationItem[] = [
+  { label: "Dashboard", href: "/admin", icon: "LayoutDashboard" },
+  { label: "Users", href: "/admin/users", icon: "Users" },
+  { label: "Organizations", href: "/admin/organizations", icon: "Building2" },
+  { label: "Audit Log", href: "/admin/audit-log", icon: "History" },
+  { label: "Back to dashboard", href: "/dashboard", icon: "ArrowLeft" }
 ];
 
 export const settingsNavigation: NavigationItem[] = [

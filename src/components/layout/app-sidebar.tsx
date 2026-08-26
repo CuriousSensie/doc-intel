@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  ArrowLeft,
   Bell,
   Building2,
   CreditCard,
   FolderKanban,
+  History,
   LayoutDashboard,
   Lock,
   type LucideIcon,
@@ -18,6 +20,7 @@ import {
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { useSidebar } from "@/components/layout/sidebar-provider";
 import { Button } from "@/components/ui/button";
@@ -28,10 +31,12 @@ import type { NavigationIcon, NavigationItem } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 
 const iconMap: Record<NavigationIcon, LucideIcon> = {
+  ArrowLeft,
   Bell,
   Building2,
   CreditCard,
   FolderKanban,
+  History,
   LayoutDashboard,
   Lock,
   Paperclip,
@@ -40,12 +45,38 @@ const iconMap: Record<NavigationIcon, LucideIcon> = {
   Users
 };
 
+const INDEX_ROUTES = new Set(["/dashboard", "/admin"]);
+
 function isItemActive(pathname: string, href: string) {
-  if (href === "/dashboard") {
+  if (INDEX_ROUTES.has(href)) {
     return pathname === href;
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+const LABEL_TRANSITION =
+  "grid overflow-hidden transition-[grid-template-columns,opacity] duration-[350ms] ease-in-out";
+
+function CollapsibleLabel({
+  children,
+  className,
+  collapsed
+}: {
+  children: ReactNode;
+  className?: string;
+  collapsed: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        LABEL_TRANSITION,
+        collapsed ? "grid-cols-[0fr] opacity-0" : "grid-cols-[1fr] opacity-100"
+      )}
+    >
+      <span className={cn("overflow-hidden truncate", className)}>{children}</span>
+    </span>
+  );
 }
 
 function SidebarBrand({ collapsed }: { collapsed: boolean }) {
@@ -58,7 +89,9 @@ function SidebarBrand({ collapsed }: { collapsed: boolean }) {
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-foreground text-xs font-black text-background">
         {appConfig.logo.label.slice(0, 2).toUpperCase()}
       </span>
-      {!collapsed ? <span className="truncate text-sm font-bold">{appConfig.name}</span> : null}
+      <CollapsibleLabel className="text-sm font-bold" collapsed={collapsed}>
+        {appConfig.name}
+      </CollapsibleLabel>
     </Link>
   );
 }
@@ -76,8 +109,8 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
           <Link
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-semibold transition-colors",
-              collapsed && "justify-center px-0",
+              "flex min-h-10 items-center rounded-md px-3 text-sm font-semibold transition-[background-color,color,gap] duration-200",
+              collapsed ? "justify-center gap-0 px-0" : "gap-3",
               active
                 ? "bg-accent/12 text-accent"
                 : "text-muted hover:bg-panel-strong hover:text-foreground"
@@ -86,7 +119,7 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
             key={item.href}
           >
             {Icon ? <Icon aria-hidden className="size-4.5 shrink-0" /> : null}
-            {!collapsed ? <span className="truncate">{item.label}</span> : null}
+            <CollapsibleLabel collapsed={collapsed}>{item.label}</CollapsibleLabel>
           </Link>
         );
 
@@ -112,7 +145,7 @@ export function AppSidebar({ items }: { items: NavigationItem[] }) {
     <TooltipProvider>
       <aside
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-panel transition-[width] duration-200 ease-in-out lg:flex",
+          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-panel transition-[width] duration-[350ms] ease-in-out lg:flex",
           collapsed ? "w-(--sidebar-width-collapsed)" : "w-(--sidebar-width)"
         )}
       >

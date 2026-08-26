@@ -29,10 +29,7 @@ export default async function OrganizationsPage({
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-              Organizations
-            </p>
-            <h1 className="mt-3 text-3xl font-black">Your organizations</h1>
+            <h1 className="text-3xl font-black">Your organizations</h1>
           </div>
           <Button asChild>
             <Link href="/organizations/new">Create organization</Link>
