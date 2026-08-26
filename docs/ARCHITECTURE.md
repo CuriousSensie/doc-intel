@@ -146,7 +146,7 @@ sequenceDiagram
   Browser->>Stripe: completes payment
   Stripe-->>Browser: redirect to successPath (UI courtesy message only)
   Stripe->>Webhook: POST checkout.session.completed (signed)
-  Webhook->>Webhook: verify signature; dedupe via webhook_events (provider, event_id)
+  Webhook->>Webhook: verify  dedupe via webhook_events
   Webhook->>DB: upsert subscriptions row
   Webhook->>DB: logEvent("billing.subscription.updated")
   Note over Browser,DB: getOwnerPlan() always re-reads the subscriptions table —<br/>the Checkout success redirect is never treated as proof of payment.
