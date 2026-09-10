@@ -199,17 +199,25 @@ async function main() {
         tenantA.session.token
       );
       if (taskRes.ok) {
-        const tasks = (await taskRes.json()) as Array<{
-          status: string;
-          related_document?: number;
-        }>;
-        const task = tasks[0];
-        if (task?.status === "SUCCESS" && task.related_document) {
-          documentId = task.related_document;
-        } else if (task?.status === "FAILURE") {
+        // /api/tasks/ returns a paginated envelope ({results: [...]}), not a bare array — and
+        // status is lowercase ("success"/"failure") with the document id under
+        // related_document_ids (a list), not a singular related_document. All three were wrong
+        // on the first pass through this spike; verified against a live 3.1.3 response.
+        const body = (await taskRes.json()) as {
+          results: Array<{ status: string; related_document_ids?: number[] }>;
+        };
+        const task = body.results[0];
+        if (task?.status === "success" && task.related_document_ids?.[0]) {
+          documentId = task.related_document_ids[0];
+        } else if (task?.status === "failure") {
           console.error("  consumption failed:", task);
           break;
         }
+      } else if (i === 0) {
+        // Log once, not every poll — a non-OK status here (e.g. missing view_paperlesstask
+        // permission on the tenant group) silently looked identical to "still processing"
+        // before this line existed, which is exactly what happened on this spike's first run.
+        console.error(`  task poll returned ${taskRes.status}: ${await taskRes.text()}`);
       }
     }
   }

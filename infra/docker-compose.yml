@@ -86,13 +86,32 @@ services:
     networks: [pomocnik]
 
   # paperless-webserver: web UI/API, the built-in task scheduler, and (by default, inside
-  # this same container) the consumer + Celery workers. See paperless-worker below for why
-  # OCR work is split into its own container instead of relying on that default.
+  # this same container) the consumer + Celery workers.
+  #
+  # KNOWN GAP, found during the Phase 0 spike (docs/spike-findings.md): the separate
+  # paperless-worker container below — overriding `command` to run just `celery worker`, per
+  # the community pattern at github.com/paperless-ngx/paperless-ngx/discussions/3900 — crash
+  # loops on this pinned 3.1.3 image. Paperless 3.0 shipped "a redesigned task system"
+  # (release notes) and celery beat fails with "PAPERLESS_SECRET_KEY is not set" on every
+  # restart even though the container's actual environment has it set correctly (verified via
+  # `docker exec ... printenv`) — the /init entrypoint appears to special-case a `celery`
+  # command differently than the v2-era pattern assumed, not a simple env-passing bug. Root
+  # cause not fully diagnosed; needs upstream doc research or an issue filed before Phase 1
+  # depends on it. For now, this container runs everything (webserver + consumer + Celery
+  # workers) in its default all-in-one mode — Paperless's standard supported configuration —
+  # with `paperless-worker` defined but stopped. D4's "separate container from day one" isn't
+  # met yet; tracked in docs/IMPLEMENTATION_PLAN.md, not silently dropped.
   paperless-webserver:
     image: paperlessngx/paperless-ngx:3.1.3
     profiles: ["paperless", "full"]
     restart: unless-stopped
     networks: [pomocnik]
+    # host.docker.internal doesn't resolve on Linux Docker Engine by default (it's a Docker
+    # Desktop/Mac-Windows convenience) — found while running the Phase 0 event-bridge spike.
+    # Needed so the post-consume script can reach a listener running on the host (local dev,
+    # before `web` is itself a container) via POMOCNIK_INTERNAL_URL.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres-paperless: { condition: service_healthy }
       redis-paperless: { condition: service_healthy }
@@ -105,6 +124,9 @@ services:
       PAPERLESS_DBNAME: ${PAPERLESS_DBNAME:-paperless}
       PAPERLESS_DBUSER: ${PAPERLESS_DBUSER:-paperless}
       PAPERLESS_DBPASS: ${PAPERLESS_DBPASS:?set in .env}
+      # Required — Paperless refuses to start with the default value. Generate with:
+      # python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set in .env}
       PAPERLESS_TIKA_ENABLED: "1"
       PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
       PAPERLESS_TIKA_ENDPOINT: http://tika:9998
@@ -118,8 +140,9 @@ services:
       # The event bridge (specs/01-architecture.md §Event bridge) — never blocks consumption
       # on our error, per that spec's explicit requirement.
       PAPERLESS_POST_CONSUME_SCRIPT: /scripts/notify-pomocnik.sh
-      # Split OCR/Celery work into paperless-worker below rather than this container.
-      PAPERLESS_TASK_WORKERS: "1"
+      # All-in-one mode for now (see the KNOWN GAP note above) — this container does its own
+      # OCR/Celery work rather than offloading to paperless-worker.
+      PAPERLESS_TASK_WORKERS: "2"
       PAPERLESS_THREADS_PER_WORKER: "1"
     volumes:
       - paperless-data:/usr/src/paperless/data
@@ -132,15 +155,16 @@ services:
       # public entrypoint once Phase 1's app is in front of it (see infra/nginx/).
       - "127.0.0.1:8010:8000"
 
-  # paperless-worker: OCR/Celery work in its own container(s), separate from day one (D4) so
-  # this can move to a dedicated-vCPU host under load without re-architecture. This split is
-  # a documented community pattern, not an officially packaged Paperless deployment mode —
-  # verify it against the pinned 3.1.3 image during the Phase 0 import-throughput spike before
-  # relying on it for a real import.
+  # paperless-worker: intended to run OCR/Celery work in its own container, separate from
+  # day one (D4) so it can move to a dedicated-vCPU host under load without re-architecture.
+  # CURRENTLY NON-FUNCTIONAL on the pinned 3.1.3 image — see the KNOWN GAP note on
+  # paperless-webserver above. Defined here (not started by default — no restart policy, must
+  # be started explicitly with `docker compose up paperless-worker` once fixed) so the shape
+  # is ready the moment the crash loop is root-caused, rather than designing this in later.
   paperless-worker:
     image: paperlessngx/paperless-ngx:3.1.3
-    profiles: ["paperless", "full"]
-    restart: unless-stopped
+    profiles: ["paperless-worker-disabled-pending-fix"]
+    restart: "no"
     networks: [pomocnik]
     depends_on:
       postgres-paperless: { condition: service_healthy }
@@ -152,6 +176,9 @@ services:
       PAPERLESS_DBNAME: ${PAPERLESS_DBNAME:-paperless}
       PAPERLESS_DBUSER: ${PAPERLESS_DBUSER:-paperless}
       PAPERLESS_DBPASS: ${PAPERLESS_DBPASS:?set in .env}
+      # Required — Paperless refuses to start with the default value. Generate with:
+      # python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set in .env}
       PAPERLESS_TIKA_ENABLED: "1"
       PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
       PAPERLESS_TIKA_ENDPOINT: http://tika:9998

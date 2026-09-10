@@ -9,6 +9,35 @@
 
 const PAPERLESS_URL = process.env.PAPERLESS_URL ?? "http://localhost:8010";
 
+/**
+ * Django model-level permission codenames (bare `codename`, NOT `app_label.codename` — found
+ * by trial: Paperless's group serializer 400s with "Object with codename=documents.add_tag
+ * does not exist" when given the qualified form) a tenant group needs before its service user
+ * can do anything at all — this is a SEPARATE layer from Paperless's per-object owner/ACL
+ * permissions this spike otherwise tests. A fresh Django group has zero permissions by
+ * default; specs/01-architecture.md's provisioning step ("create Paperless group
+ * tenant_<org_id>") is silent on this, but worker/jobs/provision-tenant.ts (Phase 1) MUST
+ * grant an equivalent set or the tenant service user can't create a single tag, let alone a
+ * document. Listed here per model, from `Permission.objects.filter(content_type__app_label=
+ * "documents")` against the pinned 3.1.3 image.
+ */
+const TENANT_MODEL_PERMISSIONS = [
+  "tag",
+  "document",
+  "documenttype",
+  "correspondent",
+  "storagepath",
+  "customfield",
+  "customfieldinstance",
+  "savedview",
+  "savedviewfilterrule",
+  "note",
+  "paperlesstask",
+  "workflow",
+  "workflowtrigger",
+  "workflowaction"
+].flatMap((model) => ["add", "change", "delete", "view"].map((action) => `${action}_${model}`));
+
 export type PaperlessSession = {
   token: string;
   username: string;
@@ -16,7 +45,10 @@ export type PaperlessSession = {
 
 async function paperlessFetch(path: string, token: string | null, init: RequestInit = {}) {
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    // Only force JSON when the body isn't FormData — a FormData body needs fetch to set its
+    // own multipart/form-data boundary; forcing application/json here produced a real 415 on
+    // /api/documents/post_document/ during the isolation spike.
+    ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(init.headers as Record<string, string> | undefined)
   };
 
@@ -54,9 +86,13 @@ export async function bootstrapTenant(
 ): Promise<{ groupId: number; userId: number; session: PaperlessSession }> {
   const suffix = `spike_${label}_${Date.now()}`;
 
+  // `permissions` here is Django's group-level Django-permission list (distinct from
+  // Paperless's per-object `set_permissions`/`permissions` field checked elsewhere in this
+  // spike) — required by /api/groups/, and a tenant group needs the full model-level set
+  // below or its service user can't create anything at all, regardless of object-level ACLs.
   const groupRes = await paperlessFetch("/api/groups/", adminToken, {
     method: "POST",
-    body: JSON.stringify({ name: `tenant_${suffix}` })
+    body: JSON.stringify({ name: `tenant_${suffix}`, permissions: TENANT_MODEL_PERMISSIONS })
   });
   if (!groupRes.ok) {
     throw new Error(`create group failed: ${groupRes.status} ${await groupRes.text()}`);

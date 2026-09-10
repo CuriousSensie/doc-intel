@@ -11,45 +11,84 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 
 ## Phase 0 — De-risking spike
 
-- [ ] Isolation spike run against the pinned Paperless version; all 20 checks from
-      `specs/10-nonfunctional.md` executed manually; workflow-ACL gap written up (already
-      confirmed pre-build — see [ADR-0006](adr/0006-disable-paperless-workflow-delegation.md))
-- [ ] Event bridge spike (kill-and-recover test)
-- [ ] Slovenian OCR spike (č/š/ž fidelity on real scanned invoices)
-- [ ] Import throughput spike (~1,000 documents, measured wall time/CPU/contention)
-- [ ] Findings written to `docs/spike-findings.md`; any kill-criterion hit escalated before
-      Phase 1 starts
+- [x] Isolation spike run against the pinned Paperless version (13 of 20 checks — the subset
+      not needing Level 1+ primitives — actually executed against a live instance); workflow-ACL
+      gap empirically confirmed (see [ADR-0006](adr/0006-disable-paperless-workflow-delegation.md)).
+      **2 real findings**: custom field definitions leak across tenants (#6, contained by
+      always querying our own mirror, never Paperless's list endpoint); cross-tenant document
+      download returns 403 not 404 (#8, confirms the error-mapping layer is load-bearing, not
+      optional). See `docs/spike-findings.md` §1.
+- [ ] Event bridge spike — mechanism confirmed (script executes, env vars propagate,
+      container-to-container networking works), but end-to-end webhook delivery and the
+      kill-and-recover test are still unverified (sandbox-specific container→host network
+      restriction blocked the throwaway listener test — not expected to reproduce once `web`
+      is a compose service). Re-run once the real webhook route exists (Phase 1 §7).
+- [ ] Slovenian OCR spike — `tesseract-ocr-slv` confirmed present in the pinned image and
+      configured correctly; **actual recognition fidelity on a real scan is untested — needs
+      the user to supply real/representative Slovenian scanned invoices.** Blocking item.
+- [ ] Import throughput spike — ran at reduced scale (100 synthetic documents, not 1,000 real
+      scanned ones) due to this session's sandbox constraints; confirmed OCR backlog is real
+      even at trivial scale. Full-scale run deferred to Phase 5's load test on the real VPS.
+- [x] Findings written to `docs/spike-findings.md`. **No kill-criterion was hit** — proceeding
+      to Phase 1 with all findings above carried forward as tracked implementation
+      requirements (see the additions below), not assumptions.
 
 ## Infra setup
 
-- [ ] `infra/docker-compose.yml` — nginx, web, worker, redis-app, Paperless webserver + its own
-      Postgres/Redis, Celery OCR workers (separate containers), Gotenberg, Tika (business
-      Postgres/Auth/Storage is Supabase Cloud — not a compose service; see
-      [ADR-0003](adr/0003-supabase-cloud-over-self-hosted.md))
-- [ ] Supabase Cloud project created (EU/Frankfurt region), `.env`/secrets configured
-- [ ] `infra/scripts/notify-pomocnik.sh` (HMAC over body+timestamp, see §7 below)
-- [ ] Boots from a clean checkout with one command
+- [x] `infra/docker-compose.yml` — nginx, web, worker, redis-app, Paperless webserver + its own
+      Postgres/Redis, Gotenberg, Tika (business Postgres/Auth/Storage is Supabase Cloud — not a
+      compose service; see [ADR-0003](adr/0003-supabase-cloud-over-self-hosted.md)). **Deviation
+      from D4**: the separate Celery OCR worker container is defined but disabled — it
+      crash-loops on the pinned 3.1.3 image (see `docs/spike-findings.md` §0); webserver runs
+      in Paperless's default all-in-one mode until root-caused.
+- [ ] Supabase Cloud project created (EU/Frankfurt region), `.env`/secrets configured — not
+      done this session (no live Supabase project provisioned; local infra work used only the
+      Paperless side)
+- [x] `infra/scripts/notify-pomocnik.sh` (HMAC over body+timestamp) — confirmed executing
+      correctly against a live instance (exits 0, correct env vars), end-to-end delivery still
+      pending per the event-bridge spike note above
+- [x] Boots from a clean checkout with one command (`docker compose --profile paperless up -d`
+      verified end-to-end this session, including fixing `PAPERLESS_SECRET_KEY` being
+      undocumented and `host.docker.internal` not resolving on Linux — both fixed in the
+      compose file/`.env.example`)
 
 ## Phase 1 — Level 0 Foundation
 
-- [ ] `docs/adr/0001`–`0010` written (this commit)
-- [ ] `docs/GLOSSARY.md`, `docs/SPEC_TRACEABILITY.md` created (this commit)
-- [ ] `docs/audit-boilerplate.md` — formal writeup of the boilerplate audit findings
-- [ ] Worker process: `worker/index.ts`, `worker/registry.ts`, `worker/queues.ts`,
-      `worker/context.ts`, `Dockerfile.worker`
-- [ ] `src/lib/service-context.ts` ([ADR-0007](adr/0007-service-context-pattern.md))
-- [ ] `src/lib/queue/` (BullMQ wrapper)
+- [x] `docs/adr/0001`–`0010` written
+- [x] `docs/GLOSSARY.md`, `docs/SPEC_TRACEABILITY.md` created
+- [ ] `docs/audit-boilerplate.md` — formal writeup of the boilerplate audit findings (this
+      session's audit findings are captured in the ADRs and `docs/spike-findings.md`, but the
+      standalone doc `specs/04-level-0-foundation.md` asks for hasn't been written yet)
+- [x] Worker process: `worker/index.ts`, `worker/registry.ts`, `worker/queues.ts`,
+      `worker/context.ts`, `Dockerfile.worker` — scaffolded and confirmed booting (real BullMQ
+      Workers start, path aliases resolve via `tsx`); job handlers are still honest
+      placeholders pending the items below
+- [x] `src/lib/service-context.ts` ([ADR-0007](adr/0007-service-context-pattern.md))
+- [x] `src/lib/queue/` (BullMQ wrapper)
 - [ ] Migration: orgs extension columns + `read-only` role + `protect_system_columns()` trigger
 - [ ] Role rollout: invitation schema/UI, `AssignableRole`, RLS review for `read-only`
 - [ ] Migration: `tenant_paperless_config`, `paperless_object_map`
-- [ ] `scripts/check-rls-coverage.ts` CI check
+- [x] `scripts/check-rls-coverage.ts` CI check — verified against both a real violation (catches
+      it) and the existing schema (passes)
 - [ ] `src/modules/tenants/` + `worker/jobs/provision-tenant.ts` (idempotent, advisory-locked,
-      compensating cleanup)
+      compensating cleanup). **Must grant `TENANT_MODEL_PERMISSIONS`-equivalent Django group
+      permissions** (add/change/delete/view for tag, document, documenttype, correspondent,
+      storagepath, customfield, customfieldinstance, savedview, savedviewfilterrule, note,
+      paperlesstask, workflow, workflowtrigger, workflowaction — bare `codename`, not
+      `app_label.codename`) **in addition to** per-object `set_permissions` — confirmed via the
+      Phase 0 isolation spike that a fresh Paperless group has zero permissions by default and
+      the tenant service user cannot create anything without this. See
+      `scripts/spike/lib/paperless-admin.ts` and `docs/spike-findings.md` §1.
 - [ ] `POST /admin/orgs/:id/reprovision`
 - [ ] `src/lib/paperless/` (client, documents, fields, tags, workflows, types, errors) +
       runtime permission-vs-tenant-config validation + ESLint admin-client restriction +
-      `resolveTenantForPaperlessDocument()` narrow export
-- [ ] Paperless contract tests in CI against a live container
+      `resolveTenantForPaperlessDocument()` narrow export. **`errors.ts` must translate a
+      Paperless 403 on any tenant-scoped read into our `NOT_FOUND` (404)** — confirmed via the
+      Phase 0 isolation spike that Paperless returns 403 (not 404) for cross-tenant document
+      access, which `specs/03-api.md` explicitly forbids exposing. See `docs/spike-findings.md`
+      §1 (#8).
+- [ ] Paperless contract tests in CI against a live container — `.github/workflows/ci.yml`
+      already wires this up (`continue-on-error` until `src/lib/paperless` exists)
 - [ ] `src/modules/documents/` + `document_uploads` table + `document-uploads` Storage bucket
 - [ ] `worker/jobs/validate-upload.ts` (MIME re-sniff + ClamAV)
 - [ ] `worker/jobs/submit-upload-to-paperless.ts` (task-id persisted, resumable)
@@ -64,9 +103,13 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 - [ ] `worker/jobs/reconcile-incremental.ts` (5 min, added+modified, full pagination)
 - [ ] `worker/jobs/reconcile-full-sweep.ts` (daily, full listing, deletion detection)
 - [ ] Search passthrough on `documents.service.ts`
-- [ ] `e2e/isolation.spec.ts` — tests 1–8, 17–20
-- [ ] `.github/workflows/ci.yml` (lint/typecheck/test/build + Playwright against a real
-      Paperless container and a CI-scoped Supabase Cloud/local Supabase test project)
+- [ ] `e2e/isolation.spec.ts` — tests 1–8, 17–20 (the raw checks were run manually as
+      `scripts/spike/isolation.ts` this session — 9 of these 11 passed live against a real
+      instance; #6 and #8's equivalents failed and are tracked above, not silently dropped;
+      lifting these into real Playwright specs is still open)
+- [x] `.github/workflows/ci.yml` (lint/typecheck/test/build + Playwright against a real
+      Paperless container and a CI-scoped Supabase Cloud/local Supabase test project) — written;
+      not yet run in actual GitHub Actions (no push to a remote this session)
 - [ ] `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `docs/MODULES.md`, `docs/SECURITY.md`,
       `docs/SETUP.md` updated
 - [ ] **Phase 1 exit criteria met** (see plan §Verification)
@@ -78,7 +121,13 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 - [ ] `src/modules/entities/` (CRUD, identifier normalization, unit tests)
 - [ ] `src/modules/connections/` (`getConnections()` — the one union-query helper)
 - [ ] `entity-merge.service.ts` + `merge_entities()` Postgres function
-- [ ] Custom-field decision-rule runtime assertion
+- [ ] Custom-field decision-rule runtime assertion. **Also**: the entities/custom-fields UI and
+      every Server Action must read custom field *definitions* from our own `custom_field_defs`
+      mirror only, never `GET /api/custom_fields/` directly — confirmed via the Phase 0
+      isolation spike that Paperless's own endpoint leaks definitions across tenants even with
+      `owner`/`set_permissions` correctly set (`docs/spike-findings.md` §1, #6). Also add
+      isolation coverage for custom field *values* on documents (test #7) as a first priority —
+      untested in Phase 0, could be a deeper leak than definitions since we don't mirror values.
 - [ ] `documents.service.ts` — `listDocuments()` mixed-filter, `getDocument()`,
       `updateDocument()`
 - [ ] Dashboard nav entries + feature flags for `documents`/`entities`

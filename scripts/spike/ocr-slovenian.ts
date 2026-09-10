@@ -32,15 +32,20 @@ async function waitForDocument(token: string, taskId: string): Promise<number | 
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 3000));
     const res = await paperlessFetch(`/api/tasks/?task_id=${taskId}`, token);
-    if (!res.ok) continue;
-    const tasks = (await res.json()) as Array<{
-      status: string;
-      related_document?: number;
-      result?: string;
-    }>;
-    const task = tasks[0];
-    if (task?.status === "SUCCESS" && task.related_document) return task.related_document;
-    if (task?.status === "FAILURE") {
+    if (!res.ok) {
+      if (i === 0) console.error(`  task poll returned ${res.status}: ${await res.text()}`);
+      continue;
+    }
+    // See scripts/spike/isolation.ts for the three real bugs this shape fixes (paginated
+    // envelope, lowercase status, related_document_ids as a list) — verified against a live
+    // 3.1.3 response.
+    const body = (await res.json()) as {
+      results: Array<{ status: string; related_document_ids?: number[]; result?: string }>;
+    };
+    const task = body.results[0];
+    if (task?.status === "success" && task.related_document_ids?.[0])
+      return task.related_document_ids[0];
+    if (task?.status === "failure") {
       console.error("  consumption failed:", task.result);
       return null;
     }
