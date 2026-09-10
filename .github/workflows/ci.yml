@@ -1,0 +1,113 @@
+name: CI
+
+# specs/12-agent-rules.md: "No PR merges with the isolation suite red." This workflow is what
+# makes that enforceable rather than a policy nobody checks. See
+# docs/IMPLEMENTATION_PLAN.md Phase 1 §10 and docs/adr/0006 for why Paperless runs for real
+# here rather than being mocked — the whole isolation model rests on its actual ACL behavior.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    name: lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: RLS coverage check
+        run: npx tsx scripts/check-rls-coverage.ts
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    name: e2e (real Paperless + real Supabase, no mocks)
+    runs-on: ubuntu-latest
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      # Real Supabase, not mocked — same local dev stack a contributor runs, so CI and local
+      # dev behave identically instead of drifting against two different backends.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack
+        run: supabase start
+
+      - name: Apply migrations + RLS policies
+        run: supabase db reset
+
+      # Real Paperless, not mocked — specs/12-agent-rules.md: "Testing against a mocked
+      # Paperless only is insufficient." Paperless-only profile is enough for the isolation
+      # suite; the full app/worker containers aren't needed since Playwright drives `npm run
+      # dev` directly against this checkout for faster iteration than rebuilding images per run.
+      - name: Start Paperless
+        working-directory: infra
+        env:
+          PAPERLESS_DBPASS: ci_test_password
+          PAPERLESS_URL: http://localhost:8010
+          PAPERLESS_ADMIN_USER: admin
+          PAPERLESS_ADMIN_PASSWORD: ci_test_password
+          PAPERLESS_ADMIN_MAIL: admin@example.com
+          PAPERLESS_TOKEN_ENCRYPTION_KEY: ${{ secrets.CI_PAPERLESS_TOKEN_ENCRYPTION_KEY }}
+          POMOCNIK_WEBHOOK_SECRET: ${{ secrets.CI_POMOCNIK_WEBHOOK_SECRET }}
+        run: |
+          cat > .env <<EOF
+          PAPERLESS_DBPASS=$PAPERLESS_DBPASS
+          PAPERLESS_URL=$PAPERLESS_URL
+          PAPERLESS_ADMIN_USER=$PAPERLESS_ADMIN_USER
+          PAPERLESS_ADMIN_PASSWORD=$PAPERLESS_ADMIN_PASSWORD
+          PAPERLESS_ADMIN_MAIL=$PAPERLESS_ADMIN_MAIL
+          PAPERLESS_TOKEN_ENCRYPTION_KEY=$PAPERLESS_TOKEN_ENCRYPTION_KEY
+          POMOCNIK_WEBHOOK_SECRET=$POMOCNIK_WEBHOOK_SECRET
+          EOF
+          docker compose --profile paperless up -d
+          echo "Waiting for Paperless to become healthy..."
+          timeout 180 sh -c 'until docker compose ps paperless-webserver | grep -q healthy; do sleep 5; done' || \
+            (docker compose logs paperless-webserver && exit 1)
+
+      - name: Run Playwright suite
+        run: npm run test:e2e
+        env:
+          # Points isolation.spec.ts (once it exists, Phase 1) and any Paperless contract
+          # tests at the CI-local instance started above.
+          PAPERLESS_URL: http://localhost:8010
+          PAPERLESS_ADMIN_USER: admin
+          PAPERLESS_ADMIN_PASSWORD: ci_test_password
+
+      - name: Paperless client contract tests
+        run: npm test -- src/lib/paperless
+        env:
+          PAPERLESS_URL: http://localhost:8010
+          PAPERLESS_ADMIN_USER: admin
+          PAPERLESS_ADMIN_PASSWORD: ci_test_password
+        continue-on-error: true # remove once src/lib/paperless exists (Phase 1) — vitest
+          # currently has nothing to match under that path and would fail the run on "no
+          # tests found" rather than a real failure.
+
+      - name: Tear down
+        if: always()
+        working-directory: infra
+        run: docker compose --profile paperless down -v
