@@ -29,7 +29,10 @@ export const envSchema = z.object({
     .transform((value) => value === "true"),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  RATE_LIMIT_MODE: z.enum(["memory", "external"]).default("memory")
+  RATE_LIMIT_MODE: z.enum(["memory", "external"]).default("memory"),
+  // BullMQ queue (infra/docker-compose.yml's `redis-app` service) — separate Redis instance
+  // from either of Paperless's, so an import backlog never starves our own app-level jobs.
+  REDIS_URL: z.string().url().default("redis://localhost:6379")
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

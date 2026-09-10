@@ -1,0 +1,16 @@
+# Pomočnik — worker process image, built for infra/docker-compose.yml's `worker` service.
+# Runs worker/index.ts directly via tsx (no separate build step) — this is a plain Node
+# process, not a Next.js app; see docs/adr/0002-single-repo-worker-entrypoint.md.
+
+FROM node:20-alpine
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY worker ./worker
+COPY src ./src
+
+ENV NODE_ENV=production
+CMD ["npx", "tsx", "worker/index.ts"]
