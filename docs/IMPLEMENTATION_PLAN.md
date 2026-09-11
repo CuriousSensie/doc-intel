@@ -152,7 +152,8 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 - [ ] `worker/jobs/sync-paperless-document.ts` (shared by upload, webhook, reconciliation)
 - [ ] `worker/jobs/expire-abandoned-uploads.ts`
 - [ ] `src/lib/errors.ts` extended (413/422/502/503)
-- [ ] `audit_logs.actor_type` column; retention extended to 2 years
+- [x] `audit_logs.actor_type` column (`20260826000000_tenant_provisioning.sql`); retention
+      extended to 2 years (`20260827000000_audit_log_retention.sql`)
 - [ ] Transactional audit Postgres functions ([ADR-0008](adr/0008-transactional-audit-writes.md))
 - [ ] `listAuditLogsForSubject()` scoped read
 - [ ] `src/app/api/internal/paperless/document-consumed/route.ts` (HMAC body+timestamp, replay
