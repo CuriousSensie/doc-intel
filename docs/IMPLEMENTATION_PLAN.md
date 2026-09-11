@@ -180,7 +180,12 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 ## Phase 5 — Hardening
 
 - [ ] Full isolation suite (all 20 tests) green in CI and on staging post-deploy
-- [ ] Load test at 50k-document/largest-tenant scale
+- [ ] Load test at 50k-document/largest-tenant scale. **Includes a real-scale OCR throughput
+      benchmark**: real scanned PDFs (not synthetic text files), a real dedicated-vCPU host (not
+      a shared-vCPU dev box), and the `paperless-worker` container split fixed (see the Phase 0
+      note above) — this is what actually retires the throughput question in
+      [ADR-0011](adr/0011-decline-mistral-ocr-pipeline.md), which this session's 100-document
+      synthetic-file spike could not.
 - [ ] Restore drill — both databases **and** the Paperless media volume — documented, RTO/RPO
       measured
 - [ ] Monitoring/alerting live (queue depth, DLQ, OCR backlog, isolation failure, disk, backups)
