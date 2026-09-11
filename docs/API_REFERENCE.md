@@ -260,6 +260,13 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 - `type AppEvent = { actorId: string | null; actorType?: "user"|"system"|"rule"|"import"|"ai"; action: string; entityType?; entityId?; organizationId?: string | null; metadata?: Json; ipAddress?: string | null; userAgent?: string | null }` — `actorType` defaults to `"user"` in the sink (ADR-0005, Pomočnik).
 - `type EventSink = { name: string; handle(event: AppEvent): Promise<void> }`
 
+### `sinks/console-sink.ts` / `sinks/audit-log-sink.ts`
+- `consoleSink: EventSink` — logs via `logger.info`.
+- `auditLogSink: EventSink` — inserts into `audit_logs` via the admin client.
+
+**To add a sink**: implement `EventSink`, push it into the `sinks` array in `index.ts`. See
+[MODULES.md#audit-logs](MODULES.md#audit-logs).
+
 ## `src/lib/paperless/`
 
 Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; `paperlessAdminClient()` is provisioning-only (ESLint-restricted to `src/modules/tenants/**` and `worker/jobs/provision-tenant.ts`).
@@ -287,12 +294,18 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `provisionTenant(orgId: string): Promise<void>` — `specs/01-architecture.md` §Provisioning. Claims via `claim_provisioning()`, idempotent find-or-create for the Paperless group/service user/document types/storage path, then `complete_provisioning()`; calls `fail_provisioning()` on any error and rethrows.
 - `findOrCreateGroup/findOrCreateServiceUser/findOrCreateDocumentType/findOrCreateStoragePath` — exported for `provision-tenant.test.ts`; not meant for use outside this module.
 
-### `sinks/console-sink.ts` / `sinks/audit-log-sink.ts`
-- `consoleSink: EventSink` — logs via `logger.info`.
-- `auditLogSink: EventSink` — inserts into `audit_logs` via the admin client.
+## `src/modules/documents/`
 
-**To add a sink**: implement `EventSink`, push it into the `sinks` array in `index.ts`. See
-[MODULES.md#audit-logs](MODULES.md#audit-logs).
+### `documents.service.ts`
+- `type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"]`
+- `createUploadIntent(userId, organizationId, { filename, size, mimeType }): Promise<{ uploadId, signedUrl, token, path }>` — validates against `src/config/documents.ts`; inserts via the caller's own RLS-scoped client; deletes the row if `createSignedUploadUrl()` fails.
+- `completeUpload(userId, uploadId): Promise<DocumentUpload>` — confirms the object exists in storage (`storage.list()`) before flipping `pending` → `uploaded` and enqueueing `validateUpload`.
+
+## `src/lib/api-response.ts`
+
+`specs/03-api.md`'s `{data,meta}`/`{error}` envelope for Route Handlers — Pomočnik.
+- `apiSuccess<T>(data, meta?, init?: { status? }): NextResponse`
+- `apiError(error, details?): NextResponse` — maps any thrown value through `toSafeError()`; error codes are the existing lowercase `AppError` convention, not `specs/03-api.md`'s literal UPPER_SNAKE (`docs/GLOSSARY.md`).
 
 ## `src/lib/pagination.ts`, `errors.ts`, `logger.ts`
 
@@ -325,6 +338,9 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `type BillingOwnerType`, `PlanKey`, `PlanFeatureMap`, `BillingPlan`, `CreditPack`.
 - `billingOwnerType: BillingOwnerType` — derived from `featureConfig.organizations`.
 - `billingConfig` — `{ currency, creditPacks, plans }`.
+
+### `documents.ts`
+- `documentsConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes, pendingExpiryMinutes }` — Pomočnik, separate from `files.ts`'s generic config (direct-to-storage, no spec'd size limit — see the file's own comment for the reasoning).
 
 ### `files.ts`
 - `type FileCategory = "avatar" | "document"`, `FileCategoryConfig`.

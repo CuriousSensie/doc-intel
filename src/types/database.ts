@@ -524,6 +524,136 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Paperless mirror (specs/02-data-model.md). Written only by the sync worker — no
+      // insert/update/delete policy, select-only for members.
+      documents: {
+        Row: {
+          id: string;
+          organization_id: string;
+          paperless_document_id: number;
+          title: string;
+          document_type_key: string | null;
+          document_date: string | null;
+          correspondent_name: string | null;
+          page_count: number | null;
+          byte_size: number | null;
+          mime_type: string | null;
+          checksum: string | null;
+          status: "pending" | "processing" | "ready" | "failed" | "orphaned";
+          source: "upload" | "import" | "email" | "template";
+          import_job_id: string | null;
+          synced_at: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          paperless_document_id: number;
+          title: string;
+          document_type_key?: string | null;
+          document_date?: string | null;
+          correspondent_name?: string | null;
+          page_count?: number | null;
+          byte_size?: number | null;
+          mime_type?: string | null;
+          checksum?: string | null;
+          status?: "pending" | "processing" | "ready" | "failed" | "orphaned";
+          source?: "upload" | "import" | "email" | "template";
+          import_job_id?: string | null;
+          synced_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          title?: string;
+          document_type_key?: string | null;
+          document_date?: string | null;
+          correspondent_name?: string | null;
+          page_count?: number | null;
+          byte_size?: number | null;
+          mime_type?: string | null;
+          checksum?: string | null;
+          status?: "pending" | "processing" | "ready" | "failed" | "orphaned";
+          synced_at?: string | null;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      document_uploads: {
+        Row: {
+          id: string;
+          organization_id: string;
+          storage_path: string;
+          filename: string;
+          declared_mime_type: string;
+          size_bytes: number;
+          status:
+            | "pending"
+            | "uploaded"
+            | "validating"
+            | "validated"
+            | "submitting"
+            | "processing"
+            | "completed"
+            | "failed"
+            | "expired";
+          error_message: string | null;
+          paperless_task_id: string | null;
+          document_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          storage_path: string;
+          filename: string;
+          declared_mime_type: string;
+          size_bytes: number;
+          status?:
+            | "pending"
+            | "uploaded"
+            | "validating"
+            | "validated"
+            | "submitting"
+            | "processing"
+            | "completed"
+            | "failed"
+            | "expired";
+          error_message?: string | null;
+          paperless_task_id?: string | null;
+          document_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          expires_at: string;
+        };
+        Update: {
+          status?:
+            | "pending"
+            | "uploaded"
+            | "validating"
+            | "validated"
+            | "submitting"
+            | "processing"
+            | "completed"
+            | "failed"
+            | "expired";
+          error_message?: string | null;
+          paperless_task_id?: string | null;
+          document_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

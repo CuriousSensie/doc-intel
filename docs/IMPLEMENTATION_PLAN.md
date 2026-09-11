@@ -146,7 +146,29 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       them, per the "read the real response" lesson from Phase 0.
 - [x] Paperless contract tests in CI against a live container — `.github/workflows/ci.yml`'s
       `continue-on-error` removed now that `src/lib/paperless` has real tests
-- [ ] `src/modules/documents/` + `document_uploads` table + `document-uploads` Storage bucket
+- [x] `documents` mirror table + `document_uploads` table + `document-uploads` Storage bucket
+      (`20260828000000_document_uploads.sql`). Verified as a real non-superuser Postgres role
+      (not `psql -U postgres`, which bypasses RLS) — first time this session RLS *enforcement*
+      itself was tested this way, not just the underlying `has_organization_write_access()`
+      function; a `read-only` member's insert is correctly rejected by the policy, a `member`'s
+      succeeds.
+- [x] `src/modules/documents/documents.service.ts` — `createUploadIntent()` (validates size/mime
+      against `src/config/documents.ts`, inserts via the caller's own RLS-scoped client so
+      `has_organization_write_access()` gates it for free, generates a signed upload URL via
+      the admin client, deletes the row if URL generation fails) and `completeUpload()`
+      (confirms the object actually exists in storage before trusting the client, enqueues
+      `validateUpload`). `src/lib/api-response.ts` is the new `{data,meta}`/`{error}` envelope
+      helper `specs/03-api.md` requires and [ADR-0009](adr/0009-route-handlers-vs-server-actions.md)
+      assumed already existed but didn't — error codes stay the existing lowercase `AppError`
+      convention, not the spec's literal UPPER_SNAKE (`docs/GLOSSARY.md`). Two Route Handlers
+      (`/api/documents/upload-intent`, `/api/documents/upload-complete`) per ADR-0009 — fetch-
+      based, so they use `getAuthContext()` + a 401 JSON body, not `requireUser()`'s redirect
+      (a `fetch()` call can't usefully follow a redirect to an HTML login page — found while
+      writing these, `files/[id]/download/route.ts`'s `requireUser()` is fine there specifically
+      because that route *is* a browser-navigated redirect). 8 unit tests (mocked Supabase
+      clients — the real Storage signed-URL behavior needs a live Supabase project, not
+      available this session; each assumption about `createSignedUploadUrl()`'s shape is cross-
+      checked against the installed `@supabase/storage-js` source, not guessed).
 - [ ] `worker/jobs/validate-upload.ts` (MIME re-sniff + ClamAV)
 - [ ] `worker/jobs/submit-upload-to-paperless.ts` (task-id persisted, resumable)
 - [ ] `worker/jobs/sync-paperless-document.ts` (shared by upload, webhook, reconciliation)

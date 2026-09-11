@@ -218,7 +218,49 @@ erDiagram
     timestamptz updated_at
   }
 
+  DOCUMENTS {
+    uuid id PK
+    uuid organization_id FK
+    int paperless_document_id "unique with organization_id"
+    text title
+    text document_type_key "nullable"
+    date document_date "nullable"
+    text correspondent_name "nullable"
+    int page_count "nullable"
+    bigint byte_size "nullable"
+    text mime_type "nullable"
+    text checksum "nullable — Paperless's, for dedup"
+    text status "pending|processing|ready|failed|orphaned"
+    text source "upload|import|email|template"
+    uuid import_job_id "nullable"
+    timestamptz synced_at "nullable"
+    uuid created_by FK "auth.users, set null"
+    timestamptz created_at
+    timestamptz updated_at
+    timestamptz deleted_at "nullable — soft delete"
+  }
+
+  DOCUMENT_UPLOADS {
+    uuid id PK
+    uuid organization_id FK
+    text storage_path
+    text filename
+    text declared_mime_type
+    bigint size_bytes
+    text status "pending|uploaded|validating|validated|submitting|processing|completed|failed|expired"
+    text error_message "nullable"
+    text paperless_task_id "nullable — resumable polling"
+    uuid document_id FK "nullable, set once documents row exists"
+    uuid created_by FK "auth.users, set null"
+    timestamptz created_at
+    timestamptz updated_at
+    timestamptz expires_at
+  }
+
   PROFILES ||--o{ ORGANIZATION_MEMBERS : "is a member via"
+  ORGANIZATIONS ||--o{ DOCUMENTS : "has (Pomočnik)"
+  ORGANIZATIONS ||--o{ DOCUMENT_UPLOADS : "has (Pomočnik)"
+  DOCUMENTS ||--o{ DOCUMENT_UPLOADS : "resolved from (Pomočnik)"
   ORGANIZATIONS ||--o{ ENTITY_TYPES : "has (Pomočnik)"
   ORGANIZATIONS ||--|| TENANT_PAPERLESS_CONFIG : "has (Pomočnik)"
   ORGANIZATIONS ||--o{ PAPERLESS_OBJECT_MAP : "owns (Pomočnik)"
@@ -290,6 +332,7 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | --- | --- | --- | --- |
 | `avatars` | Public | 5 MB | `uploadAvatar()` — served via `getPublicUrl`, no signed URL needed |
 | `files` | Private | 20 MB | `uploadFile()` / `getFileDownloadUrl()` — every read is a short-lived signed URL |
+| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Pomočnik. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other two buckets use); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
 
 No `storage.objects` RLS policies exist for either bucket — every read/write goes through the
 service-role admin client from trusted server code. See
@@ -318,6 +361,8 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` — Pomočnik. | PK is `organization_id` itself (1:1) |
 | `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Pomočnik. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
 | `entity_types` | select: org member or admin. write (insert/update/delete): org member **with write access** or admin — `has_organization_write_access()`, so `read-only` can't create/edit entity types either. Seeded (4 system rows per org) by `complete_provisioning()`, not application code — Pomočnik. | `(organization_id)` |
+| `documents` | select: org member or admin. **No insert/update/delete policy** — only the sync worker (admin client, `worker/jobs/sync-paperless-document.ts`) writes this table — Pomočnik. | `(organization_id, document_type_key)`, `(organization_id, document_date desc)`, `(organization_id, checksum)`, all `where deleted_at is null` (first two) |
+| `document_uploads` | select: org member or admin. insert: creator **with write access** (`created_by = auth.uid() and has_organization_write_access()`). **No update/delete policy** — every status transition after the initial insert runs via the admin client from a worker job — Pomočnik. | `(organization_id, created_at desc)`; partial `(expires_at) where status in ('pending','uploaded')` for `expire-abandoned-uploads.ts`'s sweep |
 
 ## Migration history
 
@@ -336,6 +381,7 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260825000000_paperless_linkage.sql` | **Pomočnik Level 0.** Adds `tenant_paperless_config` and `paperless_object_map` — both RLS-enabled with zero policies (admin-client only), matching the existing `stripe_customers`/`subscriptions`/`webhook_events` convention. Verified end-to-end against a throwaway Postgres container: RLS enabled + 0 policies confirmed, the `(object_type, paperless_id)` unique constraint correctly rejects a cross-tenant duplicate mapping, and the `object_type` check constraint correctly rejects an invalid value. |
 | `20260826000000_tenant_provisioning.sql` | **Pomočnik Level 0/1.** Adds `entity_types` (RLS: member read, write-access write); adds `audit_logs.actor_type` (ADR-0005); adds `claim_provisioning()`/`complete_provisioning()`/`fail_provisioning()` (ADR-0008). Verified against a throwaway Postgres container: first claim succeeds and a concurrent second claim is correctly refused, retry-after-failure is re-claimable, `complete_provisioning()` is idempotent on re-run (still exactly 4 `entity_types` rows, no duplicates). |
 | `20260827000000_audit_log_retention.sql` | **Pomočnik.** Extends `purge_old_audit_logs()`'s window from 30 days to 2 years (ADR-0005's stated consequence, not applied when `actor_type` was added). |
+| `20260828000000_document_uploads.sql` | **Pomočnik Level 0.** Adds the `documents` mirror table (specs/02-data-model.md; select-only RLS) and `document_uploads` (specs/01-architecture.md §Upload; select + creator-insert RLS); creates the `document-uploads` Storage bucket. Verified against a throwaway Postgres container **as a real non-superuser role** (not just `psql -U postgres`, which bypasses RLS entirely) — a `member` can insert their own upload, a `read-only` member is correctly rejected by the RLS policy itself, not just by `has_organization_write_access()`'s own return value. |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

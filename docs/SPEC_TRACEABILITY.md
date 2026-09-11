@@ -26,7 +26,7 @@ for a superseding decision).
 | Paperless integration client | `src/lib/paperless/{client,documents,fields,tags,workflows,types,errors}.ts` | in progress — client.ts/errors.ts/token-crypto.ts done, verified live; documents.ts/fields.ts/tags.ts/workflows.ts pending |
 | Event bridge (post-consume) | `src/app/api/internal/paperless/document-consumed/route.ts` | planned |
 | Reconciliation sweep | `worker/jobs/reconcile-incremental.ts`, `worker/jobs/reconcile-full-sweep.ts` | planned |
-| Upload flow | `src/modules/documents/**`, `worker/jobs/{validate-upload,submit-upload-to-paperless,sync-paperless-document}.ts` | planned |
+| Upload flow | `src/modules/documents/**`, `worker/jobs/{validate-upload,submit-upload-to-paperless,sync-paperless-document}.ts` | in progress — upload-intent/upload-complete done (unit-tested, mocked Supabase), the three worker jobs not yet built |
 
 ## specs/02-data-model.md — Postgres schema
 
@@ -35,7 +35,7 @@ for a superseding decision).
 | `orgs` extension columns | `supabase/migrations/<ts>_pomocnik_orgs_extension.sql` | planned |
 | `tenant_paperless_config`, `paperless_object_map` | `supabase/migrations/<ts>_paperless_linkage.sql` | planned |
 | `entity_types`, `entities`, `entity_identifiers` | `supabase/migrations/<ts>_entities_and_connections.sql`, `src/modules/entities/` | planned |
-| `documents` mirror | Created in Phase 1 upload-pipeline migration (needed before entity tables) | planned |
+| `documents` mirror | `20260828000000_document_uploads.sql` | done |
 | `connections` | Same migration as entities; `src/modules/connections/connections.service.ts#getConnections()` | planned |
 | `custom_field_defs` | Same migration; decision-rule enforced as runtime assertion in `src/modules/entities/` | planned |
 | `rules`, `rule_runs` | Phase 4 migration; `src/modules/rules/` | planned |
@@ -63,7 +63,7 @@ for a superseding decision).
 | Infrastructure (docker-compose) | `infra/docker-compose.yml` | planned |
 | Tenant provisioning | `src/modules/tenants/` | done |
 | Paperless integration client | `src/lib/paperless/` | in progress |
-| Upload pipeline | `src/modules/documents/`, `worker/jobs/*upload*` | planned |
+| Upload pipeline | `src/modules/documents/`, `worker/jobs/*upload*` | in progress — see Data model section above |
 | Event bridge + reconciliation | See specs/01 rows above | planned |
 | Search passthrough | `documents.service.ts` search wrapper | planned |
 | Isolation suite | `e2e/isolation.spec.ts` (tests 1–8, 17–20 in Phase 1; 9, 14–16 in Phase 2) | planned |
