@@ -150,6 +150,7 @@ erDiagram
   AUDIT_LOGS {
     uuid id PK
     uuid actor_id FK "auth.users, set null, nullable = system-initiated"
+    text actor_type "user|system|rule|import|ai, default 'user' — ADR-0005, Pomočnik"
     uuid organization_id FK "set null, nullable"
     text action "dot-namespaced, e.g. auth.login"
     text entity_type
@@ -204,7 +205,21 @@ erDiagram
     timestamptz created_at
   }
 
+  ENTITY_TYPES {
+    uuid id PK
+    uuid organization_id FK
+    text key "e.g. 'customer' — unique with organization_id"
+    text name
+    text name_plural
+    text icon "nullable"
+    boolean is_system "true for the 4 seeded types"
+    jsonb field_schema
+    timestamptz created_at
+    timestamptz updated_at
+  }
+
   PROFILES ||--o{ ORGANIZATION_MEMBERS : "is a member via"
+  ORGANIZATIONS ||--o{ ENTITY_TYPES : "has (Pomočnik)"
   ORGANIZATIONS ||--|| TENANT_PAPERLESS_CONFIG : "has (Pomočnik)"
   ORGANIZATIONS ||--o{ PAPERLESS_OBJECT_MAP : "owns (Pomočnik)"
   ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : "has"
@@ -265,6 +280,9 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | `increment_usage_counter(p_owner_type, p_user_id, p_organization_id, p_feature, p_period, p_amount, p_limit)` | Atomic conditional upsert — raises if the increment would exceed `p_limit`. The concurrency-safe alternative to a client-side read-then-write. |
 | `consume_credits(p_owner_type, p_user_id, p_organization_id, p_amount, p_reference, p_metadata)` | Takes a per-owner Postgres advisory lock, sums the ledger, inserts a debit row if sufficient balance exists — serializes concurrent spends to prevent double-spending on a table with no mutable balance column. |
 | `purge_old_audit_logs()` | Deletes `audit_logs` rows older than 30 days. **Not scheduled anywhere yet** — see [SECURITY.md](SECURITY.md#audit-logs). |
+| `claim_provisioning(p_organization_id)` | Conditional `UPDATE ... WHERE provisioning_status IN ('pending','provisioning_failed')`, returns whether *this* call claimed it. Not a Postgres advisory lock — see `provision-tenant.ts`'s doc comment for why a session-scoped lock isn't safe over PostgREST's pooled connections — Pomočnik. |
+| `complete_provisioning(p_organization_id, p_base_url, p_service_user_id, p_group_id, p_api_token_encrypted, p_storage_path_id, p_object_map)` | Atomically writes `tenant_paperless_config`, `paperless_object_map` rows, the four system `entity_types`, `organizations.provisioning_status = 'ready'`, and the `org.provisioned` audit row — ADR-0008. Idempotent (`on conflict ... do nothing`/`do update`) — Pomočnik. |
+| `fail_provisioning(p_organization_id, p_reason)` | Sets `provisioning_status = 'provisioning_failed'` and writes the `org.provisioning_failed` audit row atomically — Pomočnik. |
 
 ## Storage buckets
 
@@ -297,8 +315,9 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `audit_logs` | select: admin, or org owner/admin for their own org's rows. **No insert policy at all** — `logEvent()`'s `auditLogSink` (admin client) is the only writer. | `audit_logs_actor_idx (actor_id, created_at desc)` |
 | `webhook_events` | No policies read in application code (admin-client only, used solely by the Stripe webhook handler for idempotency). | unique `(provider, event_id)` |
 | `projects` | Scaffolded in the initial schema; no module currently reads/writes it. | — |
-| `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` (Phase 1) — Pomočnik. | PK is `organization_id` itself (1:1) |
+| `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` — Pomočnik. | PK is `organization_id` itself (1:1) |
 | `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Pomočnik. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
+| `entity_types` | select: org member or admin. write (insert/update/delete): org member **with write access** or admin — `has_organization_write_access()`, so `read-only` can't create/edit entity types either. Seeded (4 system rows per org) by `complete_provisioning()`, not application code — Pomočnik. | `(organization_id)` |
 
 ## Migration history
 
@@ -315,6 +334,7 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260823090000_admin.sql` | Adds `organizations.suspended_at` and threads it through `is_organization_member`/`has_organization_role`; adds `subscriptions.platform_disabled_at`; adds `purge_old_audit_logs()`. |
 | `20260824000000_pomocnik_orgs_extension.sql` | **Pomočnik Level 0.** Adds `organizations.timezone`/`locale`/`default_currency`/`provisioning_status`/`ai_enabled`; adds the `read-only` value to `organization_role`; adds `protect_system_columns()` + its trigger (blocks non-service-role writes to `provisioning_status`/`ai_enabled`); adds `has_organization_write_access()` and repoints `files_insert_owner` at it so a `read-only` member can't upload files. Verified end-to-end against a throwaway Postgres container with the `auth`/`storage` schemas stubbed (no live Supabase project yet this session) — see `docs/spike-findings.md`-adjacent session notes for the exact checks run. |
 | `20260825000000_paperless_linkage.sql` | **Pomočnik Level 0.** Adds `tenant_paperless_config` and `paperless_object_map` — both RLS-enabled with zero policies (admin-client only), matching the existing `stripe_customers`/`subscriptions`/`webhook_events` convention. Verified end-to-end against a throwaway Postgres container: RLS enabled + 0 policies confirmed, the `(object_type, paperless_id)` unique constraint correctly rejects a cross-tenant duplicate mapping, and the `object_type` check constraint correctly rejects an invalid value. |
+| `20260826000000_tenant_provisioning.sql` | **Pomočnik Level 0/1.** Adds `entity_types` (RLS: member read, write-access write); adds `audit_logs.actor_type` (ADR-0005); adds `claim_provisioning()`/`complete_provisioning()`/`fail_provisioning()` (ADR-0008). Verified against a throwaway Postgres container: first claim succeeds and a concurrent second claim is correctly refused, retry-after-failure is re-claimable, `complete_provisioning()` is idempotent on re-run (still exactly 4 `entity_types` rows, no duplicates). |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

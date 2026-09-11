@@ -1,13 +1,15 @@
 import { createHash, randomBytes } from "crypto";
 
 import { ConflictError } from "@/lib/errors";
+import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { Database } from "@/types/database";
 
 export type Organization = Database["public"]["Tables"]["organizations"]["Row"];
 export type OrganizationMember = Database["public"]["Tables"]["organization_members"]["Row"];
-export type OrganizationInvitation = Database["public"]["Tables"]["organization_invitations"]["Row"];
+export type OrganizationInvitation =
+  Database["public"]["Tables"]["organization_invitations"]["Row"];
 export type OrganizationRole = OrganizationMember["role"];
 export type AssignableRole = Exclude<OrganizationRole, "owner">;
 export type MemberWithProfile = OrganizationMember & {
@@ -78,6 +80,7 @@ export async function createOrganization(name: string, requestedSlug?: string) {
       throw error.code === "23505" ? new ConflictError("That URL slug is already taken") : error;
     }
 
+    await enqueue(QUEUE_NAMES.provisionTenant, { orgId: data });
     return data;
   }
 
@@ -91,6 +94,7 @@ export async function createOrganization(name: string, requestedSlug?: string) {
     });
 
     if (!error) {
+      await enqueue(QUEUE_NAMES.provisionTenant, { orgId: data });
       return data;
     }
 

@@ -148,6 +148,12 @@ export class PaperlessClient {
     return this.request<T>(path, { method: "PATCH", body });
   }
 
+  // Plain POST for objects with no owner/ACL concept (groups, users) — every tenant-owned
+  // object goes through createOwnedObject() below instead.
+  post<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, { method: "POST", body });
+  }
+
   delete(path: string): Promise<void> {
     return this.request<void>(path, { method: "DELETE" });
   }

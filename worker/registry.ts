@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { QUEUE_NAMES, type QueueName } from "@/lib/queue";
 
 import type { JobPayload } from "./context";
+import { provisionTenantJob } from "./jobs/provision-tenant";
 
 // Placeholders until each real handler lands (see docs/IMPLEMENTATION_PLAN.md) — loud failure,
 // not a silent no-op, so `docker compose up` boots a working worker without faking progress.
@@ -21,7 +22,7 @@ const notImplemented =
   };
 
 export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
-  [QUEUE_NAMES.provisionTenant]: notImplemented(QUEUE_NAMES.provisionTenant),
+  [QUEUE_NAMES.provisionTenant]: provisionTenantJob,
   [QUEUE_NAMES.validateUpload]: notImplemented(QUEUE_NAMES.validateUpload),
   [QUEUE_NAMES.submitUploadToPaperless]: notImplemented(QUEUE_NAMES.submitUploadToPaperless),
   [QUEUE_NAMES.syncPaperlessDocument]: notImplemented(QUEUE_NAMES.syncPaperlessDocument),

@@ -7,6 +7,7 @@ export const auditLogSink: EventSink = {
     const admin = createAdminClient();
     const { error } = await admin.from("audit_logs").insert({
       actor_id: event.actorId,
+      actor_type: event.actorType ?? "user",
       organization_id: event.organizationId ?? null,
       action: event.action,
       entity_type: event.entityType ?? null,

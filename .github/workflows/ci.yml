@@ -89,9 +89,10 @@ jobs:
           PAPERLESS_ADMIN_PASSWORD: ci_test_password
 
       - name: Paperless client contract tests
-        run: npm test -- src/lib/paperless
+        run: npm test -- src/lib/paperless src/modules/tenants
         env:
           PAPERLESS_URL: http://localhost:8010
+          PAPERLESS_ADMIN_URL: http://localhost:8010
           PAPERLESS_ADMIN_USER: admin
           PAPERLESS_ADMIN_PASSWORD: ci_test_password
 

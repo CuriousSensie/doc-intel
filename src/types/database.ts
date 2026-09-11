@@ -462,6 +462,7 @@ export type Database = {
         Row: {
           id: string;
           actor_id: string | null;
+          actor_type: "user" | "system" | "rule" | "import" | "ai";
           organization_id: string | null;
           action: string;
           entity_type: string | null;
@@ -474,6 +475,7 @@ export type Database = {
         Insert: {
           id?: string;
           actor_id?: string | null;
+          actor_type?: "user" | "system" | "rule" | "import" | "ai";
           organization_id?: string | null;
           action: string;
           entity_type?: string | null;
@@ -484,6 +486,42 @@ export type Database = {
           created_at?: string;
         };
         Update: Record<string, never>;
+        Relationships: [];
+      };
+      // specs/02-data-model.md, specs/05-level-1-structure.md. is_system rows are the four
+      // seeded types (customer/project/employee/contract) — complete_provisioning().
+      entity_types: {
+        Row: {
+          id: string;
+          organization_id: string;
+          key: string;
+          name: string;
+          name_plural: string;
+          icon: string | null;
+          is_system: boolean;
+          field_schema: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          key: string;
+          name: string;
+          name_plural: string;
+          icon?: string | null;
+          is_system?: boolean;
+          field_schema?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          name_plural?: string;
+          icon?: string | null;
+          field_schema?: Json;
+          updated_at?: string;
+        };
         Relationships: [];
       };
     };
@@ -541,9 +579,29 @@ export type Database = {
         Args: Record<string, never>;
         Returns: undefined;
       };
+      complete_provisioning: {
+        Args: {
+          p_organization_id: string;
+          p_base_url: string;
+          p_service_user_id: number;
+          p_group_id: number;
+          p_api_token_encrypted: string;
+          p_storage_path_id: number | null;
+          p_object_map: Json;
+        };
+        Returns: undefined;
+      };
+      fail_provisioning: {
+        Args: { p_organization_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      claim_provisioning: {
+        Args: { p_organization_id: string };
+        Returns: boolean;
+      };
     };
     Enums: {
-      organization_role: "owner" | "admin" | "member" | "read-only" | "read-only";
+      organization_role: "owner" | "admin" | "member" | "read-only";
       billing_owner_type: "user" | "organization";
       subscription_status:
         "incomplete" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";

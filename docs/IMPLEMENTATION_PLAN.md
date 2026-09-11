@@ -91,15 +91,41 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       accept an explicit `-- rls-coverage: admin-only (no policies)` marker for tables that are
       deliberately RLS-enabled with zero policies — both re-verified against the same real
       violation + passing-schema regression check.
-- [ ] `src/modules/tenants/` + `worker/jobs/provision-tenant.ts` (idempotent, advisory-locked,
-      compensating cleanup). **Must grant `TENANT_MODEL_PERMISSIONS`-equivalent Django group
-      permissions** (add/change/delete/view for tag, document, documenttype, correspondent,
-      storagepath, customfield, customfieldinstance, savedview, savedviewfilterrule, note,
-      paperlesstask, workflow, workflowtrigger, workflowaction — bare `codename`, not
-      `app_label.codename`) **in addition to** per-object `set_permissions` — confirmed via the
-      Phase 0 isolation spike that a fresh Paperless group has zero permissions by default and
-      the tenant service user cannot create anything without this. See
-      `scripts/spike/lib/paperless-admin.ts` and `docs/spike-findings.md` §1.
+- [x] `src/modules/tenants/provision-tenant.ts` + `worker/jobs/provision-tenant.ts`, wired into
+      `worker/registry.ts` and enqueued from `organizations.service.ts`'s `createOrganization()`.
+      Grants `TENANT_MODEL_PERMISSIONS` (bare codename, not `app_label.codename`) via
+      `findOrCreateGroup()`. **Idempotency is find-or-create at every Paperless-side step**
+      (`name__iexact` lookup before create — confirmed live that plain `?name=` is not an exact
+      filter and silently returns everything), **not delete-based compensating cleanup**: a
+      partial run leaves state the next retry discovers and resumes, which doesn't require
+      undoing partially-completed external API calls. **Concurrency is a conditional-UPDATE
+      claim** (`claim_provisioning()`, `pending`/`provisioning_failed` → `provisioning`, returns
+      whether *this* call claimed it) **rather than a Postgres advisory lock** — a session-scoped
+      advisory lock isn't safe over PostgREST's pooled per-request connections (lock and unlock
+      could land on different pooled connections), and the actual work spans external Paperless
+      calls between DB round-trips anyway, so a lock held for one RPC call wouldn't cover the
+      real race. This is a deliberate change from this checklist's earlier "advisory-locked"
+      phrasing once the pooled-connection constraint was worked through — not a spec
+      requirement, just this item's own earlier wording turning out to describe an unsafe
+      mechanism for this specific case.
+      `complete_provisioning()`/`fail_provisioning()` (ADR-0008: provisioning's audit record is
+      atomic with the domain write) seed the four system `entity_types`
+      (customer/project/employee/contract, Slovenian labels per specs/05's field_schema
+      example), four default document types (Invoice/Contract/Service report/Quotation, spec's
+      literal English list — no demonstrated localization pattern for document type names the
+      way entity field labels have one), and one default storage path.
+      **Verified against the live Paperless instance**: fresh create, then a second pass reusing
+      every id (group/user/document-type/storage-path all byte-identical to the first pass), and
+      the retry's password-reset-then-relogin produces a token that actually authenticates
+      (checked with a real API call, not just a non-empty string) — committed as
+      `src/modules/tenants/provision-tenant.test.ts` (skips without a live instance configured,
+      runs for real in CI's dedicated Paperless step). `claim_provisioning()`/
+      `complete_provisioning()`/`fail_provisioning()` verified against a throwaway Postgres
+      container: first claim succeeds, concurrent second claim correctly refused, retry-after-
+      failure re-claimable, `complete_provisioning()` idempotent on re-run (still exactly 4
+      entity_types, no duplicates). No live Supabase project exists yet this session, so the
+      full `provisionTenant()` orchestration (Paperless calls + real RPC calls together) is
+      unverified end-to-end — each half is verified against its real dependency separately.
 - [ ] `POST /admin/orgs/:id/reprovision`
 - [x] `src/lib/paperless/client.ts` — `paperlessFor(orgId)`/`paperlessAdminClient()`, retry with
       backoff+jitter, structured logging, 30s/120s timeouts, `createOwnedObject()` with a

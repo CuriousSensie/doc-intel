@@ -22,7 +22,7 @@ for a superseding decision).
 |---|---|---|
 | Topology / repo layout | `docs/adr/0002-single-repo-worker-entrypoint.md`, `infra/docker-compose.yml` | planned |
 | GPL boundary (D3) | `src/lib/paperless/**` is the only Paperless caller; no Paperless source in-repo | planned |
-| Tenancy model / provisioning | `src/modules/tenants/tenants.service.ts`, `worker/jobs/provision-tenant.ts` | planned |
+| Tenancy model / provisioning | `src/modules/tenants/provision-tenant.ts`, `worker/jobs/provision-tenant.ts` | done — Paperless-side verified live, DB-side verified against a throwaway Postgres, full orchestration untested end-to-end (no live Supabase project this session) |
 | Paperless integration client | `src/lib/paperless/{client,documents,fields,tags,workflows,types,errors}.ts` | in progress — client.ts/errors.ts/token-crypto.ts done, verified live; documents.ts/fields.ts/tags.ts/workflows.ts pending |
 | Event bridge (post-consume) | `src/app/api/internal/paperless/document-consumed/route.ts` | planned |
 | Reconciliation sweep | `worker/jobs/reconcile-incremental.ts`, `worker/jobs/reconcile-full-sweep.ts` | planned |
@@ -61,7 +61,7 @@ for a superseding decision).
 |---|---|---|
 | Boilerplate audit | This session's audit — see `docs/adr/0001`–`0003` | done |
 | Infrastructure (docker-compose) | `infra/docker-compose.yml` | planned |
-| Tenant provisioning | `src/modules/tenants/` | planned |
+| Tenant provisioning | `src/modules/tenants/` | done |
 | Paperless integration client | `src/lib/paperless/` | in progress |
 | Upload pipeline | `src/modules/documents/`, `worker/jobs/*upload*` | planned |
 | Event bridge + reconciliation | See specs/01 rows above | planned |
