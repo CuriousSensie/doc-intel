@@ -51,9 +51,7 @@ export type Database = {
           logo_url: string | null;
           created_by: string | null;
           suspended_at: string | null;
-          // Pomočnik Level 0 extension (supabase/migrations/20260824000000_pomocnik_orgs_extension.sql).
-          // provisioning_status and ai_enabled are system-managed — see protect_system_columns() —
-          // never write them from a tenant-facing action.
+          // provisioning_status/ai_enabled are system-managed — protect_system_columns().
           timezone: string;
           locale: string;
           default_currency: string;
@@ -85,9 +83,7 @@ export type Database = {
           timezone?: string;
           locale?: string;
           default_currency?: string;
-          // provisioning_status/ai_enabled deliberately omitted — protect_system_columns()
-          // rejects a non-service-role write to either, so they're not part of the
-          // tenant-facing Update shape.
+          // provisioning_status/ai_enabled omitted — protect_system_columns() blocks tenant writes.
           updated_at?: string;
         };
         Relationships: [];
@@ -332,6 +328,79 @@ export type Database = {
           error?: string | null;
           processed_at?: string | null;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // RLS-enabled, zero policies — admin-client only (src/lib/paperless/client.ts).
+      tenant_paperless_config: {
+        Row: {
+          organization_id: string;
+          base_url: string;
+          service_user_id: number;
+          group_id: number;
+          api_token_encrypted: string; // bytea over the wire — see decodePostgresBytea()
+          storage_path_id: number | null;
+          last_reconciled_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          organization_id: string;
+          base_url: string;
+          service_user_id: number;
+          group_id: number;
+          api_token_encrypted: string;
+          storage_path_id?: number | null;
+          last_reconciled_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          base_url?: string;
+          service_user_id?: number;
+          group_id?: number;
+          api_token_encrypted?: string;
+          storage_path_id?: number | null;
+          last_reconciled_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      paperless_object_map: {
+        Row: {
+          id: number;
+          organization_id: string;
+          object_type:
+            | "document"
+            | "tag"
+            | "document_type"
+            | "custom_field"
+            | "correspondent"
+            | "storage_path"
+            | "workflow"
+            | "saved_view";
+          paperless_id: number;
+          local_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          organization_id: string;
+          object_type:
+            | "document"
+            | "tag"
+            | "document_type"
+            | "custom_field"
+            | "correspondent"
+            | "storage_path"
+            | "workflow"
+            | "saved_view";
+          paperless_id: number;
+          local_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          local_id?: string | null;
         };
         Relationships: [];
       };
