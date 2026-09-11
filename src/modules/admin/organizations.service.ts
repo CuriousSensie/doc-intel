@@ -1,5 +1,7 @@
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
 import { decodeCursor, encodeCursor } from "@/lib/pagination";
+import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/types/database";
 
@@ -68,9 +70,15 @@ export async function suspendOrganization(actorId: string, organizationId: strin
   });
 }
 
-export async function unsuspendOrganization(actorId: string, organizationId: string): Promise<void> {
+export async function unsuspendOrganization(
+  actorId: string,
+  organizationId: string
+): Promise<void> {
   const admin = createAdminClient();
-  const { error } = await admin.from("organizations").update({ suspended_at: null }).eq("id", organizationId);
+  const { error } = await admin
+    .from("organizations")
+    .update({ suspended_at: null })
+    .eq("id", organizationId);
 
   if (error) {
     throw error;
@@ -108,4 +116,39 @@ export async function deleteOrganizationAdmin(
   if (error) {
     throw error;
   }
+}
+
+// specs/01-architecture.md §Provisioning: "repairs a failed org" — only eligible when
+// pending/provisioning_failed, matching claim_provisioning()'s own claimable states. A
+// 'ready' or already-'provisioning' org gets a clear rejection here rather than silently
+// enqueueing a job that claim_provisioning() would just skip.
+export async function reprovisionOrganizationAdmin(
+  actorId: string,
+  organizationId: string
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: org, error } = await admin
+    .from("organizations")
+    .select("provisioning_status")
+    .eq("id", organizationId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!org) throw new NotFoundError("Organization not found");
+  if (org.provisioning_status === "ready") {
+    throw new ConflictError("This organization is already provisioned.");
+  }
+  if (org.provisioning_status === "provisioning") {
+    throw new ConflictError("Provisioning is already in progress for this organization.");
+  }
+
+  await enqueue(QUEUE_NAMES.provisionTenant, { orgId: organizationId });
+
+  await logEvent({
+    actorId,
+    action: "admin.organization.reprovision_requested",
+    entityType: "organization",
+    entityId: organizationId,
+    organizationId
+  });
 }

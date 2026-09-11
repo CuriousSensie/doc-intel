@@ -126,7 +126,13 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       entity_types, no duplicates). No live Supabase project exists yet this session, so the
       full `provisionTenant()` orchestration (Paperless calls + real RPC calls together) is
       unverified end-to-end — each half is verified against its real dependency separately.
-- [ ] `POST /admin/orgs/:id/reprovision`
+- [x] `POST /admin/orgs/:id/reprovision` — implemented as `reprovisionOrganizationAction`/
+      `reprovisionOrganizationAdmin` (Server Action per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md),
+      not a literal route), matching the existing `admin.actions.ts` pattern. Rejects
+      `ready`/`provisioning` orgs with a clear message rather than silently no-op-enqueueing;
+      reuses `provisionTenant()`'s own idempotency for `pending`/`provisioning_failed`. Admin UI:
+      a provisioning-status badge and conditional "Reprovision" button on `/admin/organizations`.
+      Unit-tested (3 cases: ready → rejected, provisioning → rejected, failed → enqueues + logs).
 - [x] `src/lib/paperless/client.ts` — `paperlessFor(orgId)`/`paperlessAdminClient()`, retry with
       backoff+jitter, structured logging, 30s/120s timeouts, `createOwnedObject()` with a
       required + runtime-validated permissions argument (isolation test #20), ESLint-restricted

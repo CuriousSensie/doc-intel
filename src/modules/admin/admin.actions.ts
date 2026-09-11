@@ -11,10 +11,16 @@ import { requireAdmin } from "@/modules/auth/session";
 import { setSubscriptionPlatformStatus } from "@/modules/admin/billing.service";
 import {
   deleteOrganizationAdmin,
+  reprovisionOrganizationAdmin,
   suspendOrganization,
   unsuspendOrganization
 } from "@/modules/admin/organizations.service";
-import { deleteUserAdmin, setAppAdmin, suspendUser, unsuspendUser } from "@/modules/admin/users.service";
+import {
+  deleteUserAdmin,
+  setAppAdmin,
+  suspendUser,
+  unsuspendUser
+} from "@/modules/admin/users.service";
 
 function redirectWithError(path: string, error: unknown): never {
   const message = error instanceof Error ? error.message : "Something went wrong";
@@ -68,7 +74,13 @@ export async function setAppAdminAction(formData: FormData) {
     redirectWithError("/admin/users", error);
   }
 
-  redirect(withStatus("/admin/users", "message", isAdmin ? "Admin access granted." : "Admin access revoked."));
+  redirect(
+    withStatus(
+      "/admin/users",
+      "message",
+      isAdmin ? "Admin access granted." : "Admin access revoked."
+    )
+  );
 }
 
 export async function deleteUserAdminAction(formData: FormData) {
@@ -123,6 +135,19 @@ export async function deleteOrganizationAdminAction(formData: FormData) {
   redirect(withStatus("/admin/organizations", "message", "Organization deleted."));
 }
 
+export async function reprovisionOrganizationAction(formData: FormData) {
+  requireFeature("admin");
+  const context = await requireAdmin();
+
+  try {
+    await reprovisionOrganizationAdmin(context.user.id, requiredString(formData, "organizationId"));
+  } catch (error) {
+    redirectWithError("/admin/organizations", error);
+  }
+
+  redirect(withStatus("/admin/organizations", "message", "Reprovisioning queued."));
+}
+
 function billingOwnerFromFormData(formData: FormData): BillingOwner {
   const key = billingOwnerType === "organization" ? "organizationId" : "userId";
   return { type: billingOwnerType, id: requiredString(formData, key) };
@@ -131,7 +156,8 @@ function billingOwnerFromFormData(formData: FormData): BillingOwner {
 export async function adjustCreditsAction(formData: FormData) {
   requireFeature("admin");
   const context = await requireAdmin();
-  const redirectPath = billingOwnerType === "organization" ? "/admin/organizations" : "/admin/users";
+  const redirectPath =
+    billingOwnerType === "organization" ? "/admin/organizations" : "/admin/users";
   const amount = Number(formData.get("amount"));
   const reference = formData.get("reference");
 
@@ -141,7 +167,12 @@ export async function adjustCreditsAction(formData: FormData) {
 
   try {
     const owner = billingOwnerFromFormData(formData);
-    await adminAdjustCredits(owner, amount, context.user.id, typeof reference === "string" ? reference : undefined);
+    await adminAdjustCredits(
+      owner,
+      amount,
+      context.user.id,
+      typeof reference === "string" ? reference : undefined
+    );
   } catch (error) {
     redirectWithError(redirectPath, error);
   }
@@ -152,7 +183,8 @@ export async function adjustCreditsAction(formData: FormData) {
 export async function toggleSubscriptionPlatformStatusAction(formData: FormData) {
   requireFeature("admin");
   const context = await requireAdmin();
-  const redirectPath = billingOwnerType === "organization" ? "/admin/organizations" : "/admin/users";
+  const redirectPath =
+    billingOwnerType === "organization" ? "/admin/organizations" : "/admin/users";
   const disabled = formData.get("disabled") === "true";
 
   try {
@@ -163,6 +195,10 @@ export async function toggleSubscriptionPlatformStatusAction(formData: FormData)
   }
 
   redirect(
-    withStatus(redirectPath, "message", disabled ? "Subscription disabled at the platform level." : "Subscription re-enabled.")
+    withStatus(
+      redirectPath,
+      "message",
+      disabled ? "Subscription disabled at the platform level." : "Subscription re-enabled."
+    )
   );
 }

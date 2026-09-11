@@ -224,6 +224,7 @@ the enum value to `env.ts`. See [MODULES.md#email](MODULES.md#email).
 - `suspendOrganization(actorId, organizationId): Promise<void>`
 - `unsuspendOrganization(actorId, organizationId): Promise<void>`
 - `deleteOrganizationAdmin(actorId, organizationId, metadata?: Json): Promise<void>` — logs the event **before** deleting (the `audit_logs.organization_id` FK requires the row to still exist at insert time).
+- `reprovisionOrganizationAdmin(actorId, organizationId): Promise<void>` — Pomočnik. Throws `ConflictError` unless `provisioning_status` is `pending`/`provisioning_failed`; enqueues `provisionTenant` (reusing its idempotent find-or-create) and logs `admin.organization.reprovision_requested`.
 
 ### `billing.service.ts`
 - `setSubscriptionPlatformStatus(actorId, owner: BillingOwner, disabled: boolean): Promise<void>` — toggles `subscriptions.platform_disabled_at`; throws `NotFoundError` if the owner has no subscription. Never calls Stripe.
@@ -241,6 +242,7 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 - `suspendOrganizationAction(formData: FormData)`
 - `unsuspendOrganizationAction(formData: FormData)`
 - `deleteOrganizationAdminAction(formData: FormData)`
+- `reprovisionOrganizationAction(formData: FormData)` — Pomočnik. `specs/01-architecture.md`'s `POST /admin/orgs/:id/reprovision`, implemented as a Server Action per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md).
 - `adjustCreditsAction(formData: FormData)` — wraps `adminAdjustCredits`.
 - `toggleSubscriptionPlatformStatusAction(formData: FormData)`
 
@@ -255,8 +257,35 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 - `logEvent(event: AppEvent): Promise<void>` — fans out to `sinks: EventSink[]` (currently `[consoleSink, auditLogSink]`); never throws — a sink's failure is caught and logged.
 
 ### `types.ts`
-- `type AppEvent = { actorId: string | null; action: string; entityType?; entityId?; organizationId?: string | null; metadata?: Json; ipAddress?: string | null; userAgent?: string | null }`
+- `type AppEvent = { actorId: string | null; actorType?: "user"|"system"|"rule"|"import"|"ai"; action: string; entityType?; entityId?; organizationId?: string | null; metadata?: Json; ipAddress?: string | null; userAgent?: string | null }` — `actorType` defaults to `"user"` in the sink (ADR-0005, Pomočnik).
 - `type EventSink = { name: string; handle(event: AppEvent): Promise<void> }`
+
+## `src/lib/paperless/`
+
+Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; `paperlessAdminClient()` is provisioning-only (ESLint-restricted to `src/modules/tenants/**` and `worker/jobs/provision-tenant.ts`).
+
+### `client.ts`
+- `class PaperlessClient` — `get<T>(path)`, `post<T>(path, body)`, `patch<T>(path, body)`, `delete(path)`, `postForm<T>(path, form)` (120s timeout), `createOwnedObject<T>(path, body, { ownerId, groupId })` (permissions required, validated against the client's own tenant — isolation test #20).
+- `paperlessFor(orgId: string): Promise<PaperlessClient>` — resolves `tenant_paperless_config` via the admin Supabase client; 60s in-memory cache per org.
+- `paperlessAdminClient(): Promise<PaperlessClient>` — logs in with `PAPERLESS_ADMIN_USER`/`PASSWORD` against `PAPERLESS_ADMIN_URL`; 1h token cache.
+- `resolveTenantForPaperlessDocument(paperlessDocumentId: number): Promise<string | null>` — `paperless_object_map` lookup for the event-bridge webhook.
+
+### `errors.ts`
+- `mapPaperlessError(res: Response, context): Promise<AppError>` — 403 **and** 404 both map to our `NotFoundError` (confirmed necessary live — `docs/spike-findings.md` §1 #8).
+- `isRetryablePaperlessError(res, err): boolean`
+
+### `token-crypto.ts`
+- `encryptPaperlessToken(plaintext: string): Buffer` / `decryptPaperlessToken(encrypted: Buffer): string` — AES-256-GCM, key from `PAPERLESS_TOKEN_ENCRYPTION_KEY`.
+
+### `types.ts`
+- `type PaperlessTask`, `type PaperlessDocument`, `type PaperlessSetPermissions`, `type PaperlessListEnvelope<T>`
+- `const TENANT_MODEL_PERMISSIONS: string[]` — Django group permission codenames a tenant group needs (bare `codename`, confirmed live — `docs/spike-findings.md` §1).
+
+## `src/modules/tenants/`
+
+### `provision-tenant.ts`
+- `provisionTenant(orgId: string): Promise<void>` — `specs/01-architecture.md` §Provisioning. Claims via `claim_provisioning()`, idempotent find-or-create for the Paperless group/service user/document types/storage path, then `complete_provisioning()`; calls `fail_provisioning()` on any error and rethrows.
+- `findOrCreateGroup/findOrCreateServiceUser/findOrCreateDocumentType/findOrCreateStoragePath` — exported for `provision-tenant.test.ts`; not meant for use outside this module.
 
 ### `sinks/console-sink.ts` / `sinks/audit-log-sink.ts`
 - `consoleSink: EventSink` — logs via `logger.info`.
