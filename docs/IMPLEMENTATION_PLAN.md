@@ -79,9 +79,18 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       `authorization.ts`, the invite-role `<select>` and per-member role control on
       `/settings/team` (was a binary admin/member toggle button — now a 3-option select, since a
       toggle doesn't generalize past two roles)
-- [ ] Migration: `tenant_paperless_config`, `paperless_object_map`
+- [x] Migration: `tenant_paperless_config`, `paperless_object_map`
+      (`supabase/migrations/20260825000000_paperless_linkage.sql`) — both RLS-enabled with zero
+      policies (admin-client only, matching `stripe_customers`/`subscriptions`/`webhook_events`).
+      Verified end-to-end against a throwaway Postgres container: RLS + 0 policies confirmed,
+      the `(object_type, paperless_id)` unique constraint rejects a cross-tenant duplicate, the
+      `object_type` check constraint rejects an invalid value.
 - [x] `scripts/check-rls-coverage.ts` CI check — verified against both a real violation (catches
-      it) and the existing schema (passes)
+      it) and the existing schema (passes). Extended twice this session: to recognize
+      `organization_id uuid primary key` as satisfying the leading-index requirement, and to
+      accept an explicit `-- rls-coverage: admin-only (no policies)` marker for tables that are
+      deliberately RLS-enabled with zero policies — both re-verified against the same real
+      violation + passing-schema regression check.
 - [ ] `src/modules/tenants/` + `worker/jobs/provision-tenant.ts` (idempotent, advisory-locked,
       compensating cleanup). **Must grant `TENANT_MODEL_PERMISSIONS`-equivalent Django group
       permissions** (add/change/delete/view for tag, document, documenttype, correspondent,

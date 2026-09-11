@@ -183,7 +183,30 @@ erDiagram
     timestamptz updated_at
   }
 
+  TENANT_PAPERLESS_CONFIG {
+    uuid organization_id PK "= organizations.id"
+    text base_url
+    int service_user_id "Paperless-side user id"
+    int group_id "Paperless-side group id"
+    bytea api_token_encrypted "AES-GCM, admin-client only, never in a client response"
+    int storage_path_id "nullable"
+    timestamptz last_reconciled_at
+    timestamptz created_at
+    timestamptz updated_at
+  }
+
+  PAPERLESS_OBJECT_MAP {
+    bigint id PK
+    uuid organization_id FK
+    text object_type "document|tag|document_type|custom_field|correspondent|storage_path|workflow|saved_view"
+    int paperless_id "unique together with object_type, without organization_id — deliberate"
+    uuid local_id "nullable — our row, where one exists"
+    timestamptz created_at
+  }
+
   PROFILES ||--o{ ORGANIZATION_MEMBERS : "is a member via"
+  ORGANIZATIONS ||--|| TENANT_PAPERLESS_CONFIG : "has (Pomočnik)"
+  ORGANIZATIONS ||--o{ PAPERLESS_OBJECT_MAP : "owns (Pomočnik)"
   ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : "has"
   ORGANIZATIONS ||--o{ ORGANIZATION_INVITATIONS : "has"
   PROFILES ||--o{ ORGANIZATION_INVITATIONS : "invites / accepts"
@@ -274,6 +297,8 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `audit_logs` | select: admin, or org owner/admin for their own org's rows. **No insert policy at all** — `logEvent()`'s `auditLogSink` (admin client) is the only writer. | `audit_logs_actor_idx (actor_id, created_at desc)` |
 | `webhook_events` | No policies read in application code (admin-client only, used solely by the Stripe webhook handler for idempotency). | unique `(provider, event_id)` |
 | `projects` | Scaffolded in the initial schema; no module currently reads/writes it. | — |
+| `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` (Phase 1) — Pomočnik. | PK is `organization_id` itself (1:1) |
+| `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Pomočnik. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
 
 ## Migration history
 
@@ -289,6 +314,7 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260822090000_files_storage.sql` | Creates the `avatars` and `files` Storage buckets; adds the two cursor-pagination indexes on `files`. |
 | `20260823090000_admin.sql` | Adds `organizations.suspended_at` and threads it through `is_organization_member`/`has_organization_role`; adds `subscriptions.platform_disabled_at`; adds `purge_old_audit_logs()`. |
 | `20260824000000_pomocnik_orgs_extension.sql` | **Pomočnik Level 0.** Adds `organizations.timezone`/`locale`/`default_currency`/`provisioning_status`/`ai_enabled`; adds the `read-only` value to `organization_role`; adds `protect_system_columns()` + its trigger (blocks non-service-role writes to `provisioning_status`/`ai_enabled`); adds `has_organization_write_access()` and repoints `files_insert_owner` at it so a `read-only` member can't upload files. Verified end-to-end against a throwaway Postgres container with the `auth`/`storage` schemas stubbed (no live Supabase project yet this session) — see `docs/spike-findings.md`-adjacent session notes for the exact checks run. |
+| `20260825000000_paperless_linkage.sql` | **Pomočnik Level 0.** Adds `tenant_paperless_config` and `paperless_object_map` — both RLS-enabled with zero policies (admin-client only), matching the existing `stripe_customers`/`subscriptions`/`webhook_events` convention. Verified end-to-end against a throwaway Postgres container: RLS enabled + 0 policies confirmed, the `(object_type, paperless_id)` unique constraint correctly rejects a cross-tenant duplicate mapping, and the `object_type` check constraint correctly rejects an invalid value. |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

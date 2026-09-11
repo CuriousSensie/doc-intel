@@ -56,7 +56,12 @@ function checkFile(fileName: string, sql: string): Violation[] {
 
     const missing: string[] = [];
 
+    // organization_id as the primary key (e.g. a 1:1 config table keyed by tenant) is a
+    // leading index by construction — a separate `create index` isn't needed or expected.
+    const organizationIdIsPrimaryKey = /organization_id\s+uuid\s+primary\s+key/i.test(body);
+
     const hasIndex =
+      organizationIdIsPrimaryKey ||
       new RegExp(
         `create\\s+index[^;]*on\\s+public\\.${tableName}\\s*\\(\\s*organization_id`,
         "i"
@@ -74,10 +79,25 @@ function checkFile(fileName: string, sql: string): Violation[] {
     ).test(sql);
     if (!hasRlsEnabled) missing.push("`enable row level security`");
 
+    // A table can legitimately have RLS enabled and NO policies at all — the existing
+    // boilerplate convention for admin-client-only tables (stripe_customers, subscriptions,
+    // webhook_events — docs/DATABASE.md). Require an explicit, per-table marker comment for
+    // this rather than silently accepting "no policy" as ambiguous — a table with neither a
+    // policy nor this marker is far more likely a mistake than an intentional design.
     const hasPolicy = new RegExp(`create\\s+policy[^;]*on\\s+public\\.${tableName}\\b`, "i").test(
       sql
     );
-    if (!hasPolicy) missing.push("at least one `create policy ... on` this table");
+    const hasNoPolicyMarker = new RegExp(
+      `--\\s*rls-coverage:\\s*admin-only[^\\n]*\\n(?:[^\\n]*\\n){0,2}[^\\n]*public\\.${tableName}\\b`,
+      "i"
+    ).test(sql);
+    if (!hasPolicy && !hasNoPolicyMarker) {
+      missing.push(
+        "at least one `create policy ... on` this table (or a `-- rls-coverage: admin-only " +
+          "(no policies)` marker directly above the `enable row level security` line, for a " +
+          "deliberately admin-client-only table)"
+      );
+    }
 
     if (missing.length > 0) {
       violations.push({ file: fileName, table: tableName, missing });
