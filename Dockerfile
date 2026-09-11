@@ -1,6 +1,4 @@
-# Pomočnik — Next.js app image, built for infra/docker-compose.yml's `web` service.
-# Multi-stage, standalone output (next.config.ts) so the runtime image carries only the
-# traced dependency subset, not the full node_modules tree.
+# Multi-stage, standalone output (next.config.ts) — runtime image carries only traced deps.
 
 FROM node:20-alpine AS deps
 WORKDIR /app

@@ -1,23 +1,7 @@
-/**
- * Phase 0 — import throughput spike (specs/06-importer.md, specs/11-roadmap.md).
- *
- * Question: bulk-POSTing ~1,000 documents directly to Paperless's REST API — what's the
- * measured wall time, CPU, and queue behaviour, and does a second "tenant" uploading
- * concurrently see degraded interactive latency? This is the empirical basis for Phase 3's
- * per-org rate limiting and "bounded outstanding submissions" requirement
- * (docs/IMPLEMENTATION_PLAN.md Phase 3) — don't guess a rate limit, measure one.
- *
- * Usage:
- *   PAPERLESS_URL=http://localhost:8010 \
- *   PAPERLESS_ADMIN_USER=admin PAPERLESS_ADMIN_PASSWORD=... \
- *   npx tsx scripts/spike/import-throughput.ts --count 1000 --concurrency 4
- *
- * Generates synthetic small text files rather than requiring 1,000 real scanned PDFs — this
- * spike measures Paperless/queue throughput and contention, not OCR fidelity (that's the
- * separate ocr-slovenian.ts spike). A single tenant runs the bulk upload; a second simulated
- * tenant polls the document list throughout and logs its own response latency, so contention
- * is visible in the same run rather than inferred after the fact.
- */
+// Phase 0 — import throughput spike. Bulk-uploads N synthetic documents as tenant A while
+// tenant B polls its own document list, to measure submission throughput and contention
+// (not OCR fidelity — that's ocr-slovenian.ts). Basis for Phase 3's per-org rate limiting.
+// Usage: PAPERLESS_URL=... PAPERLESS_ADMIN_USER=... PAPERLESS_ADMIN_PASSWORD=... npx tsx scripts/spike/import-throughput.ts --count 1000 --concurrency 4
 import { bootstrapTenant, login, paperlessFetch } from "./lib/paperless-admin";
 
 function parseArgs() {

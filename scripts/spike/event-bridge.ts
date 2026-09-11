@@ -1,26 +1,6 @@
-/**
- * Phase 0 — event bridge spike (specs/01-architecture.md §Event bridge).
- *
- * Question: does the post-consume script reliably reach us, and does a reconciliation-style
- * poll recover from a killed bridge? This script drives the first half (upload, observe
- * whether the webhook fires) and gives you the exact moment to kill the bridge for the second
- * half — killing infra's `web` container (or blocking its port) is a manual step here since
- * this spike predates Phase 1's real listener.
- *
- * This spike does NOT stand up a real Next.js listener (that's Phase 1's actual webhook route
- * at src/app/api/internal/paperless/document-consumed/route.ts, which doesn't exist yet). It
- * stands up a tiny throwaway HTTP listener to observe whether Paperless's post-consume script
- * fires at all, with what payload/headers, and how promptly — the actual HMAC verification and
- * DB writes will be tested for real once that route exists.
- *
- * Usage:
- *   PAPERLESS_URL=http://localhost:8010 \
- *   PAPERLESS_ADMIN_USER=admin PAPERLESS_ADMIN_PASSWORD=... \
- *   npx tsx scripts/spike/event-bridge.ts
- *
- * Then, separately, upload a document through the Paperless UI or API and watch this
- * process's output for the incoming POST from infra/scripts/notify-pomocnik.sh.
- */
+// Phase 0 — event bridge spike (specs/01-architecture.md §Event bridge). Stands up a throwaway
+// listener to observe whether Paperless's post-consume script fires, with what payload, and how
+// promptly. Not the real webhook route (that's Phase 1's document-consumed/route.ts).
 import { createServer } from "node:http";
 
 const PORT = Number(process.env.SPIKE_LISTENER_PORT ?? 4001);

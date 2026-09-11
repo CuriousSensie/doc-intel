@@ -1,9 +1,6 @@
 name: CI
 
-# specs/12-agent-rules.md: "No PR merges with the isolation suite red." This workflow is what
-# makes that enforceable rather than a policy nobody checks. See
-# docs/IMPLEMENTATION_PLAN.md Phase 1 §10 and docs/adr/0006 for why Paperless runs for real
-# here rather than being mocked — the whole isolation model rests on its actual ACL behavior.
+# specs/12-agent-rules.md: no PR merges with the isolation suite red.
 
 on:
   pull_request:
@@ -47,8 +44,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      # Real Supabase, not mocked — same local dev stack a contributor runs, so CI and local
-      # dev behave identically instead of drifting against two different backends.
+      # Real local Supabase, not mocked — same stack a contributor runs.
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -59,10 +55,7 @@ jobs:
       - name: Apply migrations + RLS policies
         run: supabase db reset
 
-      # Real Paperless, not mocked — specs/12-agent-rules.md: "Testing against a mocked
-      # Paperless only is insufficient." Paperless-only profile is enough for the isolation
-      # suite; the full app/worker containers aren't needed since Playwright drives `npm run
-      # dev` directly against this checkout for faster iteration than rebuilding images per run.
+      # Real Paperless, not mocked (specs/12-agent-rules.md).
       - name: Start Paperless
         working-directory: infra
         env:
@@ -91,8 +84,6 @@ jobs:
       - name: Run Playwright suite
         run: npm run test:e2e
         env:
-          # Points isolation.spec.ts (once it exists, Phase 1) and any Paperless contract
-          # tests at the CI-local instance started above.
           PAPERLESS_URL: http://localhost:8010
           PAPERLESS_ADMIN_USER: admin
           PAPERLESS_ADMIN_PASSWORD: ci_test_password
@@ -103,9 +94,6 @@ jobs:
           PAPERLESS_URL: http://localhost:8010
           PAPERLESS_ADMIN_USER: admin
           PAPERLESS_ADMIN_PASSWORD: ci_test_password
-        continue-on-error: true # remove once src/lib/paperless exists (Phase 1) — vitest
-          # currently has nothing to match under that path and would fail the run on "no
-          # tests found" rather than a real failure.
 
       - name: Tear down
         if: always()

@@ -7,16 +7,10 @@ import { QUEUE_NAMES } from "@/lib/queue";
 
 import { jobRegistry } from "./registry";
 
-/**
- * Boots one BullMQ Worker per queue in the registry. This is the entrypoint for the
- * `worker` container in infra/docker-compose.yml (Dockerfile.worker) — it shares every
- * src/modules and src/lib module with the Next.js app (docs/adr/0002) but runs as a plain
- * Node process with no request lifecycle (docs/adr/0007).
- */
+// Entrypoint for the `worker` container (Dockerfile.worker). Boots one BullMQ Worker per queue.
 function main() {
   const workers = Object.values(QUEUE_NAMES).map((name) => {
-    // Each Worker gets its own Redis connection per BullMQ's recommendation — connections
-    // are not meant to be shared between Workers the way Queue producer connections are.
+    // Own connection per Worker, per BullMQ's recommendation (unlike Queue producers, shared).
     const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
 
     const worker = new Worker(name, jobRegistry[name], { connection });

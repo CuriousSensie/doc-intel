@@ -30,8 +30,7 @@ describe("organizations schemas", () => {
   });
 
   it("allows the read-only role as an assignable role", () => {
-    // Pomočnik's 4th role (specs/00-overview.md's RBAC minimum) — never "owner", which stays
-    // rejected above.
+    // 4th role — never "owner", which stays rejected above.
     expect(
       inviteMemberSchema.safeParse({ email: "viewer@example.com", role: "read-only" }).success
     ).toBe(true);

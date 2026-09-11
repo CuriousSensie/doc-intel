@@ -49,10 +49,7 @@ export function can(role: "owner" | "admin" | "member" | "read-only", permission
       "organization.files.manage"
     ],
     member: ["organization.read"],
-    // A viewer role (specs/00-overview.md's RBAC minimum) — read access identical to member,
-    // never write. RLS (has_organization_write_access(), supabase/migrations/
-    // 20260824000000_pomocnik_orgs_extension.sql) is the real enforcement boundary for this;
-    // this entry exists so callers of can() get a fast, clear "no" without a round trip.
+    // Read like member, never write — has_organization_write_access() is the real boundary.
     "read-only": ["organization.read"]
   };
 

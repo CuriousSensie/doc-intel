@@ -3,11 +3,7 @@ import IORedis from "ioredis";
 
 import { env } from "@/lib/env";
 
-/**
- * BullMQ queue names. Every producer (Server Actions enqueueing work) and every consumer
- * (worker/registry.ts) imports names from here rather than passing raw strings — a typo in a
- * queue name is a job that silently never runs.
- */
+// Single source of truth for queue names — a raw-string typo is a job that never runs.
 export const QUEUE_NAMES = {
   provisionTenant: "provision-tenant",
   validateUpload: "validate-upload",
@@ -28,11 +24,8 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
 let connection: IORedis | null = null;
 
-/**
- * One shared ioredis connection for every Queue instance in this process. BullMQ Workers
- * (worker/index.ts) create their own connection per Worker by design — this one is for
- * producers only (Server Actions enqueueing jobs).
- */
+// Shared connection for producers only — Workers (worker/index.ts) create their own per BullMQ's
+// recommendation.
 function getConnection(): ConnectionOptions {
   if (!connection) {
     connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
@@ -43,7 +36,6 @@ function getConnection(): ConnectionOptions {
 
 const queues = new Map<QueueName, Queue>();
 
-/** Returns a memoized BullMQ Queue for the given name, creating it on first use. */
 export function getQueue(name: QueueName): Queue {
   const existing = queues.get(name);
 
@@ -56,11 +48,7 @@ export function getQueue(name: QueueName): Queue {
   return queue;
 }
 
-/**
- * Enqueues a job. Every job payload MUST include `orgId` — worker/context.ts#buildJobContext()
- * depends on it being present to scope every query the job's handler issues (see
- * docs/adr/0007-service-context-pattern.md).
- */
+// Payload must include orgId — buildJobContext() (worker/context.ts) depends on it.
 export async function enqueue<TPayload extends { orgId: string }>(
   name: QueueName,
   payload: TPayload,

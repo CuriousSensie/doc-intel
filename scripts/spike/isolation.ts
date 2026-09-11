@@ -1,20 +1,8 @@
-/**
- * Phase 0 — isolation spike (specs/10-nonfunctional.md's 20-test suite, run manually against
- * a real, pinned Paperless instance). Not product code — see scripts/spike/lib/paperless-admin.ts
- * for why this lives here and how it feeds Phase 1's e2e/isolation.spec.ts.
- *
- * Usage:
- *   PAPERLESS_URL=http://localhost:8010 \
- *   PAPERLESS_ADMIN_USER=admin PAPERLESS_ADMIN_PASSWORD=... \
- *   npx tsx scripts/spike/isolation.ts
- *
- * This script does NOT hardcode the exact shape of Paperless's permission-setting API — it
- * fetches /api/schema/ first and tries the field names it finds (`set_permissions` then
- * `permissions`), because that contract has changed across Paperless versions and guessing
- * wrong silently would produce a false "leak" finding. If neither works for an object class,
- * the script logs that explicitly rather than guessing further — a human must check the
- * pinned version's actual API docs at that point.
- */
+// Phase 0 — isolation spike (specs/10-nonfunctional.md's 20-test suite). Not product code.
+// Usage: PAPERLESS_URL=... PAPERLESS_ADMIN_USER=... PAPERLESS_ADMIN_PASSWORD=... npx tsx scripts/spike/isolation.ts
+//
+// Probes /api/schema/ for the real permission field name rather than hardcoding one — that
+// contract has changed across Paperless versions and a wrong guess would fake a "leak" finding.
 import { login, paperlessFetch, PAPERLESS_URL } from "./lib/paperless-admin";
 
 type CheckResult = { id: number; test: string; expected: string; actual: string; pass: boolean };
@@ -199,10 +187,7 @@ async function main() {
         tenantA.session.token
       );
       if (taskRes.ok) {
-        // /api/tasks/ returns a paginated envelope ({results: [...]}), not a bare array — and
-        // status is lowercase ("success"/"failure") with the document id under
-        // related_document_ids (a list), not a singular related_document. All three were wrong
-        // on the first pass through this spike; verified against a live 3.1.3 response.
+        // Paginated envelope, lowercase status, related_document_ids as a list — all confirmed live.
         const body = (await taskRes.json()) as {
           results: Array<{ status: string; related_document_ids?: number[] }>;
         };
@@ -214,9 +199,7 @@ async function main() {
           break;
         }
       } else if (i === 0) {
-        // Log once, not every poll — a non-OK status here (e.g. missing view_paperlesstask
-        // permission on the tenant group) silently looked identical to "still processing"
-        // before this line existed, which is exactly what happened on this spike's first run.
+        // Log once — a non-OK poll used to look identical to "still processing".
         console.error(`  task poll returned ${taskRes.status}: ${await taskRes.text()}`);
       }
     }
@@ -366,9 +349,7 @@ async function main() {
     }
   }
 
-  // #20 an object created without explicit permissions -> our own client must refuse this
-  // (this is a code-level guard in src/lib/paperless/client.ts, Phase 1 — not testable against
-  // raw Paperless here; recorded as a reminder, not a live check).
+  // #20 code-level guard in src/lib/paperless/client.ts — not testable against raw Paperless.
   record(
     20,
     "creation without explicit permissions is impossible",
@@ -377,9 +358,7 @@ async function main() {
     true
   );
 
-  // --- special case: workflows (ADR-0006) ------------------------------------------------------
-  // Per ADR-0006, confirmed via Paperless's own GitHub discussions (#10550, #12352) that
-  // workflows have no owner/ACL model at all. Verify that empirically too, for the record.
+  // --- special case: workflows, empirically confirming ADR-0006 -------------------------------
   {
     const wfRes = await paperlessFetch("/api/workflows/", tenantA.session.token, {
       method: "POST",

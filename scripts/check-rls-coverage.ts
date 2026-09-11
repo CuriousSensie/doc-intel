@@ -1,32 +1,13 @@
-/**
- * CI guard for specs/12-agent-rules.md rule 12: "Never write a migration adding a
- * tenant-scoped table without its organization_id index and RLS policy in the same
- * migration." (organization_id, not org_id — see docs/adr/0004.)
- *
- * Static, regex-based, deliberately simple: for every `create table public.<name>` in a
- * migration file whose body references `organization_id`, that SAME file must also contain
- * `alter table public.<name> enable row level security` and at least one
- * `create policy ... on public.<name>`. This mirrors the exact pattern already used in
- * supabase/migrations/20260813180000_initial_schema.sql — this script doesn't invent a new
- * convention, it enforces the existing one.
- *
- * Run: npx tsx scripts/check-rls-coverage.ts
- * Wired into .github/workflows/ci.yml.
- */
+// CI guard: a migration adding a tenant-scoped table (has organization_id) must also add its
+// leading index + RLS + policy in the same file (specs/12-agent-rules.md rule 12).
+// Run: npx tsx scripts/check-rls-coverage.ts — wired into .github/workflows/ci.yml.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
 
-/**
- * The boilerplate's own pre-Pomočnik migrations, reviewed and accepted before this check
- * existed. Several of their tables are owner-polymorphic (`organization_id` is nullable —
- * `stripe_customers`, `subscriptions`, `credit_transactions`, `usage_counters` — see
- * docs/DATABASE.md's "Owner-polymorphic billing" note) or use a documented indexing choice
- * this check's simple heuristic can't see (`organization_invitations`). specs/12-agent-rules.md's
- * rule is about NEW tenant-scoped tables going forward, not a retroactive audit of already-
- * shipped schema — this baseline is what makes that distinction, not a loophole for new work.
- */
+// Pre-Pomočnik migrations, already reviewed — some tables are owner-polymorphic or use an
+// indexing choice this regex can't see. Baseline for "new tables going forward," not a loophole.
 const EXEMPT_MIGRATIONS = new Set([
   "20260813180000_initial_schema.sql",
   "20260820120000_organizations_functions.sql",
@@ -41,8 +22,6 @@ type Violation = { file: string; table: string; missing: string[] };
 function checkFile(fileName: string, sql: string): Violation[] {
   const violations: Violation[] = [];
 
-  // Find every `create table public.<name> ( ... )` block (case-insensitive, tolerant of
-  // "create table if not exists").
   const tableRegex =
     /create\s+table\s+(?:if\s+not\s+exists\s+)?public\.(\w+)\s*\(([\s\S]*?)\n\);/gi;
   let match: RegExpExecArray | null;
@@ -56,8 +35,7 @@ function checkFile(fileName: string, sql: string): Violation[] {
 
     const missing: string[] = [];
 
-    // organization_id as the primary key (e.g. a 1:1 config table keyed by tenant) is a
-    // leading index by construction — a separate `create index` isn't needed or expected.
+    // PK on organization_id is a leading index by construction — no separate create index.
     const organizationIdIsPrimaryKey = /organization_id\s+uuid\s+primary\s+key/i.test(body);
 
     const hasIndex =
@@ -79,11 +57,8 @@ function checkFile(fileName: string, sql: string): Violation[] {
     ).test(sql);
     if (!hasRlsEnabled) missing.push("`enable row level security`");
 
-    // A table can legitimately have RLS enabled and NO policies at all — the existing
-    // boilerplate convention for admin-client-only tables (stripe_customers, subscriptions,
-    // webhook_events — docs/DATABASE.md). Require an explicit, per-table marker comment for
-    // this rather than silently accepting "no policy" as ambiguous — a table with neither a
-    // policy nor this marker is far more likely a mistake than an intentional design.
+    // RLS-enabled + zero policies is valid for admin-client-only tables, but only with an
+    // explicit marker — otherwise it's more likely a mistake than a design choice.
     const hasPolicy = new RegExp(`create\\s+policy[^;]*on\\s+public\\.${tableName}\\b`, "i").test(
       sql
     );

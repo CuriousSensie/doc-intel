@@ -5,16 +5,8 @@ import { QUEUE_NAMES, type QueueName } from "@/lib/queue";
 
 import type { JobPayload } from "./context";
 
-/**
- * Maps a queue name to the handler that processes its jobs. worker/index.ts creates one
- * BullMQ Worker per entry here.
- *
- * Every handler below is a placeholder pending its real implementation — see
- * docs/IMPLEMENTATION_PLAN.md's Phase 1/3/4 checklists for what each one does and which spec
- * section it implements. They exist now so `docker compose up` boots a working worker process
- * (infra deliverable) without silently claiming product-level functionality that isn't built
- * yet — each one logs loudly and fails the job rather than pretending to succeed.
- */
+// Placeholders until each real handler lands (see docs/IMPLEMENTATION_PLAN.md) — loud failure,
+// not a silent no-op, so `docker compose up` boots a working worker without faking progress.
 const notImplemented =
   (name: QueueName): Processor<JobPayload> =>
   async (job: Job<JobPayload>) => {

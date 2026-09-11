@@ -1,21 +1,10 @@
 # Pomočnik infra — single EU-region host, Docker Compose (D4).
+# Business Postgres/Auth/Storage is Supabase Cloud (ADR-0003), not a service here.
 #
-# Business Postgres/Auth/Storage is Supabase Cloud (ADR-0003) — NOT a service here.
-# Everything else — our app, our worker, our queue, and the entire Paperless-ngx stack —
-# runs on this host, per D4 and the GPL boundary in D3 (Paperless is an unmodified image,
-# reached only over its REST API; see src/lib/paperless/).
+# Pinned: paperless-ngx 3.1.3, postgres 16, redis 7 (x2, independent), gotenberg 8, tika 2.9.2.1-full.
 #
-# Pinned versions (see docs/adr/ for anything debatable about these choices):
-#   paperless-ngx  3.1.3   (searched at plan time: latest stable release line)
-#   postgres       16      (Paperless's own DB — never queried by our code, D3)
-#   redis          7       (two independent instances: Paperless's broker, our BullMQ queue)
-#   gotenberg      8       (Office -> PDF, used by Paperless)
-#   tika           2.9.2.1-full (Office parsing, used by Paperless)
-#
-# Bring up just Paperless + its dependencies for the Phase 0 spike:
-#   docker compose --profile paperless up -d
-# Bring up everything (Phase 1+):
-#   docker compose up -d
+# docker compose --profile paperless up -d   # Paperless + deps only (Phase 0 spike)
+# docker compose up -d                        # everything (Phase 1+)
 
 name: pomocnik
 
@@ -33,9 +22,7 @@ volumes:
   redis-app-data:
 
 services:
-  # ---------------------------------------------------------------------------------------
-  # Paperless-ngx — the document engine (D1). Unmodified image, REST API only (D3).
-  # ---------------------------------------------------------------------------------------
+  # --- Paperless-ngx (D1) — unmodified image, REST API only (D3) ---------------------------
 
   postgres-paperless:
     image: postgres:16-alpine
@@ -72,8 +59,6 @@ services:
     profiles: ["paperless", "full"]
     restart: unless-stopped
     networks: [pomocnik]
-    # Paperless's own guidance: disable the routes it doesn't use, on principle of least
-    # exposure for a service reachable only from the internal network anyway.
     command:
       - "gotenberg"
       - "--chromium-disable-javascript=true"
@@ -85,31 +70,15 @@ services:
     restart: unless-stopped
     networks: [pomocnik]
 
-  # paperless-webserver: web UI/API, the built-in task scheduler, and (by default, inside
-  # this same container) the consumer + Celery workers.
-  #
-  # KNOWN GAP, found during the Phase 0 spike (docs/spike-findings.md): the separate
-  # paperless-worker container below — overriding `command` to run just `celery worker`, per
-  # the community pattern at github.com/paperless-ngx/paperless-ngx/discussions/3900 — crash
-  # loops on this pinned 3.1.3 image. Paperless 3.0 shipped "a redesigned task system"
-  # (release notes) and celery beat fails with "PAPERLESS_SECRET_KEY is not set" on every
-  # restart even though the container's actual environment has it set correctly (verified via
-  # `docker exec ... printenv`) — the /init entrypoint appears to special-case a `celery`
-  # command differently than the v2-era pattern assumed, not a simple env-passing bug. Root
-  # cause not fully diagnosed; needs upstream doc research or an issue filed before Phase 1
-  # depends on it. For now, this container runs everything (webserver + consumer + Celery
-  # workers) in its default all-in-one mode — Paperless's standard supported configuration —
-  # with `paperless-worker` defined but stopped. D4's "separate container from day one" isn't
-  # met yet; tracked in docs/IMPLEMENTATION_PLAN.md, not silently dropped.
+  # KNOWN GAP: paperless-worker below crash-loops on this pinned image (celery beat +
+  # PAPERLESS_SECRET_KEY, root cause undiagnosed — see docs/spike-findings.md §0). Running
+  # all-in-one here until fixed; D4's "separate container from day one" isn't met yet.
   paperless-webserver:
     image: paperlessngx/paperless-ngx:3.1.3
     profiles: ["paperless", "full"]
     restart: unless-stopped
     networks: [pomocnik]
-    # host.docker.internal doesn't resolve on Linux Docker Engine by default (it's a Docker
-    # Desktop/Mac-Windows convenience) — found while running the Phase 0 event-bridge spike.
-    # Needed so the post-consume script can reach a listener running on the host (local dev,
-    # before `web` is itself a container) via POMOCNIK_INTERNAL_URL.
+    # host.docker.internal needs this on Linux (unlike Docker Desktop) — docs/spike-findings.md §2.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -124,24 +93,17 @@ services:
       PAPERLESS_DBNAME: ${PAPERLESS_DBNAME:-paperless}
       PAPERLESS_DBUSER: ${PAPERLESS_DBUSER:-paperless}
       PAPERLESS_DBPASS: ${PAPERLESS_DBPASS:?set in .env}
-      # Required — Paperless refuses to start with the default value. Generate with:
-      # python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+      # Generate: python3 -c "import secrets; print(secrets.token_urlsafe(64))"
       PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set in .env}
       PAPERLESS_TIKA_ENABLED: "1"
       PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
       PAPERLESS_TIKA_ENDPOINT: http://tika:9998
-      # Slovenian + English OCR (D7) — verify the slv language pack is actually present in
-      # this image during the Phase 0 OCR spike; some Paperless images need
-      # PAPERLESS_OCR_LANGUAGES to trigger a language-pack install on first boot.
       PAPERLESS_OCR_LANGUAGE: slv+eng
       PAPERLESS_OCR_LANGUAGES: slv eng
       PAPERLESS_TIME_ZONE: Europe/Ljubljana
       PAPERLESS_URL: ${PAPERLESS_URL:?set in .env, e.g. https://paperless.internal}
-      # The event bridge (specs/01-architecture.md §Event bridge) — never blocks consumption
-      # on our error, per that spec's explicit requirement.
       PAPERLESS_POST_CONSUME_SCRIPT: /scripts/notify-pomocnik.sh
-      # All-in-one mode for now (see the KNOWN GAP note above) — this container does its own
-      # OCR/Celery work rather than offloading to paperless-worker.
+      # All-in-one mode (see KNOWN GAP above) — this container does its own OCR/Celery work.
       PAPERLESS_TASK_WORKERS: "2"
       PAPERLESS_THREADS_PER_WORKER: "1"
     volumes:
@@ -151,16 +113,10 @@ services:
       - paperless-consume:/usr/src/paperless/consume
       - ./scripts/notify-pomocnik.sh:/scripts/notify-pomocnik.sh:ro
     ports:
-      # Exposed to the host only for local/dev access during Phase 0; nginx is the only
-      # public entrypoint once Phase 1's app is in front of it (see infra/nginx/).
+      # Host-exposed for local dev only; nginx is the sole public entrypoint once `web` exists.
       - "127.0.0.1:8010:8000"
 
-  # paperless-worker: intended to run OCR/Celery work in its own container, separate from
-  # day one (D4) so it can move to a dedicated-vCPU host under load without re-architecture.
-  # CURRENTLY NON-FUNCTIONAL on the pinned 3.1.3 image — see the KNOWN GAP note on
-  # paperless-webserver above. Defined here (not started by default — no restart policy, must
-  # be started explicitly with `docker compose up paperless-worker` once fixed) so the shape
-  # is ready the moment the crash loop is root-caused, rather than designing this in later.
+  # Not started by default (no restart policy) — crash-loops until the KNOWN GAP above is fixed.
   paperless-worker:
     image: paperlessngx/paperless-ngx:3.1.3
     profiles: ["paperless-worker-disabled-pending-fix"]
@@ -176,8 +132,6 @@ services:
       PAPERLESS_DBNAME: ${PAPERLESS_DBNAME:-paperless}
       PAPERLESS_DBUSER: ${PAPERLESS_DBUSER:-paperless}
       PAPERLESS_DBPASS: ${PAPERLESS_DBPASS:?set in .env}
-      # Required — Paperless refuses to start with the default value. Generate with:
-      # python3 -c "import secrets; print(secrets.token_urlsafe(64))"
       PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set in .env}
       PAPERLESS_TIKA_ENABLED: "1"
       PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
@@ -192,17 +146,13 @@ services:
       - paperless-consume:/usr/src/paperless/consume
     command: ["celery", "--app", "paperless", "worker", "--loglevel", "INFO"]
     deploy:
-      # Resource budget (specs/10-nonfunctional.md, Phase 5 hardening) — placeholder limits,
-      # to be measured and tuned under real load in Phase 5, not assumed correct here.
+      # Placeholder — tune under real load in Phase 5.
       resources:
         limits:
           cpus: "4"
           memory: 4G
 
-  # ---------------------------------------------------------------------------------------
-  # Our stack — Next.js app, worker, queue. Supabase (Postgres/Auth/Storage) is Cloud, not
-  # a service here (ADR-0003).
-  # ---------------------------------------------------------------------------------------
+  # --- Our stack — app, worker, queue. Supabase is Cloud (ADR-0003), not a service here. ----
 
   redis-app:
     image: redis:7-alpine
@@ -254,8 +204,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      # TLS certs (Let's Encrypt) — mounted from the host's certbot output. Not managed by
-      # this compose file; see docs/SETUP.md for the certbot/renewal setup.
+      # Let's Encrypt output from the host — not managed by this compose file, see docs/SETUP.md.
       - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
       - "80:80"

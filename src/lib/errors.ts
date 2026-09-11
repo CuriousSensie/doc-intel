@@ -60,6 +60,30 @@ export class BillingError extends AppError {
   }
 }
 
+export class PayloadTooLargeError extends AppError {
+  constructor(message = "Payload too large") {
+    super(message, { code: "payload_too_large", status: 413 });
+  }
+}
+
+export class UnprocessableError extends AppError {
+  constructor(message = "Valid shape, invalid business state") {
+    super(message, { code: "unprocessable", status: 422 });
+  }
+}
+
+export class PaperlessUnavailableError extends AppError {
+  constructor(message = "Upstream document service unavailable") {
+    super(message, { code: "paperless_unavailable", status: 502 });
+  }
+}
+
+export class OrgNotProvisionedError extends AppError {
+  constructor(message = "Tenant provisioning incomplete or failed") {
+    super(message, { code: "org_not_provisioned", status: 503 });
+  }
+}
+
 export function toSafeError(error: unknown): SafeErrorShape {
   if (error instanceof AppError) {
     return {

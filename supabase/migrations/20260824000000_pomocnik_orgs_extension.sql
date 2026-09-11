@@ -1,7 +1,5 @@
--- Pomočnik Level 0 — orgs extension columns (specs/02-data-model.md), the read-only role
--- (specs/00-overview.md's RBAC minimum: owner/admin/member/read-only), and the guards both
--- require. Column naming is organization_id-style throughout, matching the boilerplate's
--- existing convention rather than the spec's literal org_id (docs/adr/0004).
+-- Pomočnik Level 0 — orgs extension columns + read-only role (docs/adr/0004: organization_id
+-- naming, not the spec's org_id).
 
 alter table public.organizations add column timezone text not null default 'Europe/Ljubljana';
 alter table public.organizations add column locale text not null default 'sl-SI';
@@ -12,11 +10,7 @@ alter table public.organizations add column ai_enabled boolean not null default 
 
 alter type public.organization_role add value 'read-only';
 
--- System-managed columns: a tenant admin can update their org's name/logo (existing
--- "organizations_update_owner_admin" policy) but must never be able to write their own way
--- into "ready"/"ai_enabled=true" directly — those are set only by the provisioning job and by
--- the (Level 2) AI opt-in flow, both running as the service role. RLS is row-level, not
--- column-level, so a trigger is the enforcement point (same pattern as set_updated_at()).
+-- RLS is row-level, not column-level — a trigger blocks tenant writes to system-managed columns.
 create or replace function public.protect_system_columns()
 returns trigger
 language plpgsql
@@ -37,12 +31,8 @@ create trigger organizations_protect_system_columns
   before update on public.organizations
   for each row execute function public.protect_system_columns();
 
--- A fresh "read-only" member must keep every existing read (is_organization_member() is
--- unchanged and deliberately still includes read-only) but lose every existing member-level
--- WRITE the boilerplate currently grants to any org member. The one such policy today is
--- files_insert_owner (docs/DATABASE.md: "insert: owner (and org member if org-scoped)") — audited
--- specifically for this migration; re-check this list if a future migration adds another
--- write policy keyed to is_organization_member() instead of has_organization_role().
+-- Same as is_organization_member() but excludes read-only — needed because files_insert_owner
+-- (the only member-level write policy today) was keyed to plain membership.
 create or replace function public.has_organization_write_access(target_organization_id uuid)
 returns boolean
 language sql

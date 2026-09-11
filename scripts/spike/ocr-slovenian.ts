@@ -1,30 +1,13 @@
-/**
- * Phase 0 — Slovenian OCR spike (specs/04-level-0-foundation.md, specs/11-roadmap.md).
- *
- * Question: with PAPERLESS_OCR_LANGUAGE=slv+eng, are č/š/ž correctly recognized on real
- * scanned Slovenian invoices? This is a fidelity check a human must eyeball — mojibake and
- * character substitution are the specific failure modes named in the spec, and there's no
- * ground-truth text to diff against for a real scan. This script automates the mechanical
- * part (upload, wait for OCR, fetch extracted text, flag likely mojibake) and prints the full
- * text for manual review.
- *
- * Usage:
- *   PAPERLESS_URL=http://localhost:8010 \
- *   PAPERLESS_ADMIN_USER=admin PAPERLESS_ADMIN_PASSWORD=... \
- *   npx tsx scripts/spike/ocr-slovenian.ts ./path/to/scanned-invoices/*.pdf
- *
- * Supply real or representative Slovenian scanned invoices — a synthetic/born-digital PDF
- * does not exercise Tesseract's recognition the way a real scan does (per spec: "verify with
- * a real Slovenian scanned invoice, not a synthetic PDF").
- */
+// Phase 0 — Slovenian OCR spike. Uploads real scanned invoices, waits for OCR, flags likely
+// mojibake, and prints extracted text for manual č/š/ž review (no ground truth to diff against).
+// Usage: PAPERLESS_URL=... PAPERLESS_ADMIN_USER=... PAPERLESS_ADMIN_PASSWORD=... npx tsx scripts/spike/ocr-slovenian.ts <files...>
+// Use real scans, not synthetic PDFs — Tesseract's recognition path differs.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
 import { login, paperlessFetch } from "./lib/paperless-admin";
 
-// Common mojibake signatures for č/š/ž when UTF-8 text is mis-decoded as Latin-1/Windows-1252,
-// or when the expected diacritic is dropped entirely — both are the failure modes the spec
-// calls out explicitly.
+// č/š/ž mis-decoded as Latin-1/Windows-1252, or dropped entirely.
 const MOJIBAKE_PATTERNS = [/Ã¤/, /Ã¥/, /Ã¾/, /Å¡/, /Å¾/, /Ä\x8d/, /�/];
 const SLOVENIAN_CHARS = /[čšžČŠŽ]/g;
 
@@ -36,9 +19,7 @@ async function waitForDocument(token: string, taskId: string): Promise<number | 
       if (i === 0) console.error(`  task poll returned ${res.status}: ${await res.text()}`);
       continue;
     }
-    // See scripts/spike/isolation.ts for the three real bugs this shape fixes (paginated
-    // envelope, lowercase status, related_document_ids as a list) — verified against a live
-    // 3.1.3 response.
+    // Paginated envelope, lowercase status, related_document_ids as a list (see isolation.ts).
     const body = (await res.json()) as {
       results: Array<{ status: string; related_document_ids?: number[]; result?: string }>;
     };
