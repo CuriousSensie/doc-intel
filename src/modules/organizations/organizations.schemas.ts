@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const email = z.string().trim().email("Enter a valid email address").toLowerCase();
-const assignableRole = z.enum(["admin", "member"]);
+const assignableRole = z.enum(["admin", "member", "read-only"]);
 
 export const createOrganizationSchema = z.object({
   name: z.string().trim().min(2, "Enter an organization name").max(120),

@@ -40,8 +40,12 @@ own members, roles, and pending invitations.
 these operations need SECURITY DEFINER functions instead of plain RLS-scoped queries.
 
 **Configuration**: gated by `features.organizations` in `src/config/features.ts`. Roles are
-`owner`, `admin`, `member` (the `organization_role` enum); role permissions are defined in
-`src/modules/auth/authorization.ts`'s `can()` helper.
+`owner`, `admin`, `member`, `read-only` (the `organization_role` enum — the 4th role added for
+Pomočnik, `supabase/migrations/20260824000000_pomocnik_orgs_extension.sql`); role permissions
+are defined in `src/modules/auth/authorization.ts`'s `can()` helper. `read-only` has the same
+read access as `member` but no write access anywhere — enforced at the RLS layer by
+`has_organization_write_access()`, not just by `can()`, since RLS is the real boundary
+(`docs/SECURITY.md`).
 
 **How to enable**: set `FEATURE_ORGANIZATIONS=true` (default). The "Organizations" and "Team" nav
 entries in `src/config/navigation.ts` and the `/settings/team` tab appear automatically once

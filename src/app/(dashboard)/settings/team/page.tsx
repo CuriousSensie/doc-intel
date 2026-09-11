@@ -133,6 +133,7 @@ export default async function TeamSettingsPage({
               >
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
+                <option value="read-only">Read-only</option>
               </select>
             </label>
             <Button type="submit">Send invite</Button>
@@ -194,17 +195,21 @@ export default async function TeamSettingsPage({
                 <p className="text-sm capitalize text-muted">{member.role}</p>
               </div>
               {canManage && member.user_id !== context.user.id && member.role !== "owner" ? (
-                <div className="flex flex-wrap gap-2">
-                  <form action={updateMemberRoleAction}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <form action={updateMemberRoleAction} className="flex items-center gap-2">
                     <input name="organizationId" type="hidden" value={organization.id} />
                     <input name="memberId" type="hidden" value={member.id} />
-                    <input
+                    <select
+                      className="min-h-9 rounded-md border border-border bg-panel px-2 text-sm font-normal outline-none transition focus:border-foreground focus:ring-2 focus:ring-foreground/15"
+                      defaultValue={member.role}
                       name="role"
-                      type="hidden"
-                      value={member.role === "admin" ? "member" : "admin"}
-                    />
+                    >
+                      <option value="member">Member</option>
+                      <option value="admin">Admin</option>
+                      <option value="read-only">Read-only</option>
+                    </select>
                     <Button size="sm" type="submit" variant="outline">
-                      Make {member.role === "admin" ? "member" : "admin"}
+                      Update role
                     </Button>
                   </form>
                   <form action={removeMemberAction}>

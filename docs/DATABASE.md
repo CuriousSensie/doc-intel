@@ -36,6 +36,11 @@ erDiagram
     text logo_url
     uuid created_by FK "auth.users, set null"
     timestamptz suspended_at
+    text timezone "default 'Europe/Ljubljana' — Pomočnik"
+    text locale "default 'sl-SI' — Pomočnik"
+    char currency "default_currency, default 'EUR' — Pomočnik"
+    text provisioning_status "pending|provisioning|ready|provisioning_failed, system-managed — Pomočnik"
+    boolean ai_enabled "default false, system-managed — Pomočnik"
     timestamptz created_at
     timestamptz updated_at
   }
@@ -44,7 +49,7 @@ erDiagram
     uuid id PK
     uuid organization_id FK
     uuid user_id FK "auth.users"
-    organization_role role "owner | admin | member"
+    organization_role role "owner | admin | member | read-only"
     timestamptz created_at
     timestamptz updated_at
   }
@@ -210,7 +215,7 @@ same **owner-polymorphic** shape: `owner_type` plus exactly one of `user_id`/`or
 
 | Enum | Values |
 | --- | --- |
-| `organization_role` | `owner`, `admin`, `member` |
+| `organization_role` | `owner`, `admin`, `member`, `read-only` (added for Pomočnik — a viewer role with read access identical to `member` but no write access, see `has_organization_write_access()` below) |
 | `subscription_status` | `incomplete`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, `paused` |
 | `credit_transaction_type` | `subscription_grant`, `purchase`, `usage`, `refund`, `admin_adjustment`, `promotion` |
 | `billing_owner_type` | `user`, `organization` |
@@ -228,6 +233,8 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | `is_app_admin()` | `true` if the current session's user has `profiles.is_app_admin = true` and isn't suspended. Used in nearly every RLS policy as the admin-bypass clause. |
 | `is_organization_member(target_organization_id)` | `true` if the current session's user is a member of the org **and** the org isn't suspended. The suspension check lives here, not in application code — see [SECURITY.md](SECURITY.md#admin). |
 | `has_organization_role(target_organization_id, allowed_roles)` | Same as above, plus a role check. |
+| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Pomočnik. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `files_insert_owner`). |
+| `protect_system_columns()` | Trigger function on `organizations` — rejects a non-`service_role` write to `provisioning_status` or `ai_enabled` (system-managed; set only by the tenant-provisioning job and the AI opt-in flow). RLS is row-level, not column-level, so this is the enforcement point — Pomočnik. |
 | `create_organization(org_name, org_slug)` | Creates an org and the creator's `owner` membership in one transaction (the creator has no RLS access to insert their own membership otherwise — see [SECURITY.md](SECURITY.md#organizations)). |
 | `get_organization_invitation(p_token)` | Looks up an invitation by its token hash — the invitee isn't a member yet, so this can't be a plain RLS-scoped select. |
 | `accept_organization_invitation(p_token)` | Validates the token (hash, expiry, revocation, email match) and inserts the membership atomically. |
@@ -263,7 +270,7 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `credit_transactions` | select only (owner or admin) — **no insert policy**, admin client only. | `(user_id)`, `(organization_id)` |
 | `usage_counters` | select only (owner or admin) — **no insert/update policy**, admin client only. | partial unique `(owner_type,user_id,feature,period) where organization_id is null`; partial unique `(owner_type,organization_id,feature,period) where user_id is null` |
 | `notifications` | select-own, update-own — **no insert policy**, admin client only. | `notifications_user_created_idx (user_id, created_at desc)` |
-| `files` | select: owner, org member, or admin. insert: owner (and org member if org-scoped). delete: owner, org owner/admin, or admin. **No update policy.** | `files_owner_created_idx`, `files_organization_created_idx` (both `created_at desc, id desc`, for cursor pagination) |
+| `files` | select: owner, org member, or admin. insert: owner (and org member **with write access** if org-scoped — `has_organization_write_access()`, so a `read-only` member cannot upload, per Pomočnik's migration). delete: owner, org owner/admin, or admin. **No update policy.** | `files_owner_created_idx`, `files_organization_created_idx` (both `created_at desc, id desc`, for cursor pagination) |
 | `audit_logs` | select: admin, or org owner/admin for their own org's rows. **No insert policy at all** — `logEvent()`'s `auditLogSink` (admin client) is the only writer. | `audit_logs_actor_idx (actor_id, created_at desc)` |
 | `webhook_events` | No policies read in application code (admin-client only, used solely by the Stripe webhook handler for idempotency). | unique `(provider, event_id)` |
 | `projects` | Scaffolded in the initial schema; no module currently reads/writes it. | — |
@@ -281,6 +288,7 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260821130000_billing_functions.sql` | Replaces `usage_counters`' original composite unique constraint with two partial unique indexes (nullable owner columns aren't equal to each other in Postgres, so the naive constraint didn't work); adds `increment_usage_counter` and `consume_credits`. |
 | `20260822090000_files_storage.sql` | Creates the `avatars` and `files` Storage buckets; adds the two cursor-pagination indexes on `files`. |
 | `20260823090000_admin.sql` | Adds `organizations.suspended_at` and threads it through `is_organization_member`/`has_organization_role`; adds `subscriptions.platform_disabled_at`; adds `purge_old_audit_logs()`. |
+| `20260824000000_pomocnik_orgs_extension.sql` | **Pomočnik Level 0.** Adds `organizations.timezone`/`locale`/`default_currency`/`provisioning_status`/`ai_enabled`; adds the `read-only` value to `organization_role`; adds `protect_system_columns()` + its trigger (blocks non-service-role writes to `provisioning_status`/`ai_enabled`); adds `has_organization_write_access()` and repoints `files_insert_owner` at it so a `read-only` member can't upload files. Verified end-to-end against a throwaway Postgres container with the `auth`/`storage` schemas stubbed (no live Supabase project yet this session) — see `docs/spike-findings.md`-adjacent session notes for the exact checks run. |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

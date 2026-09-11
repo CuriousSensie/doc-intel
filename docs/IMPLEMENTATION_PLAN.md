@@ -65,8 +65,20 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       placeholders pending the items below
 - [x] `src/lib/service-context.ts` ([ADR-0007](adr/0007-service-context-pattern.md))
 - [x] `src/lib/queue/` (BullMQ wrapper)
-- [ ] Migration: orgs extension columns + `read-only` role + `protect_system_columns()` trigger
-- [ ] Role rollout: invitation schema/UI, `AssignableRole`, RLS review for `read-only`
+- [x] Migration: orgs extension columns + `read-only` role + `protect_system_columns()` trigger
+      (`supabase/migrations/20260824000000_pomocnik_orgs_extension.sql`) — also added
+      `has_organization_write_access()` and repointed `files_insert_owner` at it (a fresh
+      `read-only` member would otherwise still have been able to upload files via the existing
+      `is_organization_member()`-keyed policy). Verified end-to-end against a throwaway Postgres
+      container with `auth`/`storage` stubbed: enum value present, trigger blocks a
+      non-service-role write to `provisioning_status`/`ai_enabled` and allows a normal column
+      update, `has_organization_write_access()` returns false for `read-only` / true for
+      `member`. No live Supabase project exists yet this session to run it through the real CLI.
+- [x] Role rollout: `src/types/database.ts` (enum + new `organizations` columns, 8 occurrences),
+      `organizations.schemas.ts`'s `assignableRole` Zod enum (+ test), `can()` in
+      `authorization.ts`, the invite-role `<select>` and per-member role control on
+      `/settings/team` (was a binary admin/member toggle button — now a 3-option select, since a
+      toggle doesn't generalize past two roles)
 - [ ] Migration: `tenant_paperless_config`, `paperless_object_map`
 - [x] `scripts/check-rls-coverage.ts` CI check — verified against both a real violation (catches
       it) and the existing schema (passes)

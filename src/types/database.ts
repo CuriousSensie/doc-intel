@@ -51,6 +51,14 @@ export type Database = {
           logo_url: string | null;
           created_by: string | null;
           suspended_at: string | null;
+          // Pomočnik Level 0 extension (supabase/migrations/20260824000000_pomocnik_orgs_extension.sql).
+          // provisioning_status and ai_enabled are system-managed — see protect_system_columns() —
+          // never write them from a tenant-facing action.
+          timezone: string;
+          locale: string;
+          default_currency: string;
+          provisioning_status: "pending" | "provisioning" | "ready" | "provisioning_failed";
+          ai_enabled: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -61,6 +69,11 @@ export type Database = {
           logo_url?: string | null;
           created_by?: string | null;
           suspended_at?: string | null;
+          timezone?: string;
+          locale?: string;
+          default_currency?: string;
+          provisioning_status?: "pending" | "provisioning" | "ready" | "provisioning_failed";
+          ai_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -69,6 +82,12 @@ export type Database = {
           slug?: string;
           logo_url?: string | null;
           suspended_at?: string | null;
+          timezone?: string;
+          locale?: string;
+          default_currency?: string;
+          // provisioning_status/ai_enabled deliberately omitted — protect_system_columns()
+          // rejects a non-service-role write to either, so they're not part of the
+          // tenant-facing Update shape.
           updated_at?: string;
         };
         Relationships: [];
@@ -78,7 +97,7 @@ export type Database = {
           id: string;
           organization_id: string;
           user_id: string;
-          role: "owner" | "admin" | "member";
+          role: "owner" | "admin" | "member" | "read-only";
           created_at: string;
           updated_at: string;
         };
@@ -86,12 +105,12 @@ export type Database = {
           id?: string;
           organization_id: string;
           user_id: string;
-          role?: "owner" | "admin" | "member";
+          role?: "owner" | "admin" | "member" | "read-only";
           created_at?: string;
           updated_at?: string;
         };
         Update: {
-          role?: "owner" | "admin" | "member";
+          role?: "owner" | "admin" | "member" | "read-only";
           updated_at?: string;
         };
         Relationships: [];
@@ -101,7 +120,7 @@ export type Database = {
           id: string;
           organization_id: string;
           email: string;
-          role: "owner" | "admin" | "member";
+          role: "owner" | "admin" | "member" | "read-only";
           token_hash: string;
           invited_by: string | null;
           accepted_by: string | null;
@@ -115,7 +134,7 @@ export type Database = {
           id?: string;
           organization_id: string;
           email: string;
-          role?: "owner" | "admin" | "member";
+          role?: "owner" | "admin" | "member" | "read-only";
           token_hash: string;
           invited_by?: string | null;
           accepted_by?: string | null;
@@ -126,7 +145,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
-          role?: "owner" | "admin" | "member";
+          role?: "owner" | "admin" | "member" | "read-only";
           accepted_by?: string | null;
           accepted_at?: string | null;
           revoked_at?: string | null;
@@ -171,13 +190,7 @@ export type Database = {
           stripe_price_id: string | null;
           plan_key: string;
           status:
-            | "incomplete"
-            | "trialing"
-            | "active"
-            | "past_due"
-            | "canceled"
-            | "unpaid"
-            | "paused";
+            "incomplete" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
           current_period_start: string | null;
           current_period_end: string | null;
           cancel_at_period_end: boolean;
@@ -195,13 +208,7 @@ export type Database = {
           stripe_price_id?: string | null;
           plan_key: string;
           status?:
-            | "incomplete"
-            | "trialing"
-            | "active"
-            | "past_due"
-            | "canceled"
-            | "unpaid"
-            | "paused";
+            "incomplete" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
           current_period_start?: string | null;
           current_period_end?: string | null;
           cancel_at_period_end?: boolean;
@@ -214,13 +221,7 @@ export type Database = {
           stripe_price_id?: string | null;
           plan_key?: string;
           status?:
-            | "incomplete"
-            | "trialing"
-            | "active"
-            | "past_due"
-            | "canceled"
-            | "unpaid"
-            | "paused";
+            "incomplete" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
           current_period_start?: string | null;
           current_period_end?: string | null;
           cancel_at_period_end?: boolean;
@@ -236,7 +237,13 @@ export type Database = {
           user_id: string | null;
           organization_id: string | null;
           amount: number;
-          type: "subscription_grant" | "purchase" | "usage" | "refund" | "admin_adjustment" | "promotion";
+          type:
+            | "subscription_grant"
+            | "purchase"
+            | "usage"
+            | "refund"
+            | "admin_adjustment"
+            | "promotion";
           reference: string | null;
           metadata: Json;
           created_by: string | null;
@@ -248,7 +255,13 @@ export type Database = {
           user_id?: string | null;
           organization_id?: string | null;
           amount: number;
-          type: "subscription_grant" | "purchase" | "usage" | "refund" | "admin_adjustment" | "promotion";
+          type:
+            | "subscription_grant"
+            | "purchase"
+            | "usage"
+            | "refund"
+            | "admin_adjustment"
+            | "promotion";
           reference?: string | null;
           metadata?: Json;
           created_by?: string | null;
@@ -418,7 +431,7 @@ export type Database = {
           organization_id: string;
           organization_name: string;
           email: string;
-          role: "owner" | "admin" | "member";
+          role: "owner" | "admin" | "member" | "read-only";
           expires_at: string;
           accepted_at: string | null;
           revoked_at: string | null;
@@ -461,10 +474,12 @@ export type Database = {
       };
     };
     Enums: {
-      organization_role: "owner" | "admin" | "member";
+      organization_role: "owner" | "admin" | "member" | "read-only" | "read-only";
       billing_owner_type: "user" | "organization";
-      subscription_status: "incomplete" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
-      credit_transaction_type: "subscription_grant" | "purchase" | "usage" | "refund" | "admin_adjustment" | "promotion";
+      subscription_status:
+        "incomplete" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
+      credit_transaction_type:
+        "subscription_grant" | "purchase" | "usage" | "refund" | "admin_adjustment" | "promotion";
       webhook_processing_status: "pending" | "processed" | "failed";
     };
     CompositeTypes: Record<string, never>;
