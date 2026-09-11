@@ -101,15 +101,19 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       the tenant service user cannot create anything without this. See
       `scripts/spike/lib/paperless-admin.ts` and `docs/spike-findings.md` §1.
 - [ ] `POST /admin/orgs/:id/reprovision`
-- [ ] `src/lib/paperless/` (client, documents, fields, tags, workflows, types, errors) +
-      runtime permission-vs-tenant-config validation + ESLint admin-client restriction +
-      `resolveTenantForPaperlessDocument()` narrow export. **`errors.ts` must translate a
-      Paperless 403 on any tenant-scoped read into our `NOT_FOUND` (404)** — confirmed via the
-      Phase 0 isolation spike that Paperless returns 403 (not 404) for cross-tenant document
-      access, which `specs/03-api.md` explicitly forbids exposing. See `docs/spike-findings.md`
-      §1 (#8).
-- [ ] Paperless contract tests in CI against a live container — `.github/workflows/ci.yml`
-      already wires this up (`continue-on-error` until `src/lib/paperless` exists)
+- [x] `src/lib/paperless/client.ts` — `paperlessFor(orgId)`/`paperlessAdminClient()`, retry with
+      backoff+jitter, structured logging, 30s/120s timeouts, `createOwnedObject()` with a
+      required + runtime-validated permissions argument (isolation test #20), ESLint-restricted
+      admin-client import, `resolveTenantForPaperlessDocument()` narrow export. `errors.ts`
+      translates Paperless 403→our 404 (confirmed necessary by the Phase 0 spike,
+      `docs/spike-findings.md` §1 #8). `token-crypto.ts` (AES-256-GCM) unit-tested. **Verified
+      end-to-end against the live Paperless instance** — GET/POST/PATCH/DELETE, the
+      ownership-mismatch guard, and the 404 mapping all confirmed working against real
+      responses, not just typecheck. `documents.ts`/`fields.ts`/`tags.ts`/`workflows.ts`
+      typed wrappers not yet built — added as real callers (upload pipeline, entities) need
+      them, per the "read the real response" lesson from Phase 0.
+- [x] Paperless contract tests in CI against a live container — `.github/workflows/ci.yml`'s
+      `continue-on-error` removed now that `src/lib/paperless` has real tests
 - [ ] `src/modules/documents/` + `document_uploads` table + `document-uploads` Storage bucket
 - [ ] `worker/jobs/validate-upload.ts` (MIME re-sniff + ClamAV)
 - [ ] `worker/jobs/submit-upload-to-paperless.ts` (task-id persisted, resumable)
