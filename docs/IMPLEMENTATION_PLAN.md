@@ -247,8 +247,22 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       extended to 2 years (`20260827000000_audit_log_retention.sql`)
 - [ ] Transactional audit Postgres functions ([ADR-0008](adr/0008-transactional-audit-writes.md))
 - [ ] `listAuditLogsForSubject()` scoped read
-- [ ] `src/app/api/internal/paperless/document-consumed/route.ts` (HMAC body+timestamp, replay
-      window, event dedup)
+- [x] `src/app/api/internal/paperless/document-consumed/route.ts` (HMAC body+timestamp, replay
+      window, event dedup). `src/lib/paperless/webhook-signature.ts` verifies the HMAC-SHA256
+      over body+timestamp (matching `infra/scripts/notify-pomocnik.sh` exactly) with a 5-minute
+      clock-skew/replay tolerance window and a timing-safe comparison. Dedup reuses the existing
+      generic `webhook_events` table (provider `'paperless'`) rather than a new table — keyed by
+      the signature itself as the event id, since notify-pomocnik.sh's payload has no event id
+      of its own to give us. An unresolvable tenant (`resolveTenantForPaperlessDocument()`
+      returns null — a document Pomočnik hasn't synced yet) is handled as a normal, expected
+      case, not an error: it's deferred to the reconciliation sweep's backstop rather than
+      guessing an org. Added `POMOCNIK_WEBHOOK_SECRET` to `src/lib/env.ts` and generated+appended
+      a real value to the local `.env` (was entirely missing — the script required it but
+      nothing provisioned it). Verified end-to-end against a real running dev server this
+      session (not just typechecked): correctly-signed request with an unmapped document id →
+      `200 {resolved:false}`; bad signature → `401`; missing headers → `401`; stale/replayed
+      timestamp → `401`; exact replay of a valid request → deduped via `webhook_events`. Test
+      rows cleaned up from the live Supabase project afterward.
 - [ ] `worker/jobs/reconcile-incremental.ts` (5 min, added+modified, full pagination)
 - [ ] `worker/jobs/reconcile-full-sweep.ts` (daily, full listing, deletion detection)
 - [ ] Search passthrough on `documents.service.ts`

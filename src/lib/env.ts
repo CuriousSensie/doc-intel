@@ -40,7 +40,10 @@ export const envSchema = z.object({
   PAPERLESS_TOKEN_ENCRYPTION_KEY: z.string().optional(),
   // validate-upload.ts's AV scan (specs/10-nonfunctional.md §Security). clamd's INSTREAM port.
   CLAMAV_HOST: z.string().default("localhost"),
-  CLAMAV_PORT: z.coerce.number().int().positive().default(3310)
+  CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
+  // Shared with infra/scripts/notify-pomocnik.sh (Paperless container's env) — signs the
+  // post-consume webhook's body+timestamp. /api/internal/paperless/document-consumed.
+  POMOCNIK_WEBHOOK_SECRET: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
