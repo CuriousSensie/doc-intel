@@ -55,6 +55,11 @@ export class PaperlessClient {
     private readonly expectedOwnership: OwnedObjectPermissions | null
   ) {}
 
+  // null only for the admin client — every tenant client (paperlessFor()) always has one.
+  get ownership(): OwnedObjectPermissions | null {
+    return this.expectedOwnership;
+  }
+
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const {
       method = "GET",
@@ -162,6 +167,23 @@ export class PaperlessClient {
     return this.request<T>(path, { method: "POST", form, timeoutMs: UPLOAD_TIMEOUT_MS });
   }
 
+  // Shared by createOwnedObject() and setOwnedObjectPermissions() — the one guard that makes
+  // isolation test #20 ("no creation/grant without explicit, tenant-matching permissions") a
+  // compile-time-adjacent guarantee instead of a convention two call sites could each get wrong.
+  private assertOwnership(permissions: OwnedObjectPermissions): void {
+    if (
+      this.expectedOwnership &&
+      (permissions.ownerId !== this.expectedOwnership.ownerId ||
+        permissions.groupId !== this.expectedOwnership.groupId)
+    ) {
+      throw new Error(
+        `Refusing to grant Paperless permissions for org ${this.orgId} that don't match its own ` +
+          `service user/group (got owner=${permissions.ownerId} group=${permissions.groupId}, ` +
+          `expected owner=${this.expectedOwnership.ownerId} group=${this.expectedOwnership.groupId})`
+      );
+    }
+  }
+
   // The only way to create a tenant-owned object — permissions required, validated against
   // this tenant before sending (isolation test #20).
   async createOwnedObject<T>(
@@ -169,17 +191,7 @@ export class PaperlessClient {
     body: Record<string, unknown>,
     permissions: OwnedObjectPermissions
   ): Promise<T> {
-    if (
-      this.expectedOwnership &&
-      (permissions.ownerId !== this.expectedOwnership.ownerId ||
-        permissions.groupId !== this.expectedOwnership.groupId)
-    ) {
-      throw new Error(
-        `Refusing to create a Paperless object for org ${this.orgId} with permissions that don't ` +
-          `match its own service user/group (got owner=${permissions.ownerId} group=${permissions.groupId}, ` +
-          `expected owner=${this.expectedOwnership.ownerId} group=${this.expectedOwnership.groupId})`
-      );
-    }
+    this.assertOwnership(permissions);
 
     const payload: PaperlessSetPermissions & Record<string, unknown> = {
       ...body,
@@ -191,6 +203,28 @@ export class PaperlessClient {
     };
 
     return this.request<T>(path, { method: "POST", body: payload });
+  }
+
+  // post_document/ does not itself grant the tenant group view/change on the resulting
+  // document (docs/spike-findings.md's isolation spike: "upload alone may not set group
+  // perms") — callers must PATCH this onto every document created via postForm(), the same way
+  // createOwnedObject() sets it inline for every JSON-created object. Skipping this is the
+  // same class of P1 leak createOwnedObject() guards against.
+  async setOwnedObjectPermissions(
+    path: string,
+    permissions: OwnedObjectPermissions
+  ): Promise<void> {
+    this.assertOwnership(permissions);
+
+    const payload: PaperlessSetPermissions = {
+      owner: permissions.ownerId,
+      set_permissions: {
+        view: { users: [], groups: [permissions.groupId] },
+        change: { users: [], groups: [permissions.groupId] }
+      }
+    };
+
+    await this.request<void>(path, { method: "PATCH", body: payload });
   }
 }
 

@@ -197,7 +197,17 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       the advisors flag on the provisioning trio rather than replicating it. All 12+1 migrations
       pushed and typed (`src/types/database.ts` updated by hand to match the checked-in file's
       formatting, not the raw `supabase gen types` output — see commit for why).
-- [ ] `worker/jobs/submit-upload-to-paperless.ts` (task-id persisted, resumable)
+- [x] `worker/jobs/submit-upload-to-paperless.ts` (task-id persisted, resumable). Added
+      `PaperlessClient.setOwnedObjectPermissions()` (`src/lib/paperless/client.ts`) — the
+      isolation spike found `post_document/` does **not** itself grant the tenant group
+      view/change on the resulting document, so this job PATCHes that on explicitly once the
+      task succeeds, the same P1-leak class `createOwnedObject()` already guards against for
+      JSON-created objects. `src/lib/paperless/tasks.ts` adds the `/api/tasks/` poll loop
+      (fixed 2s interval, ~60s budget, matching the isolation spike's verified values — lowercase
+      `status`, `related_document_ids` as a list) and strips the quotes `post_document/`'s bare
+      task-id response wraps them in. Resumability point is `document_uploads.paperless_task_id`
+      itself, not a claim RPC — a retry that finds it already set skips straight to polling
+      instead of re-POSTing (non-idempotent endpoint).
 - [ ] `worker/jobs/sync-paperless-document.ts` (shared by upload, webhook, reconciliation)
 - [ ] `worker/jobs/expire-abandoned-uploads.ts`
 - [ ] `src/lib/errors.ts` extended (413/422/502/503)

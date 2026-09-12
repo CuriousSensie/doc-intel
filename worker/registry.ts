@@ -5,6 +5,7 @@ import { QUEUE_NAMES, type QueueName } from "@/lib/queue";
 
 import type { JobPayload } from "./context";
 import { provisionTenantJob } from "./jobs/provision-tenant";
+import { submitUploadToPaperlessJob } from "./jobs/submit-upload-to-paperless";
 import { validateUploadJob } from "./jobs/validate-upload";
 
 // Placeholders until each real handler lands (see docs/IMPLEMENTATION_PLAN.md) — loud failure,
@@ -25,7 +26,7 @@ const notImplemented =
 export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.provisionTenant]: provisionTenantJob,
   [QUEUE_NAMES.validateUpload]: validateUploadJob,
-  [QUEUE_NAMES.submitUploadToPaperless]: notImplemented(QUEUE_NAMES.submitUploadToPaperless),
+  [QUEUE_NAMES.submitUploadToPaperless]: submitUploadToPaperlessJob,
   [QUEUE_NAMES.syncPaperlessDocument]: notImplemented(QUEUE_NAMES.syncPaperlessDocument),
   [QUEUE_NAMES.expireAbandonedUploads]: notImplemented(QUEUE_NAMES.expireAbandonedUploads),
   [QUEUE_NAMES.reconcileIncremental]: notImplemented(QUEUE_NAMES.reconcileIncremental),
