@@ -266,7 +266,13 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       confirmed each raises the expected `P0001: Authentication required` from inside the
       correct function body (not a generic/structural SQL error), which confirms argument types
       and column references resolve correctly.
-- [ ] `listAuditLogsForSubject()` scoped read
+- [x] `listAuditLogsForSubject()` scoped read (`src/modules/admin/audit-log.service.ts`) —
+      specs/03-api.md's `GET /audit` "filter by subject": audit history for one entity (a
+      document, an `organization_member`, etc.), not the app-admin global feed
+      `listAuditLogs()` already covers. Adds no authorization of its own — scoping is RLS alone
+      (`audit_logs_select_admins`: app admin, or an org owner/admin for their own org's rows),
+      same as the existing function. Same cursor-pagination shape, unit-tested for the
+      `entity_type`/`entity_id` filter and error propagation.
 - [x] `src/app/api/internal/paperless/document-consumed/route.ts` (HMAC body+timestamp, replay
       window, event dedup). `src/lib/paperless/webhook-signature.ts` verifies the HMAC-SHA256
       over body+timestamp (matching `infra/scripts/notify-pomocnik.sh` exactly) with a 5-minute
