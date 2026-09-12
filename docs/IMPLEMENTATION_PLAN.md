@@ -24,10 +24,15 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       restriction blocked the throwaway listener test — not expected to reproduce once `web`
       is a compose service). Re-run once the real webhook route exists (Phase 1 §7).
 - [x] Slovenian OCR spike — `tesseract-ocr-slv` confirmed present in the pinned image and
-      configured correctly; the user has since verified recognition fidelity directly against
-      real Slovenian scanned documents — good fidelity, no caveats (no mojibake, no č/š/ž
-      corruption). `specs/11-roadmap.md`'s kill criterion not triggered. See
-      `docs/spike-findings.md` §3.
+      configured correctly. Verified against a real Slovenian invoice pulled directly from the
+      live Paperless instance (`GET /api/documents/105/`, diffed line-by-line against the source
+      image): prose/label fidelity is excellent (č/š/ž all correct, no mojibake), but **tabular
+      numeric data — line items, multi-currency totals — is dropped entirely, not just
+      misaligned**, a real and reproducible gap (Tesseract's known weakness on ruled-line-free
+      multi-column tables), not a Slovenian-specific issue. Kill criterion not triggered (the
+      gap is narrow, not general "poor accuracy"), but tracked as a real limitation for anything
+      relying on OCR text to capture every number on an invoice — see `docs/spike-findings.md`
+      §3.
 - [ ] Import throughput spike — ran at reduced scale (100 synthetic documents, not 1,000 real
       scanned ones) due to this session's sandbox constraints; confirmed OCR backlog is real
       even at trivial scale. Full-scale run deferred to Phase 5's load test on the real VPS.

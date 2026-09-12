@@ -212,20 +212,43 @@ and `web` is itself a compose service (Phase 1), where the target is a container
 
 ## 3. Slovenian OCR spike (`scripts/spike/ocr-slovenian.ts`)
 
-**Status:** confirmed — the language pack is present and configured correctly, and the user has
-since verified recognition fidelity directly against real Slovenian scanned documents. Good
-fidelity, no caveats reported (no mojibake, no č/š/ž corruption, no accuracy concerns raised).
-Per `specs/11-roadmap.md`'s kill criterion ("poor accuracy → evaluate alternative OCR before
-building on it") — **not triggered**; proceed on Paperless/Tesseract as planned.
+**Status:** confirmed against a real document, pulled directly from the live Paperless instance
+(document id 105, `99.png`, a real Slovenian invoice — "RAČUN" — the user uploaded and OCR'd).
+**Prose/label text: excellent fidelity.** **Tabular numeric data: a real, reproducible gap** —
+see below. Per `specs/11-roadmap.md`'s kill criterion ("poor accuracy → evaluate alternative OCR
+before building on it") — **not triggered** (the gap is narrow and specific, not general "poor
+accuracy"), but tracked as a known limitation, not silently accepted.
 
 - **Confirmed**: `tesseract-ocr-slv` is present in the pinned `paperlessngx/paperless-ngx:3.1.3`
   image out of the box — `docker compose logs paperless-webserver` on first boot shows
   `[init-tesseract-langs] Package tesseract-ocr-slv already installed!`, no extra install step
   needed. `PAPERLESS_OCR_LANGUAGE=slv+eng` / `PAPERLESS_OCR_LANGUAGES=slv eng` are set correctly
   in `infra/docker-compose.yml` and Paperless accepted them without error.
-- č/š/ž fidelity on a real scan: **confirmed good** by the user against real documents.
-- Mojibake: none reported.
-- Overall accuracy verdict: **usable** — no alternative OCR evaluation needed.
+- **č/š/ž fidelity: confirmed excellent** — every diacritic in the source image (RAČUN,
+  Številka, Šempeter, ZDRUŽ.DRŽAVE, račun, številka) round-trips correctly in the stored
+  `content` field, verified by pulling `GET /api/documents/105/` directly and diffing against
+  the source image line by line. No mojibake.
+- **Real gap found: tabular/numeric data is dropped, not just misaligned.** The source image has
+  two tables. The first (line items: quantity/price/VAT/price-with-VAT/USD value, one row:
+  `1,00 | 100,00 | 0,00 (0%) | 100,00 | 100,00`) and the four-line totals block between the two
+  tables (`SKUPAJ: 100,00`, `SKUPAJ USD: 100,00`, `Za plačilo USD: 100,00`, `EUR: 89,68`) are
+  **entirely absent** from the extracted `content` — not garbled, just missing, as if that
+  region of the image produced no text at all. The second table (VAT breakdown) fared better —
+  its numbers (`0,00 % | 89,68 | 0,00 | 89,68`) did come through. This is consistent with
+  Tesseract's known weakness on whitespace-delimited (no ruled lines) multi-column tables, not a
+  Slovenian-language-specific issue — the same one-row table structure defeated it while running
+  the DDV table with numbers already left-of-decimal (fewer columns, more numeric consistency)
+  through fine.
+- **Product impact**: full-text search over an invoice's own totals/line-item amounts (searching
+  for "89,68" or "100,00" as they appear in the item table) will miss this document, since that
+  text was never indexed — Paperless is only as searchable as what Tesseract actually extracted.
+  Anything downstream that reads Paperless's OCR `content` for the same purpose (a future Level
+  2 AI extraction step) inherits the same gap unless it works from the original file/image
+  directly rather than the text layer.
+- Overall accuracy verdict: **usable for prose/labels** (search, browsing, correspondent/date
+  matching all fine); **known-incomplete for tabular monetary data** — flag as a real limitation
+  when designing anything that assumes OCR text captures every number on an invoice, not
+  something to silently work around by claiming "no caveats."
 
 ## 4. Import throughput spike (`scripts/spike/import-throughput.ts`)
 
@@ -268,7 +291,7 @@ concrete, tracked work rather than assumptions:
 | Separate `paperless-worker` OCR container crash-loops on the pinned 3.1.3 image; running in all-in-one mode instead | Real gap against D4's "separate container from day one," not a blocker for Phase 1 functionality | `docs/IMPLEMENTATION_PLAN.md` — root-cause before Phase 3/5 needs real horizontal OCR scaling |
 | `host.docker.internal` needs explicit `extra_hosts` on Linux; container→host connectivity is further blocked in this specific sandbox (container→container is fine) | Dev-environment-only; the real Phase 1 target is container→container | Fixed in `infra/docker-compose.yml`; re-verify full webhook delivery once `web` is a compose service |
 | Event bridge script execution, env propagation, and container-to-container networking are all confirmed working; end-to-end webhook delivery and kill-and-recover are still unverified | Open, not failed | Re-run once `src/app/api/internal/paperless/document-consumed/route.ts` exists |
-| Slovenian OCR fidelity on a real scan | **Resolved** — user-verified against real Slovenian scanned documents, good fidelity, no caveats | Kill criterion not triggered; no further action needed |
+| Slovenian OCR fidelity on a real scan | **Resolved with a caveat** — prose/labels excellent (č/š/ž verified correct, no mojibake), but tabular numeric data (line items, totals) is dropped entirely on the one real invoice tested, verified directly against `GET /api/documents/105/` | Kill criterion not triggered; the tabular-data gap is a known limitation for anything relying on OCR text to capture every number on an invoice — see §3 |
 | Import throughput at real scale (1,000 real scanned documents) | Only a 100-document synthetic-file proxy run this session | Fold into Phase 5's load test on the actual target VPS |
 
 **What this session's spike work actually proved beyond the checklist**: every setup-blocking
