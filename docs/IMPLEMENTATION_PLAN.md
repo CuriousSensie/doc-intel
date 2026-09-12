@@ -263,8 +263,35 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       `200 {resolved:false}`; bad signature → `401`; missing headers → `401`; stale/replayed
       timestamp → `401`; exact replay of a valid request → deduped via `webhook_events`. Test
       rows cleaned up from the live Supabase project afterward.
-- [ ] `worker/jobs/reconcile-incremental.ts` (5 min, added+modified, full pagination)
-- [ ] `worker/jobs/reconcile-full-sweep.ts` (daily, full listing, deletion detection)
+- [x] `worker/jobs/reconcile-incremental.ts` (5 min, added+modified, full pagination). One job
+      that loops over every `provisioning_status='ready'` org internally (not fanned out
+      per-tenant — no queue/payload contract exists for that, same shape as
+      `expire-abandoned-uploads.ts`); a single tenant's failure is logged and skipped rather than
+      aborting the rest. Queries Paperless for `added__gte`/`modified__gte` since
+      `last_reconciled_at` minus a 2-minute overlap window (spec says "minus overlap window"
+      without naming a value), unions both id sets, and enqueues `sync-paperless-document.ts`
+      for every candidate — including ones already mirrored, since its upsert is how a
+      Paperless-side metadata edit (retitled, re-typed) ever reaches the mirror at all, not just
+      brand-new documents. `src/lib/paperless/documents.ts`'s `listAllPaperlessDocumentIds()`
+      follows Paperless's `next` pagination fully. Structurally cannot detect a deletion (see
+      `reconcile-full-sweep.ts`) — it only ever sees what's inside the added/modified window.
+- [x] `worker/jobs/reconcile-full-sweep.ts` (daily, full listing, deletion detection). Same
+      per-tenant-loop shape as the incremental job, but lists every document a tenant has in
+      Paperless (no date filter) and diffs it against the `documents` mirror both ways: anything
+      in Paperless but not mirrored gets enqueued for sync; anything mirrored (and not already
+      `orphaned`) but missing from the live Paperless listing gets `status='orphaned'` directly
+      (this job's own write, not `sync-paperless-document.ts`'s — that job has no delete-side
+      path). `GET /api/documents/` pagination, `added__gte`/`modified__gte`/`ordering`/
+      `page_size` query params, and the document response's real field shape (`page_count`,
+      `mime_type` as direct fields; checksum nested under `versions[].checksum`; no `byte_size`
+      field anywhere) were all confirmed live against the real pinned instance this session, not
+      assumed — see the preceding commit's fix to `sync-paperless-document.ts`. Verified the
+      full loop end-to-end against the real Supabase Cloud project and a real Paperless
+      container: provisioned a throwaway tenant, uploaded a real document, ran the incremental
+      sweep (created the mirror row via the real worker consuming the real enqueued job), ran
+      the full sweep (confirmed `ready`, 0 orphaned), deleted the document in Paperless, ran the
+      full sweep again — `status` flipped to `orphaned`, `last_reconciled_at` updated. Test
+      tenant and its Paperless-side objects cleaned up afterward.
 - [ ] Search passthrough on `documents.service.ts`
 - [ ] `e2e/isolation.spec.ts` — tests 1–8, 17–20 (the raw checks were run manually as
       `scripts/spike/isolation.ts` this session — 9 of these 11 passed live against a real
