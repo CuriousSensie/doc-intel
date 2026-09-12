@@ -170,45 +170,43 @@ export async function listMembers(organizationId: string): Promise<MemberWithPro
   }));
 }
 
+// ADR-0008: role changes are a "permission change" mutation that needs its audit row written
+// in the same transaction, not via a separate best-effort logEvent() call — update_member_role()
+// does the role update, its own owner/admin authorization check, and the audit insert
+// atomically.
 export async function updateMemberRole(memberId: string, role: AssignableRole) {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("organization_members")
-    .update({ role })
-    .eq("id", memberId)
-    .select("*")
-    .single();
+  const { error } = await supabase.rpc("update_member_role", {
+    p_member_id: memberId,
+    p_role: role
+  });
 
   if (error) {
     throw error;
   }
-
-  return data;
 }
 
+// ADR-0008: same reasoning as updateMemberRole() above.
 export async function removeMember(memberId: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("organization_members").delete().eq("id", memberId);
+  const { error } = await supabase.rpc("remove_member", { p_member_id: memberId });
 
   if (error) {
     throw error;
   }
 }
 
-export async function leaveOrganization(organizationId: string, userId: string) {
+// ADR-0008: same reasoning as updateMemberRole() above — voluntary self-removal is still a
+// "permission change". The RPC scopes to auth.uid() itself, so this no longer needs a userId
+// parameter the way the old plain-delete version did.
+export async function leaveOrganization(organizationId: string) {
   const supabase = await createClient();
-  const { error, count } = await supabase
-    .from("organization_members")
-    .delete({ count: "exact" })
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId);
+  const { error } = await supabase.rpc("leave_organization", {
+    p_organization_id: organizationId
+  });
 
   if (error) {
     throw error;
-  }
-
-  if (!count) {
-    throw new ConflictError("You can't leave as the only owner. Transfer ownership first.");
   }
 }
 

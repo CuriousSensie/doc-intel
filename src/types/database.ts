@@ -682,6 +682,18 @@ export type Database = {
         Args: { p_org_id: string; p_new_owner_id: string };
         Returns: undefined;
       };
+      update_member_role: {
+        Args: { p_member_id: string; p_role: "owner" | "admin" | "member" | "read-only" };
+        Returns: undefined;
+      };
+      remove_member: {
+        Args: { p_member_id: string };
+        Returns: undefined;
+      };
+      leave_organization: {
+        Args: { p_organization_id: string };
+        Returns: undefined;
+      };
       increment_usage_counter: {
         Args: {
           p_owner_type: "user" | "organization";

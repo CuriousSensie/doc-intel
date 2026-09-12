@@ -249,7 +249,23 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       this session for `src/lib/files/scan.ts`.
 - [x] `audit_logs.actor_type` column (`20260826000000_tenant_provisioning.sql`); retention
       extended to 2 years (`20260827000000_audit_log_retention.sql`)
-- [ ] Transactional audit Postgres functions ([ADR-0008](adr/0008-transactional-audit-writes.md))
+- [x] Transactional audit Postgres functions ([ADR-0008](adr/0008-transactional-audit-writes.md)).
+      Of the ADR's six named mutation categories, four (connection create/delete, rule action
+      application, import completion, AI run acceptance) don't have underlying features built
+      yet (Phase 2-plus) and tenant provisioning already had this from an earlier session
+      (`complete_provisioning()`/`fail_provisioning()`). The remaining category, "permission
+      changes," was still going through a plain mutation + a separate best-effort `logEvent()`
+      call — `update_member_role()`, `remove_member()`, and `leave_organization()` (new) plus
+      `transfer_organization_ownership()` (existing, audit insert added) now do the domain write
+      and the `audit_logs` insert atomically, replicating the same `auth.uid()`/
+      `has_organization_role()` authorization check `transfer_organization_ownership()` already
+      used rather than relying on RLS (security definer bypasses it). The three call sites'
+      separate `logEvent()` calls were removed — same convention `provisionTenant()` already
+      established (no `logEvent()` call at all once the RPC owns the audit write). Every
+      function verified live against the real Supabase Cloud project: called unauthenticated,
+      confirmed each raises the expected `P0001: Authentication required` from inside the
+      correct function body (not a generic/structural SQL error), which confirms argument types
+      and column references resolve correctly.
 - [ ] `listAuditLogsForSubject()` scoped read
 - [x] `src/app/api/internal/paperless/document-consumed/route.ts` (HMAC body+timestamp, replay
       window, event dedup). `src/lib/paperless/webhook-signature.ts` verifies the HMAC-SHA256
