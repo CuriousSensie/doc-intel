@@ -23,6 +23,11 @@ export type PaperlessTask = {
   owner: number | null;
 };
 
+// page_count/mime_type/deleted_at/versions confirmed live against the pinned instance
+// (2026-09-12) — page_count and mime_type are direct fields; there is no byte_size field
+// anywhere on this response (checked both the list and detail shapes), so that still has to
+// come from document_uploads on the upload path only. checksum lives on the root entry of
+// `versions`, not as a top-level field.
 export type PaperlessDocument = {
   id: number;
   title: string;
@@ -34,7 +39,17 @@ export type PaperlessDocument = {
   created: string;
   added: string;
   modified: string;
+  deleted_at: string | null;
   owner: number | null;
+  page_count: number | null;
+  mime_type: string | null;
+  versions: Array<{
+    id: number;
+    added: string;
+    version_label: string | null;
+    checksum: string;
+    is_root: boolean;
+  }>;
 };
 
 // Per-object owner/ACL payload. Field is `set_permissions` on this pinned version, not

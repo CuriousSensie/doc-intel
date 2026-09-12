@@ -45,26 +45,25 @@ export async function syncPaperlessDocument(
         : Promise.resolve(null)
     ]);
 
-    // byte_size/mime_type/page_count/checksum: Paperless's document GET response
-    // (src/lib/paperless/types.ts) doesn't carry these, and no live-verified endpoint for them
-    // exists yet (nothing in docs/spike-findings.md probed one) — only the upload path can fill
-    // byte_size/mime_type, from our own document_uploads row. Left null otherwise rather than
-    // guessing a Paperless response shape, per this project's "verify against the real
-    // instance" rule (specs/12-agent-rules.md).
+    // page_count/mime_type/checksum confirmed live against the pinned instance
+    // (src/lib/paperless/types.ts) — available for every caller, not just the upload path.
+    // byte_size has no Paperless field anywhere (checked both list and detail shapes) — only
+    // the upload path can fill it, from our own document_uploads row.
+    const checksum =
+      doc.versions.find((v) => v.is_root)?.checksum ?? doc.versions[0]?.checksum ?? null;
+
     let byteSize: number | null = null;
-    let mimeType: string | null = null;
     let createdBy: string | null = null;
 
     if (uploadId) {
       const { data: upload, error: uploadError } = await db
         .from("document_uploads")
-        .select("declared_mime_type, size_bytes, created_by")
+        .select("size_bytes, created_by")
         .eq("id", uploadId)
         .eq("organization_id", orgId)
         .single();
       if (uploadError) throw uploadError;
       byteSize = upload.size_bytes;
-      mimeType = upload.declared_mime_type;
       createdBy = upload.created_by;
     }
 
@@ -78,8 +77,10 @@ export async function syncPaperlessDocument(
           document_type_key: documentTypeKey,
           document_date: doc.created ? doc.created.slice(0, 10) : null,
           correspondent_name: correspondentName,
+          page_count: doc.page_count,
           byte_size: byteSize,
-          mime_type: mimeType,
+          mime_type: doc.mime_type,
+          checksum,
           status: "ready",
           created_by: createdBy,
           synced_at: new Date().toISOString()
