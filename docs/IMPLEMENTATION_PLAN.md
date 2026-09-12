@@ -23,9 +23,11 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       kill-and-recover test are still unverified (sandbox-specific container→host network
       restriction blocked the throwaway listener test — not expected to reproduce once `web`
       is a compose service). Re-run once the real webhook route exists (Phase 1 §7).
-- [ ] Slovenian OCR spike — `tesseract-ocr-slv` confirmed present in the pinned image and
-      configured correctly; **actual recognition fidelity on a real scan is untested — needs
-      the user to supply real/representative Slovenian scanned invoices.** Blocking item.
+- [x] Slovenian OCR spike — `tesseract-ocr-slv` confirmed present in the pinned image and
+      configured correctly; the user has since verified recognition fidelity directly against
+      real Slovenian scanned documents — good fidelity, no caveats (no mojibake, no č/š/ž
+      corruption). `specs/11-roadmap.md`'s kill criterion not triggered. See
+      `docs/spike-findings.md` §3.
 - [ ] Import throughput spike — ran at reduced scale (100 synthetic documents, not 1,000 real
       scanned ones) due to this session's sandbox constraints; confirmed OCR backlog is real
       even at trivial scale. Full-scale run deferred to Phase 5's load test on the real VPS.

@@ -212,25 +212,20 @@ and `web` is itself a compose service (Phase 1), where the target is a container
 
 ## 3. Slovenian OCR spike (`scripts/spike/ocr-slovenian.ts`)
 
-**Status:** partially confirmed — the language pack is present and configured correctly;
-**actual recognition fidelity on a real scan is still untested and needs the user to supply
-real or representative Slovenian scanned invoice files** (this session had none available).
+**Status:** confirmed — the language pack is present and configured correctly, and the user has
+since verified recognition fidelity directly against real Slovenian scanned documents. Good
+fidelity, no caveats reported (no mojibake, no č/š/ž corruption, no accuracy concerns raised).
+Per `specs/11-roadmap.md`'s kill criterion ("poor accuracy → evaluate alternative OCR before
+building on it") — **not triggered**; proceed on Paperless/Tesseract as planned.
 
 - **Confirmed**: `tesseract-ocr-slv` is present in the pinned `paperlessngx/paperless-ngx:3.1.3`
   image out of the box — `docker compose logs paperless-webserver` on first boot shows
   `[init-tesseract-langs] Package tesseract-ocr-slv already installed!`, no extra install step
   needed. `PAPERLESS_OCR_LANGUAGE=slv+eng` / `PAPERLESS_OCR_LANGUAGES=slv eng` are set correctly
   in `infra/docker-compose.yml` and Paperless accepted them without error.
-- č/š/ž fidelity on a real scan: **pending — needs real files.** Run
-  `PAPERLESS_URL=http://localhost:8010 PAPERLESS_ADMIN_USER=admin PAPERLESS_ADMIN_PASSWORD=<from infra/.env>
-  npx tsx scripts/spike/ocr-slovenian.ts <files...>` once real/representative invoices are
-  available.
-- Mojibake detected: not evaluable without real files.
-- Overall accuracy verdict (usable / needs alternative OCR): **blocked on real files** — this
-  is the one spike question this session could not resolve at all, not even partially, and per
-  `specs/11-roadmap.md`'s kill criterion ("poor accuracy → evaluate alternative OCR before
-  building on it") it should run before Phase 1 relies on OCR quality for anything
-  user-facing.
+- č/š/ž fidelity on a real scan: **confirmed good** by the user against real documents.
+- Mojibake: none reported.
+- Overall accuracy verdict: **usable** — no alternative OCR evaluation needed.
 
 ## 4. Import throughput spike (`scripts/spike/import-throughput.ts`)
 
@@ -273,7 +268,7 @@ concrete, tracked work rather than assumptions:
 | Separate `paperless-worker` OCR container crash-loops on the pinned 3.1.3 image; running in all-in-one mode instead | Real gap against D4's "separate container from day one," not a blocker for Phase 1 functionality | `docs/IMPLEMENTATION_PLAN.md` — root-cause before Phase 3/5 needs real horizontal OCR scaling |
 | `host.docker.internal` needs explicit `extra_hosts` on Linux; container→host connectivity is further blocked in this specific sandbox (container→container is fine) | Dev-environment-only; the real Phase 1 target is container→container | Fixed in `infra/docker-compose.yml`; re-verify full webhook delivery once `web` is a compose service |
 | Event bridge script execution, env propagation, and container-to-container networking are all confirmed working; end-to-end webhook delivery and kill-and-recover are still unverified | Open, not failed | Re-run once `src/app/api/internal/paperless/document-consumed/route.ts` exists |
-| Slovenian OCR fidelity on a real scan | **Fully open — no real files available this session** | Needs the user to supply real/representative Slovenian scanned invoices; re-run `scripts/spike/ocr-slovenian.ts` before Phase 1 relies on OCR quality |
+| Slovenian OCR fidelity on a real scan | **Resolved** — user-verified against real Slovenian scanned documents, good fidelity, no caveats | Kill criterion not triggered; no further action needed |
 | Import throughput at real scale (1,000 real scanned documents) | Only a 100-document synthetic-file proxy run this session | Fold into Phase 5's load test on the actual target VPS |
 
 **What this session's spike work actually proved beyond the checklist**: every setup-blocking
