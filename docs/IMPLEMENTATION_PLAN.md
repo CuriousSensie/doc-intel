@@ -242,7 +242,11 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       Redis container this session (not just typechecked): registered the scheduler, watched it
       actually fire repeatedly, then re-upserted it and confirmed `getJobSchedulers()` still
       showed exactly one entry, not two.
-- [ ] `src/lib/errors.ts` extended (413/422/502/503)
+- [x] `src/lib/errors.ts` extended (413/422/502/503) — stale checkbox, fixed: `PayloadTooLargeError`,
+      `UnprocessableError`, `PaperlessUnavailableError`, and `OrgNotProvisionedError` already
+      existed from an earlier session and are in active use by this session's jobs
+      (`submit-upload-to-paperless.ts`, `paperlessFor()`). `ScanUnavailableError` (502) added
+      this session for `src/lib/files/scan.ts`.
 - [x] `audit_logs.actor_type` column (`20260826000000_tenant_provisioning.sql`); retention
       extended to 2 years (`20260827000000_audit_log_retention.sql`)
 - [ ] Transactional audit Postgres functions ([ADR-0008](adr/0008-transactional-audit-writes.md))
