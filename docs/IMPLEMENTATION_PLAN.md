@@ -41,9 +41,18 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       from D4**: the separate Celery OCR worker container is defined but disabled — it
       crash-loops on the pinned 3.1.3 image (see `docs/spike-findings.md` §0); webserver runs
       in Paperless's default all-in-one mode until root-caused.
-- [ ] Supabase Cloud project created (EU/Frankfurt region), `.env`/secrets configured — not
-      done this session (no live Supabase project provisioned; local infra work used only the
-      Paperless side)
+- [x] Supabase Cloud project created (`DocIntelligence`, eu-west-1), `.env` configured, all 12
+      migrations applied via `supabase db push`. Fixed a real bug surfaced by the real CLI run
+      (exactly the gap the `pomocnik_orgs_extension` migration note flagged — "No live Supabase
+      project exists yet this session to run it through the real CLI"): `alter type ... add
+      value 'read-only'` followed by a function body using that value in the same migration
+      file fails with `SQLSTATE 55P04` (new enum values can't be referenced by a function
+      compiled in the same transaction they were added in). Split
+      `has_organization_write_access()` + the `files_insert_owner` policy rewrite into a new
+      migration `20260824120000_pomocnik_write_access_function.sql` running immediately after
+      the enum-add commits. `check-rls-coverage.ts` and `supabase db advisors --linked` both
+      pass — only pre-existing-pattern WARNs (no ERRORs), same `SECURITY DEFINER`-in-`public`
+      shape as the existing `is_organization_member()`/`has_organization_role()` helpers.
 - [x] `infra/scripts/notify-pomocnik.sh` (HMAC over body+timestamp) — confirmed executing
       correctly against a live instance (exits 0, correct env vars), end-to-end delivery still
       pending per the event-bridge spike note above
