@@ -208,7 +208,28 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       task-id response wraps them in. Resumability point is `document_uploads.paperless_task_id`
       itself, not a claim RPC — a retry that finds it already set skips straight to polling
       instead of re-POSTing (non-idempotent endpoint).
-- [ ] `worker/jobs/sync-paperless-document.ts` (shared by upload, webhook, reconciliation)
+- [x] `worker/jobs/sync-paperless-document.ts` (shared by upload, webhook, reconciliation).
+      Webhook route and both reconciliation jobs don't exist yet, so this only has one real
+      caller today (submit-upload-to-paperless.ts, passing `uploadId`) — designed its signature
+      `(orgId, paperlessDocumentId, uploadId?)` to fit the other two once built, per
+      specs/01-architecture.md's event-bridge section (webhook passes no uploadId; reconciliation
+      loops this per missing document, not a batch). Added `src/lib/paperless/documents.ts`
+      (`getPaperlessDocument`/`getPaperlessDocumentTypeName`/`getPaperlessCorrespondentName`, none
+      existed) and `toDocumentTypeKey()` — `document_type_key` has no canonical source anywhere
+      in the spec or schema, so this lowercases+underscores the Paperless document_type's own
+      name as a documented judgment call, not a guess. `page_count`/`checksum` are left null for
+      every caller (no live-verified Paperless endpoint for them — flagged as a follow-up spike,
+      not guessed); `byte_size`/`mime_type` are only filled on the upload path, from
+      `document_uploads`' own columns. Idempotent via `documents`' own
+      `(organization_id, paperless_document_id)` upsert rather than a claim step, since multiple
+      callers (webhook + reconciliation) can legitimately race on the same document. Also writes
+      the first-ever `paperless_object_map` row with `object_type='document'` (nothing did
+      before this), defensively: a unique-constraint hit is only trusted as "already ours" after
+      confirming the existing row's `organization_id` matches, otherwise it throws loudly instead
+      of silently reassigning a cross-tenant mapping. Enqueues `runRule` (document.ingested
+      trigger — rule engine itself isn't built, this only fires the trigger) and best-effort
+      `logEvent()` + `createNotification()` for the uploader (no uploader to notify on the
+      webhook/reconciliation paths, so notification is skipped there).
 - [ ] `worker/jobs/expire-abandoned-uploads.ts`
 - [ ] `src/lib/errors.ts` extended (413/422/502/503)
 - [x] `audit_logs.actor_type` column (`20260826000000_tenant_provisioning.sql`); retention
