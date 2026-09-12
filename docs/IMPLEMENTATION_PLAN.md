@@ -230,7 +230,18 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       trigger — rule engine itself isn't built, this only fires the trigger) and best-effort
       `logEvent()` + `createNotification()` for the uploader (no uploader to notify on the
       webhook/reconciliation paths, so notification is skipped there).
-- [ ] `worker/jobs/expire-abandoned-uploads.ts`
+- [x] `worker/jobs/expire-abandoned-uploads.ts`. Global sweep (not tenant-scoped — unlike every
+      other job, it ignores `job.data.orgId`, an unused placeholder kept only to satisfy
+      `enqueue()`'s `{orgId: string}` constraint), flipping any `document_uploads` row still
+      `pending`/`uploaded` past its own `expires_at` to `expired` via
+      `document_uploads_expiry_idx`. Actually wired to a recurring trigger, not just written and
+      left unscheduled like `purge_old_audit_logs()` (`docs/SECURITY.md`'s documented gap) —
+      `worker/index.ts` now registers it on every boot via BullMQ v6's
+      `Queue.upsertJobScheduler()` (every 5 min), which is keyed by scheduler id so a container
+      restart re-registering it doesn't create duplicate schedules. Verified live against a real
+      Redis container this session (not just typechecked): registered the scheduler, watched it
+      actually fire repeatedly, then re-upserted it and confirmed `getJobSchedulers()` still
+      showed exactly one entry, not two.
 - [ ] `src/lib/errors.ts` extended (413/422/502/503)
 - [x] `audit_logs.actor_type` column (`20260826000000_tenant_provisioning.sql`); retention
       extended to 2 years (`20260827000000_audit_log_retention.sql`)

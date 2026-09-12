@@ -3,9 +3,24 @@ import IORedis from "ioredis";
 
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import { QUEUE_NAMES } from "@/lib/queue";
+import { getQueue, QUEUE_NAMES } from "@/lib/queue";
 
 import { jobRegistry } from "./registry";
+
+const EXPIRE_ABANDONED_UPLOADS_INTERVAL_MS = 5 * 60 * 1000;
+
+// Registers this worker's recurring (non-tenant-triggered) jobs via BullMQ v6's JobScheduler —
+// upsertJobScheduler() is keyed by jobSchedulerId, so calling this on every boot (including a
+// container restart) updates the existing schedule instead of piling up duplicates. orgId is an
+// unused placeholder — expire-abandoned-uploads.ts's sweep is global, not per-tenant, but every
+// job payload still carries the base JobPayload shape (worker/context.ts) by convention.
+async function registerSchedules() {
+  await getQueue(QUEUE_NAMES.expireAbandonedUploads).upsertJobScheduler(
+    QUEUE_NAMES.expireAbandonedUploads,
+    { every: EXPIRE_ABANDONED_UPLOADS_INTERVAL_MS },
+    { data: { orgId: "system" } }
+  );
+}
 
 // Entrypoint for the `worker` container (Dockerfile.worker). Boots one BullMQ Worker per queue.
 function main() {
@@ -41,6 +56,12 @@ function main() {
 
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
+
+  registerSchedules().catch((err) => {
+    logger.error("worker.register_schedules_failed", {
+      errorMessage: err instanceof Error ? err.message : String(err)
+    });
+  });
 }
 
 main();

@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { QUEUE_NAMES, type QueueName } from "@/lib/queue";
 
 import type { JobPayload } from "./context";
+import { expireAbandonedUploadsJob } from "./jobs/expire-abandoned-uploads";
 import { provisionTenantJob } from "./jobs/provision-tenant";
 import { submitUploadToPaperlessJob } from "./jobs/submit-upload-to-paperless";
 import { syncPaperlessDocumentJob } from "./jobs/sync-paperless-document";
@@ -29,7 +30,7 @@ export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.validateUpload]: validateUploadJob,
   [QUEUE_NAMES.submitUploadToPaperless]: submitUploadToPaperlessJob,
   [QUEUE_NAMES.syncPaperlessDocument]: syncPaperlessDocumentJob,
-  [QUEUE_NAMES.expireAbandonedUploads]: notImplemented(QUEUE_NAMES.expireAbandonedUploads),
+  [QUEUE_NAMES.expireAbandonedUploads]: expireAbandonedUploadsJob,
   [QUEUE_NAMES.reconcileIncremental]: notImplemented(QUEUE_NAMES.reconcileIncremental),
   [QUEUE_NAMES.reconcileFullSweep]: notImplemented(QUEUE_NAMES.reconcileFullSweep),
   [QUEUE_NAMES.runRule]: notImplemented(QUEUE_NAMES.runRule),
