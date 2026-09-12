@@ -178,7 +178,25 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       clients — the real Storage signed-URL behavior needs a live Supabase project, not
       available this session; each assumption about `createSignedUploadUrl()`'s shape is cross-
       checked against the installed `@supabase/storage-js` source, not guessed).
-- [ ] `worker/jobs/validate-upload.ts` (MIME re-sniff + ClamAV)
+- [x] `worker/jobs/validate-upload.ts` (MIME re-sniff + ClamAV). ClamAV wasn't provisioned
+      anywhere in the repo — added a `clamd` container (`infra/docker-compose.yml`, `full`
+      profile, pinned `clamav/clamav:1.5.4`), `CLAMAV_HOST`/`CLAMAV_PORT` env vars, and a
+      hand-rolled INSTREAM TCP client (`src/lib/files/scan.ts`, no new npm dependency — see
+      [ADR-0012](adr/0012-clamav-scan-service.md) for why). Verified end-to-end against the real
+      container this session (not mocked): pulled the image, waited out the first-boot
+      signature-DB download, ran the client from a throwaway container on the same Docker
+      network — EICAR test string correctly flagged `infected: true` (`Eicar-Test-Signature`), a
+      clean buffer passes. `src/lib/files/validate.ts` generalized to
+      `validateFileAgainstConfig()` (any `{maxSizeBytes, allowedMimeTypes}` config, not just
+      `FileCategory`) and extended with TIFF (both byte orders) and a generic zip-container
+      signature so OOXML/ODT don't silently skip the re-sniff. New migration
+      `20260912125436_document_upload_validation_functions.sql` adds
+      `claim_upload_validation()`/`complete_upload_validation()`/`fail_upload_validation()`
+      (same conditional-UPDATE pattern as `claim_provisioning()` et al.) — these explicitly
+      reject non-`service_role` callers, closing the same public-`SECURITY DEFINER`-callable gap
+      the advisors flag on the provisioning trio rather than replicating it. All 12+1 migrations
+      pushed and typed (`src/types/database.ts` updated by hand to match the checked-in file's
+      formatting, not the raw `supabase gen types` output — see commit for why).
 - [ ] `worker/jobs/submit-upload-to-paperless.ts` (task-id persisted, resumable)
 - [ ] `worker/jobs/sync-paperless-document.ts` (shared by upload, webhook, reconciliation)
 - [ ] `worker/jobs/expire-abandoned-uploads.ts`

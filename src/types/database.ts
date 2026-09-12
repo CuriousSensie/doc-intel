@@ -729,6 +729,18 @@ export type Database = {
         Args: { p_organization_id: string };
         Returns: boolean;
       };
+      claim_upload_validation: {
+        Args: { p_upload_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      complete_upload_validation: {
+        Args: { p_upload_id: string; p_organization_id: string };
+        Returns: undefined;
+      };
+      fail_upload_validation: {
+        Args: { p_upload_id: string; p_organization_id: string; p_reason: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       organization_role: "owner" | "admin" | "member" | "read-only";

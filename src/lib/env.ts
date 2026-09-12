@@ -37,7 +37,10 @@ export const envSchema = z.object({
   PAPERLESS_ADMIN_USER: z.string().optional(),
   PAPERLESS_ADMIN_PASSWORD: z.string().optional(),
   // base64, 32 bytes decoded. Generate with: openssl rand -base64 32
-  PAPERLESS_TOKEN_ENCRYPTION_KEY: z.string().optional()
+  PAPERLESS_TOKEN_ENCRYPTION_KEY: z.string().optional(),
+  // validate-upload.ts's AV scan (specs/10-nonfunctional.md §Security). clamd's INSTREAM port.
+  CLAMAV_HOST: z.string().default("localhost"),
+  CLAMAV_PORT: z.coerce.number().int().positive().default(3310)
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

@@ -84,6 +84,12 @@ export class OrgNotProvisionedError extends AppError {
   }
 }
 
+export class ScanUnavailableError extends AppError {
+  constructor(message = "Antivirus scan service unavailable") {
+    super(message, { code: "scan_unavailable", status: 502 });
+  }
+}
+
 export function toSafeError(error: unknown): SafeErrorShape {
   if (error instanceof AppError) {
     return {
