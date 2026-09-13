@@ -6,7 +6,8 @@
 drop table if exists public.files;
 drop table if exists public.projects;
 
--- Avatar upload (kept — src/modules/profile/avatar.service.ts) still uses the "avatars" bucket;
--- only the files-module-only "files" bucket goes.
-delete from storage.objects where bucket_id = 'files';
-delete from storage.buckets where id = 'files';
+-- Avatar upload (kept — src/modules/profile/avatar.service.ts) still uses the "avatars" bucket.
+-- The files-module-only "files" bucket is deliberately NOT dropped here — Supabase Cloud
+-- rejects any direct write to storage.objects/storage.buckets from a migration (SQLSTATE 42501,
+-- "use the Storage API instead"), for both the row and its contents. It's left as an orphaned,
+-- unreferenced bucket; delete it via the Supabase dashboard or Storage API if it needs to go.
