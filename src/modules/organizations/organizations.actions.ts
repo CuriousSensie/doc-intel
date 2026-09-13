@@ -13,7 +13,10 @@ import { requireUser } from "@/modules/auth/session";
 import type { AuthContext } from "@/modules/auth/session";
 import { sendEmail } from "@/modules/email/email.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
-import { clearActiveOrganization, setActiveOrganization } from "@/modules/organizations/active-organization";
+import {
+  clearActiveOrganization,
+  setActiveOrganization
+} from "@/modules/organizations/active-organization";
 import {
   createOrganizationSchema,
   inviteMemberSchema,
@@ -44,7 +47,11 @@ function redirectWithError(path: string, error: unknown): never {
   redirect(withStatus(path, "error", message));
 }
 
-async function requireOrgRole(organizationId: string, userId: string, roles: Array<"owner" | "admin">) {
+async function requireOrgRole(
+  organizationId: string,
+  userId: string,
+  roles: Array<"owner" | "admin">
+) {
   const membership = await getMembership(organizationId, userId);
 
   if (!membership || !roles.includes(membership.role as "owner" | "admin")) {
@@ -112,7 +119,10 @@ export async function createOrganizationAction(formData: FormData) {
   }
 
   try {
-    const organizationId = await createOrganization(parsed.data.name, parsed.data.slug || undefined);
+    const organizationId = await createOrganization(
+      parsed.data.name,
+      parsed.data.slug || undefined
+    );
     await setActiveOrganization(organizationId);
     await logEvent({
       actorId: context.user.id,
@@ -235,15 +245,8 @@ export async function updateMemberRoleAction(formData: FormData) {
   await requireOrgRole(organizationId, context.user.id, ["owner", "admin"]);
 
   try {
+    // ADR-0008: update_member_role() writes the audit row atomically — no separate logEvent().
     await updateMemberRole(parsed.data.memberId, parsed.data.role);
-    await logEvent({
-      actorId: context.user.id,
-      action: "organization.member.role_changed",
-      entityType: "organization_member",
-      entityId: parsed.data.memberId,
-      organizationId,
-      metadata: { role: parsed.data.role }
-    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -263,14 +266,8 @@ export async function removeMemberAction(formData: FormData) {
   await requireOrgRole(organizationId, context.user.id, ["owner", "admin"]);
 
   try {
+    // ADR-0008: remove_member() writes the audit row atomically — no separate logEvent().
     await removeMember(parsed.data.memberId);
-    await logEvent({
-      actorId: context.user.id,
-      action: "organization.member.removed",
-      entityType: "organization_member",
-      entityId: parsed.data.memberId,
-      organizationId
-    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -279,7 +276,7 @@ export async function removeMemberAction(formData: FormData) {
 }
 
 export async function leaveOrganizationAction(formData: FormData) {
-  const context = await requireUser("/organizations");
+  await requireUser("/organizations");
   const organizationId = formData.get("organizationId");
 
   if (typeof organizationId !== "string") {
@@ -287,14 +284,8 @@ export async function leaveOrganizationAction(formData: FormData) {
   }
 
   try {
-    await leaveOrganization(organizationId, context.user.id);
-    await logEvent({
-      actorId: context.user.id,
-      action: "organization.member.left",
-      entityType: "organization",
-      entityId: organizationId,
-      organizationId
-    });
+    // ADR-0008: leave_organization() writes the audit row atomically — no separate logEvent().
+    await leaveOrganization(organizationId);
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -315,15 +306,9 @@ export async function transferOwnershipAction(formData: FormData) {
   await requireOrgRole(organizationId, context.user.id, ["owner"]);
 
   try {
+    // ADR-0008: transfer_organization_ownership() writes the audit row atomically — no
+    // separate logEvent().
     await transferOwnership(organizationId, parsed.data.newOwnerId);
-    await logEvent({
-      actorId: context.user.id,
-      action: "organization.ownership_transferred",
-      entityType: "organization",
-      entityId: organizationId,
-      organizationId,
-      metadata: { newOwnerId: parsed.data.newOwnerId }
-    });
   } catch (error) {
     redirectWithError("/settings/team", error);
   }
@@ -379,9 +364,13 @@ export async function switchOrganizationAction(formData: FormData) {
 
 async function notifyOrganizationAdminsOfNewMember(organizationId: string, newMember: AuthContext) {
   try {
-    const [organization, members] = await Promise.all([getOrganization(organizationId), listMembers(organizationId)]);
+    const [organization, members] = await Promise.all([
+      getOrganization(organizationId),
+      listMembers(organizationId)
+    ]);
     const recipients = members.filter(
-      (member) => (member.role === "owner" || member.role === "admin") && member.user_id !== newMember.user.id
+      (member) =>
+        (member.role === "owner" || member.role === "admin") && member.user_id !== newMember.user.id
     );
     const joinedName = newMember.profile?.name ?? newMember.user.email ?? "Someone";
 

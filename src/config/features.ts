@@ -3,6 +3,7 @@ export const featureConfig = {
   organizations: true,
   credits: true,
   files: true,
+  documents: true,
   admin: true,
   notifications: true,
   mfa: true,

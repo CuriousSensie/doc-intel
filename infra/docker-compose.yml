@@ -1,0 +1,238 @@
+# Pomočnik infra — single EU-region host, Docker Compose (D4).
+# Business Postgres/Auth/Storage is Supabase Cloud (ADR-0003), not a service here.
+#
+# Pinned: paperless-ngx 3.1.3, postgres 16, redis 7 (x2, independent), gotenberg 8,
+# tika 2.9.2.1-full, clamav 1.5.4.
+#
+# docker compose --profile paperless up -d   # Paperless + deps only (Phase 0 spike)
+# docker compose up -d                        # everything (Phase 1+)
+
+name: pomocnik
+
+networks:
+  pomocnik:
+    driver: bridge
+
+volumes:
+  paperless-data:
+  paperless-media:
+  paperless-export:
+  paperless-consume:
+  postgres-paperless-data:
+  redis-paperless-data:
+  redis-app-data:
+  clamav-data:
+
+services:
+  # --- Paperless-ngx (D1) — unmodified image, REST API only (D3) ---------------------------
+
+  postgres-paperless:
+    image: postgres:16-alpine
+    profiles: ["paperless", "full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    environment:
+      POSTGRES_DB: ${PAPERLESS_DBNAME:-paperless}
+      POSTGRES_USER: ${PAPERLESS_DBUSER:-paperless}
+      POSTGRES_PASSWORD: ${PAPERLESS_DBPASS:?set in .env}
+    volumes:
+      - postgres-paperless-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAPERLESS_DBUSER:-paperless}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-paperless:
+    image: redis:7-alpine
+    profiles: ["paperless", "full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    volumes:
+      - redis-paperless-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    profiles: ["paperless", "full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+
+  tika:
+    image: apache/tika:2.9.2.1-full
+    profiles: ["paperless", "full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+
+  # KNOWN GAP: paperless-worker below crash-loops on this pinned image (celery beat +
+  # PAPERLESS_SECRET_KEY, root cause undiagnosed — see docs/spike-findings.md §0). Running
+  # all-in-one here until fixed; D4's "separate container from day one" isn't met yet.
+  paperless-webserver:
+    image: paperlessngx/paperless-ngx:3.1.3
+    profiles: ["paperless", "full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    # host.docker.internal needs this on Linux (unlike Docker Desktop) — docs/spike-findings.md §2.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres-paperless: { condition: service_healthy }
+      redis-paperless: { condition: service_healthy }
+      gotenberg: { condition: service_started }
+      tika: { condition: service_started }
+    env_file: .env
+    environment:
+      PAPERLESS_REDIS: redis://redis-paperless:6379
+      PAPERLESS_DBHOST: postgres-paperless
+      PAPERLESS_DBNAME: ${PAPERLESS_DBNAME:-paperless}
+      PAPERLESS_DBUSER: ${PAPERLESS_DBUSER:-paperless}
+      PAPERLESS_DBPASS: ${PAPERLESS_DBPASS:?set in .env}
+      # Generate: python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set in .env}
+      PAPERLESS_TIKA_ENABLED: "1"
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_OCR_LANGUAGE: slv+eng
+      PAPERLESS_OCR_LANGUAGES: slv eng
+      PAPERLESS_TIME_ZONE: Europe/Ljubljana
+      PAPERLESS_URL: ${PAPERLESS_URL:?set in .env, e.g. https://paperless.internal}
+      PAPERLESS_POST_CONSUME_SCRIPT: /scripts/notify-pomocnik.sh
+      # All-in-one mode (see KNOWN GAP above) — this container does its own OCR/Celery work.
+      PAPERLESS_TASK_WORKERS: "2"
+      PAPERLESS_THREADS_PER_WORKER: "1"
+    volumes:
+      - paperless-data:/usr/src/paperless/data
+      - paperless-media:/usr/src/paperless/media
+      - paperless-export:/usr/src/paperless/export
+      - paperless-consume:/usr/src/paperless/consume
+      - ./scripts/notify-pomocnik.sh:/scripts/notify-pomocnik.sh:ro
+    ports:
+      # Host-exposed for local dev only; nginx is the sole public entrypoint once `web` exists.
+      - "127.0.0.1:8010:8000"
+
+  # Not started by default (no restart policy) — crash-loops until the KNOWN GAP above is fixed.
+  paperless-worker:
+    image: paperlessngx/paperless-ngx:3.1.3
+    profiles: ["paperless-worker-disabled-pending-fix"]
+    restart: "no"
+    networks: [pomocnik]
+    depends_on:
+      postgres-paperless: { condition: service_healthy }
+      redis-paperless: { condition: service_healthy }
+    env_file: .env
+    environment:
+      PAPERLESS_REDIS: redis://redis-paperless:6379
+      PAPERLESS_DBHOST: postgres-paperless
+      PAPERLESS_DBNAME: ${PAPERLESS_DBNAME:-paperless}
+      PAPERLESS_DBUSER: ${PAPERLESS_DBUSER:-paperless}
+      PAPERLESS_DBPASS: ${PAPERLESS_DBPASS:?set in .env}
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY:?set in .env}
+      PAPERLESS_TIKA_ENABLED: "1"
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_OCR_LANGUAGE: slv+eng
+      PAPERLESS_OCR_LANGUAGES: slv eng
+      PAPERLESS_TIME_ZONE: Europe/Ljubljana
+    volumes:
+      - paperless-data:/usr/src/paperless/data
+      - paperless-media:/usr/src/paperless/media
+      - paperless-export:/usr/src/paperless/export
+      - paperless-consume:/usr/src/paperless/consume
+    command: ["celery", "--app", "paperless", "worker", "--loglevel", "INFO"]
+    deploy:
+      # Placeholder — tune under real load in Phase 5.
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+
+  # --- Our stack — app, worker, queue. Supabase is Cloud (ADR-0003), not a service here. ----
+
+  redis-app:
+    image: redis:7-alpine
+    profiles: ["full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    volumes:
+      - redis-app-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      # Host-exposed for local dev only (running `web`/`worker` natively against a dockerized
+      # queue, e.g. e2e runs) — same convention as paperless-webserver's own dev-only port
+      # below. 6380, not 6379, since a host-installed Redis commonly already holds 6379.
+      - "127.0.0.1:6380:6379"
+
+  # validate-upload.ts's AV scan (specs/10-nonfunctional.md §Security). Official image ships its
+  # own freshclam; signature DB download on first boot can take several minutes, hence the long
+  # start_period.
+  clamav:
+    image: clamav/clamav:1.5.4
+    profiles: ["full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    profiles: ["full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis-app:6379
+    depends_on:
+      redis-app: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.worker
+    profiles: ["full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis-app:6379
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+    depends_on:
+      redis-app: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: ["full"]
+    restart: unless-stopped
+    networks: [pomocnik]
+    depends_on: [web]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # Let's Encrypt output from the host — not managed by this compose file, see docs/SETUP.md.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"

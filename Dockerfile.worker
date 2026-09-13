@@ -1,0 +1,14 @@
+# Runs worker/index.ts via tsx, no build step — plain Node process (docs/adr/0002).
+
+FROM node:20-alpine
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY worker ./worker
+COPY src ./src
+
+ENV NODE_ENV=production
+CMD ["npx", "tsx", "worker/index.ts"]

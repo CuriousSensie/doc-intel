@@ -195,9 +195,10 @@ Row Level Security is the primary authorization boundary, not an afterthought la
 application checks. Role-based checks in action files (`requireOrgRole` in
 `organizations.actions.ts`, `can()` in `authorization.ts`) exist for fast, clear error messages —
 if a future caller bypassed them entirely, RLS still holds. Tables with no legitimate user-facing
-write path (`stripe_customers`, `subscriptions`, `notifications`, `audit_logs`, ...) simply have
-no insert/update RLS policy at all, so the *only* way to write to them is the service-role admin
-client from trusted server code. See [SECURITY.md](SECURITY.md) for the full rule set.
+write path (`stripe_customers`, `subscriptions`, `notifications`, `audit_logs`,
+`tenant_paperless_config`, `paperless_object_map`, ...) simply have no insert/update RLS policy
+at all, so the *only* way to write to them is the service-role admin client from trusted server
+code. See [SECURITY.md](SECURITY.md) for the full rule set.
 
 ### Provider abstractions
 
@@ -213,8 +214,27 @@ any of its callers know which provider is active.
 `logEvent()` (`src/lib/events/`) fans one event out to a list of `EventSink`s — today `consoleSink`
 and `auditLogSink` — rather than every module hand-rolling its own "write to console and also to
 the database" logic. Adding a new destination (Slack, analytics) is writing one more `EventSink`
-and adding it to the list; no existing call site changes. See
+and adding it to the list; no existing call site changes. **One deliberate exception**:
+organization permission-change mutations (`update_member_role`, `remove_member`,
+`leave_organization`, `transfer_organization_ownership` — Pomočnik, ADR-0008) bypass this
+dispatcher entirely and write their audit row transactionally inside the same Postgres function
+as the mutation, precisely because `logEvent()`'s sinks are deliberately best-effort and never
+throw back into the caller — the right behavior for supplementary logging, the wrong one for a
+mutation that needs a guaranteed audit record. See
 [MODULES.md#audit-logs](MODULES.md#audit-logs).
+
+### Job retries as a queue-wide default, not per-job
+
+Every BullMQ queue (`src/lib/queue/index.ts`) gets the same `defaultJobOptions` — 3 attempts,
+exponential backoff — rather than each of the ~13 job handlers configuring (or forgetting to
+configure) its own. This was a real, live-found gap, not a preemptive decision: no queue had any
+retry policy at all until this session, so a single transient failure (e.g. one dropped
+connection to Paperless) permanently failed a job despite that job's own resumability design
+(checkpointing via a persisted task id, conditional claims) already assuming a retry would
+happen. Enabling retries then surfaced a second bug — a same-job retry landing after a claim
+could never reclaim its own row — fixed by widening the claim conditions and by only writing a
+terminal `failed` status on a job's *last* attempt (`worker/context.ts`'s `isLastAttempt()`), not
+every attempt.
 
 ### Cursor-based pagination
 

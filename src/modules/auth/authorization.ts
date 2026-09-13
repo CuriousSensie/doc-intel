@@ -10,25 +10,36 @@ export function requireFeature(feature: FeatureKey) {
   }
 }
 
-export function hasFeature(plan: PlanKey, feature: keyof (typeof billingConfig.plans)[PlanKey]["features"]) {
+export function hasFeature(
+  plan: PlanKey,
+  feature: keyof (typeof billingConfig.plans)[PlanKey]["features"]
+) {
   return billingConfig.plans[plan].features[feature] > 0;
 }
 
-export function getLimit(plan: PlanKey, limit: keyof (typeof billingConfig.plans)[PlanKey]["features"]) {
+export function getLimit(
+  plan: PlanKey,
+  limit: keyof (typeof billingConfig.plans)[PlanKey]["features"]
+) {
   return billingConfig.plans[plan].features[limit];
 }
 
-export async function requireSubscription(owner: BillingOwner, allowedPlans: PlanKey[]): Promise<PlanKey> {
+export async function requireSubscription(
+  owner: BillingOwner,
+  allowedPlans: PlanKey[]
+): Promise<PlanKey> {
   const plan = await getOwnerPlan(owner);
 
   if (!allowedPlans.includes(plan)) {
-    throw new AuthorizationError(`This action requires one of the following plans: ${allowedPlans.join(", ")}`);
+    throw new AuthorizationError(
+      `This action requires one of the following plans: ${allowedPlans.join(", ")}`
+    );
   }
 
   return plan;
 }
 
-export function can(role: "owner" | "admin" | "member", permission: string) {
+export function can(role: "owner" | "admin" | "member" | "read-only", permission: string) {
   const permissions: Record<typeof role, string[]> = {
     owner: ["organization.*"],
     admin: [
@@ -37,7 +48,9 @@ export function can(role: "owner" | "admin" | "member", permission: string) {
       "organization.settings.manage",
       "organization.files.manage"
     ],
-    member: ["organization.read"]
+    member: ["organization.read"],
+    // Read like member, never write — has_organization_write_access() is the real boundary.
+    "read-only": ["organization.read"]
   };
 
   return permissions[role].some((allowed) => {

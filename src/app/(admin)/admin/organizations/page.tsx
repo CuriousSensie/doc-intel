@@ -8,6 +8,7 @@ import { isFeatureEnabled } from "@/config/features";
 import {
   adjustCreditsAction,
   deleteOrganizationAdminAction,
+  reprovisionOrganizationAction,
   suspendOrganizationAction,
   toggleSubscriptionPlatformStatusAction,
   unsuspendOrganizationAction
@@ -64,10 +65,30 @@ export default async function AdminOrganizationsPage({
                         Suspended
                       </span>
                     ) : null}
+                    {organization.provisioning_status !== "ready" ? (
+                      <span
+                        className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          organization.provisioning_status === "provisioning_failed"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {organization.provisioning_status}
+                      </span>
+                    ) : null}
                   </p>
                   <p className="text-sm text-muted">{organization.slug}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {organization.provisioning_status === "pending" ||
+                  organization.provisioning_status === "provisioning_failed" ? (
+                    <form action={reprovisionOrganizationAction}>
+                      <input name="organizationId" type="hidden" value={organization.id} />
+                      <Button size="sm" type="submit" variant="outline">
+                        Reprovision
+                      </Button>
+                    </form>
+                  ) : null}
                   <form
                     action={
                       organization.suspended_at

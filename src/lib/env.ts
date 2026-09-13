@@ -29,12 +29,71 @@ export const envSchema = z.object({
     .transform((value) => value === "true"),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  RATE_LIMIT_MODE: z.enum(["memory", "external"]).default("memory")
+  RATE_LIMIT_MODE: z.enum(["memory", "external"]).default("memory"),
+  // Separate Redis instance from Paperless's, so an import backlog never starves our own jobs.
+  REDIS_URL: z.string().url().default("redis://localhost:6379"),
+  // Superuser creds, provisioning only (paperlessAdminClient(), ESLint-restricted).
+  PAPERLESS_ADMIN_URL: z.string().url().optional(),
+  PAPERLESS_ADMIN_USER: z.string().optional(),
+  PAPERLESS_ADMIN_PASSWORD: z.string().optional(),
+  // base64, 32 bytes decoded. Generate with: openssl rand -base64 32
+  PAPERLESS_TOKEN_ENCRYPTION_KEY: z.string().optional(),
+  // validate-upload.ts's AV scan (specs/10-nonfunctional.md §Security). clamd's INSTREAM port.
+  CLAMAV_HOST: z.string().default("localhost"),
+  CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
+  // Shared with infra/scripts/notify-pomocnik.sh (Paperless container's env) — signs the
+  // post-consume webhook's body+timestamp. /api/internal/paperless/document-consumed.
+  POMOCNIK_WEBHOOK_SECRET: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
 
-export function parseEnv(source: Record<string, string | undefined> = process.env): AppEnv {
+// Next.js only inlines `NEXT_PUBLIC_*` vars into the client bundle when they appear as a
+// literal `process.env.NEXT_PUBLIC_X` member expression — passing the whole `process.env`
+// object by reference (the previous default parameter here) is invisible to that static
+// replacement, so every NEXT_PUBLIC_ var silently came back `undefined` in any client
+// component. Found live: `src/lib/supabase/client.ts`'s `createClient()` (the browser Supabase
+// client) had never actually been exercised in a browser until
+// `document-upload-form.tsx` — first real caller, first time this broke visibly. Every key is
+// listed explicitly so each one is its own static `process.env.KEY` expression.
+function readProcessEnv(): Record<string, string | undefined> {
+  return {
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
+    SUPPORT_EMAIL: process.env.SUPPORT_EMAIL,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    STRIPE_PRICE_PRO_MONTHLY: process.env.STRIPE_PRICE_PRO_MONTHLY,
+    STRIPE_PRICE_PRO_YEARLY: process.env.STRIPE_PRICE_PRO_YEARLY,
+    STRIPE_PRICE_TEAM_MONTHLY: process.env.STRIPE_PRICE_TEAM_MONTHLY,
+    STRIPE_PRICE_TEAM_YEARLY: process.env.STRIPE_PRICE_TEAM_YEARLY,
+    STRIPE_PRICE_CREDITS_STARTER: process.env.STRIPE_PRICE_CREDITS_STARTER,
+    STRIPE_PRICE_CREDITS_GROWTH: process.env.STRIPE_PRICE_CREDITS_GROWTH,
+    STRIPE_PRICE_CREDITS_SCALE: process.env.STRIPE_PRICE_CREDITS_SCALE,
+    EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+    EMAIL_DEV_RECIPIENT: process.env.EMAIL_DEV_RECIPIENT,
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_SECURE: process.env.SMTP_SECURE,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASSWORD: process.env.SMTP_PASSWORD,
+    RATE_LIMIT_MODE: process.env.RATE_LIMIT_MODE,
+    REDIS_URL: process.env.REDIS_URL,
+    PAPERLESS_ADMIN_URL: process.env.PAPERLESS_ADMIN_URL,
+    PAPERLESS_ADMIN_USER: process.env.PAPERLESS_ADMIN_USER,
+    PAPERLESS_ADMIN_PASSWORD: process.env.PAPERLESS_ADMIN_PASSWORD,
+    PAPERLESS_TOKEN_ENCRYPTION_KEY: process.env.PAPERLESS_TOKEN_ENCRYPTION_KEY,
+    CLAMAV_HOST: process.env.CLAMAV_HOST,
+    CLAMAV_PORT: process.env.CLAMAV_PORT,
+    POMOCNIK_WEBHOOK_SECRET: process.env.POMOCNIK_WEBHOOK_SECRET
+  };
+}
+
+export function parseEnv(source: Record<string, string | undefined> = readProcessEnv()): AppEnv {
   const parsed = envSchema.safeParse(source);
 
   if (!parsed.success) {

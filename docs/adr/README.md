@@ -36,3 +36,5 @@ ADR that says so and links back; the old one stays as a record of what was true 
 | [0008](0008-transactional-audit-writes.md) | Transactional audit writes for business-critical mutations | Accepted |
 | [0009](0009-route-handlers-vs-server-actions.md) | Route Handlers vs. Server Actions allocation for the REST contract | Accepted |
 | [0010](0010-per-backfill-undo-scope.md) | Per-backfill-execution undo scope instead of per-rule undo | Accepted |
+| [0011](0011-decline-mistral-ocr-pipeline.md) | Decline a Mistral OCR/LLM document pipeline for now | Accepted |
+| [0012](0012-clamav-scan-service.md) | `clamd` over TCP for the upload AV scan | Accepted |

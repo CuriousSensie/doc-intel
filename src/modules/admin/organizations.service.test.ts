@@ -3,8 +3,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => {
   vi.doUnmock("@/lib/events");
   vi.doUnmock("@/lib/supabase/admin");
+  vi.doUnmock("@/lib/queue");
   vi.resetModules();
 });
+
+function mockOrgLookup(provisioning_status: string) {
+  const maybeSingle = vi.fn().mockResolvedValue({ data: { provisioning_status }, error: null });
+  const eq = vi.fn(() => ({ maybeSingle }));
+  const select = vi.fn(() => ({ eq }));
+  vi.doMock("@/lib/supabase/admin", () => ({
+    createAdminClient: () => ({ from: () => ({ select }) })
+  }));
+}
 
 describe("suspendOrganization / unsuspendOrganization", () => {
   it("suspendOrganization sets suspended_at and logs the event", async () => {
@@ -20,7 +30,9 @@ describe("suspendOrganization / unsuspendOrganization", () => {
     const { suspendOrganization } = await import("@/modules/admin/organizations.service");
     await suspendOrganization("admin-1", "org-1");
 
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ suspended_at: expect.any(String) }));
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ suspended_at: expect.any(String) })
+    );
     expect(eq).toHaveBeenCalledWith("id", "org-1");
     expect(logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ action: "admin.organization.suspended", entityId: "org-1" })
@@ -65,5 +77,49 @@ describe("deleteOrganizationAdmin", () => {
 
     expect(calls).toEqual(["log", "delete"]);
     expect(eq).toHaveBeenCalledWith("id", "org-1");
+  });
+});
+
+describe("reprovisionOrganizationAdmin", () => {
+  it("rejects an already-ready organization", async () => {
+    mockOrgLookup("ready");
+    vi.doMock("@/lib/queue", () => ({ enqueue: vi.fn() }));
+
+    const { reprovisionOrganizationAdmin } = await import("@/modules/admin/organizations.service");
+    await expect(reprovisionOrganizationAdmin("admin-1", "org-1")).rejects.toThrow(
+      /already provisioned/
+    );
+  });
+
+  it("rejects an organization mid-provisioning", async () => {
+    mockOrgLookup("provisioning");
+    vi.doMock("@/lib/queue", () => ({ enqueue: vi.fn() }));
+
+    const { reprovisionOrganizationAdmin } = await import("@/modules/admin/organizations.service");
+    await expect(reprovisionOrganizationAdmin("admin-1", "org-1")).rejects.toThrow(
+      /already in progress/
+    );
+  });
+
+  it("enqueues provisioning and logs the event for a failed organization", async () => {
+    mockOrgLookup("provisioning_failed");
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const logEvent = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/queue", () => ({
+      enqueue,
+      QUEUE_NAMES: { provisionTenant: "provision-tenant" }
+    }));
+    vi.doMock("@/lib/events", () => ({ logEvent }));
+
+    const { reprovisionOrganizationAdmin } = await import("@/modules/admin/organizations.service");
+    await reprovisionOrganizationAdmin("admin-1", "org-1");
+
+    expect(enqueue).toHaveBeenCalledWith("provision-tenant", { orgId: "org-1" });
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "admin.organization.reprovision_requested",
+        entityId: "org-1"
+      })
+    );
   });
 });

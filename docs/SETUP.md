@@ -105,11 +105,78 @@ SMTP provider works the same way — nothing in the app is Hostinger-specific. S
 `docs/SECURITY.md` for how the `EmailProvider` abstraction and dev-recipient override work, and
 `docs/MODULES.md` for how to add another provider (e.g. a transactional API like Resend) later.
 
+## Pomočnik infrastructure (Paperless, worker, Docker Compose)
+
+Pomočnik adds a Paperless-ngx document engine and a BullMQ worker on top of this boilerplate.
+Per D4 (`specs/01-architecture.md`) these — and the Next.js app itself — deploy via
+`infra/docker-compose.yml` on a single VPS, not Vercel; see the note under
+[Deployment](#deployment) below for why the Vercel walkthrough still exists in this file.
+Business Postgres/Auth/Storage stays on Supabase Cloud
+([ADR-0003](adr/0003-supabase-cloud-over-self-hosted.md)) — it is not part of this compose
+stack.
+
+### Local/staging setup
+
+```bash
+cd infra
+cp .env.example .env
+# fill in PAPERLESS_DBPASS, PAPERLESS_ADMIN_USER/PASSWORD/MAIL, PAPERLESS_TOKEN_ENCRYPTION_KEY
+# (openssl rand -base64 32), POMOCNIK_WEBHOOK_SECRET (openssl rand -hex 32), CLAMAV_HOST/PORT
+# (defaults are fine: localhost/3310 outside Docker, clamav/3310 inside the compose network),
+# and the app's Supabase/Stripe/SMTP vars from the repo root .env.example.
+
+# Just Paperless + its dependencies — enough for the Phase 0 spike scripts:
+docker compose --profile paperless up -d
+
+# Everything, including our app, worker, and ClamAV:
+docker compose --profile full up -d
+```
+
+Paperless's web UI/API is reachable at `http://localhost:8010` in this local setup (see the
+`ports` mapping on `paperless-webserver` in `infra/docker-compose.yml` — production binds this
+only to nginx, not the host). Our app is at `http://localhost:3000` once the `full` profile is
+up. `redis-app` (the queue `worker` and `web` share, separate from Paperless's own Redis) is
+also host-exposed for local dev, at `localhost:6380` — not `6379`, which a host-installed Redis
+commonly already occupies — useful when running `web`/`worker` natively against the
+dockerized queue instead of inside Compose (e.g. the e2e suite does this).
+
+`clamav` (the AV scanner `validate-upload.ts` calls before any file reaches Paperless — see
+[ADR-0012](adr/0012-clamav-scan-service.md)) starts with the `full` profile alongside
+everything else. Its signature-database download on first boot can take several minutes, hence
+a generous `start_period` on its healthcheck — `worker` won't start until it reports healthy.
+
+### What's in the compose file
+
+See the header comment in `infra/docker-compose.yml` for the pinned image versions and why the
+Celery worker is split into its own container (`paperless-worker`) from day one — that split
+is a documented community pattern, not an officially packaged Paperless deployment mode, and is
+explicitly flagged there for verification during the Phase 0 import-throughput spike.
+
+### Phase 0 spike scripts
+
+Before building product code against Paperless, `scripts/spike/` answers the four de-risking
+questions in `specs/11-roadmap.md` — isolation, event-bridge reliability, Slovenian OCR
+fidelity, import throughput — against this real running instance. See
+`scripts/spike/README.md` for how to run each one, and `docs/spike-findings.md` for recorded
+results.
+
+### Event bridge
+
+`infra/scripts/notify-pomocnik.sh` is mounted into `paperless-webserver` and set as
+`PAPERLESS_POST_CONSUME_SCRIPT`. It needs `POMOCNIK_WEBHOOK_SECRET` (shared with
+`src/app/api/internal/paperless/document-consumed/route.ts`, Phase 1) and
+`POMOCNIK_INTERNAL_URL` pointing at the `web` service's Docker-network address — never a
+public URL, since that route is nginx-blocked from outside (`infra/nginx/conf.d/default.conf`).
+
 ## Deployment
 
 This is a standard Next.js app — any host that runs `next build`/`next start` (or the Next.js
-runtime directly) works. The steps below are for **Vercel + Supabase production**, the path with
-the least friction, but nothing here is Vercel-specific beyond step 1.
+runtime directly) works, and the steps below (Vercel) are kept as the generic boilerplate's
+default walkthrough for other products cloned from it. **Pomočnik itself does not use this path**
+— per D4, the app, worker, and Paperless stack deploy together via `infra/docker-compose.yml`
+on a single VPS (see [Pomočnik infrastructure](#pomočnik-infrastructure-paperless-worker-docker-compose)
+above); only Supabase (Postgres/Auth/Storage) is the managed Cloud service this Vercel-era section
+already assumes.
 
 1. **Push the repo** to GitHub/GitLab/Bitbucket and import it into Vercel (or run `vercel` from
    the CLI). Vercel auto-detects Next.js — no build config needed beyond the env vars below.

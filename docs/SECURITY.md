@@ -57,6 +57,11 @@ the existing `handle_new_user` trigger):
 - `transfer_organization_ownership` — swaps two members' roles (old owner → admin, new owner →
   owner) atomically; doing this as two separate client-side updates risks a partial transfer if the
   second update fails.
+- `update_member_role` / `remove_member` / `leave_organization` — these three *are* expressible as
+  plain RLS-scoped mutations (the actor already has update/delete rights via policy), but became
+  SECURITY DEFINER functions anyway for a different reason: see [Audit Logs](#audit-logs) below
+  for why a permission change specifically needs its audit row written in the same transaction as
+  the mutation, not via a separate best-effort `logEvent()` call.
 
 Invitation tokens are generated server-side and only their SHA-256 hash (`token_hash`) is stored;
 the raw token exists only in the invite link, never in the database. `digest()` (used to hash the
@@ -171,6 +176,52 @@ Deleting a file is gated by an application-level check (`canManageFile` in
 object removal and row delete together, so a file can never end up deleted from Storage but not
 the database (or vice versa) due to a bypassable RLS check.
 
+## Documents (Paperless integration) — Pomočnik
+
+Three separate defenses apply before a tenant's uploaded file ever reaches Paperless, each
+independent of the others:
+
+- **MIME re-sniff**, same "never trust filename extensions or a client-declared type" rule as
+  [Files](#files) above, generalized in `src/lib/files/validate.ts`'s
+  `validateFileAgainstConfig()` to cover TIFF and zip-based OOXML/ODT formats in addition to the
+  original PNG/JPEG/GIF/WEBP/PDF signature set (`documentsConfig.allowedMimeTypes`,
+  `src/config/documents.ts`).
+- **A real antivirus scan** (`worker/jobs/validate-upload.ts`, `src/lib/files/scan.ts`) — a
+  hand-rolled ClamAV `INSTREAM` client, not a dependency (see
+  [ADR-0012](adr/0012-clamav-scan-service.md) for why hand-rolled). An unreachable/erroring
+  scanner is treated as a retryable infra failure (`ScanUnavailableError`, 502), never as "scan
+  skipped, let it through" — the file is never handed to Paperless without a scan actually
+  completing.
+- **Direct-to-storage isolation**: like `document-uploads`' own bucket design (see
+  [DATABASE.md](DATABASE.md#storage-buckets)), there is no `storage.objects` RLS grant for
+  `authenticated` at all — knowing another tenant's object key is not sufficient to read it,
+  verified live in `e2e/isolation.spec.ts`'s test #18 (a real `authenticated`-role client denied
+  downloading by a guessed path, not the admin client).
+
+**Tenant isolation on the Paperless side** is enforced per-object, not per-endpoint, because
+Paperless is a single shared instance across tenants (D2). Every object `PaperlessClient`
+creates or grants access to must carry the requesting tenant's own owner/group, checked by
+`assertOwnership()` (`src/lib/paperless/client.ts`) before the request is even sent — passing a
+mismatched owner/group throws immediately rather than silently creating a cross-tenant-visible
+object. This is what `createOwnedObject()` (JSON-bodied creates) and
+`setOwnedObjectPermissions()` (the permissions PATCH `submit-upload-to-paperless.ts` runs after
+`post_document/`, since that endpoint doesn't grant tenant-group access itself — a real,
+live-confirmed finding, not a hypothetical) both go through; there is no code path that creates
+or grants a Paperless object without this check. `e2e/isolation.spec.ts` (ported from the Phase
+0 spike, `scripts/spike/isolation.ts`) verifies this and 9 other cross-tenant checks against a
+real two-tenant Paperless+Supabase setup, including one confirmed, still-open Paperless-side leak
+(custom field definitions, test #6 — tracked with `test.fail()` so it flags loudly if upstream
+ever fixes it, rather than either failing CI forever or silently passing).
+
+**The Paperless post-consume webhook**
+(`src/app/api/internal/paperless/document-consumed/route.ts`) is HMAC-SHA256-verified over
+`body+timestamp` (`src/lib/paperless/webhook-signature.ts`), matching `infra/scripts/
+notify-pomocnik.sh` exactly — a timing-safe comparison, plus a 5-minute maximum clock skew that
+doubles as replay protection (a captured, correctly-signed request replayed after that window is
+rejected). Deduplication reuses the existing `webhook_events` table (see
+[Billing](#billing) above for the same mechanism's other user), keyed by the signature itself
+as the event id, since the webhook's payload carries no event id of its own.
+
 ## Admin
 
 Application-admin status (`profiles.is_app_admin`) is a plain boolean, checked directly by
@@ -216,14 +267,32 @@ ownerless.
 
 ## Audit Logs
 
-`logEvent()` (`src/lib/events/index.ts`) is the **only** way an `audit_logs` row is created —
-the table has select-only RLS (`is_app_admin()`, or an org owner/admin for their own org's rows)
-and no insert policy at all, so a client can never fabricate an audit entry; only the admin
-client, via `auditLogSink`, can write one. A sink failure (including the audit-log insert itself)
-is caught inside `logEvent()` and logged, never thrown back into the caller — an audit-logging
-hiccup can never turn an otherwise-successful action into an error response.
+`logEvent()` (`src/lib/events/index.ts`) is the usual way an `audit_logs` row is created — the
+table has select-only RLS (`is_app_admin()`, or an org owner/admin for their own org's rows) and
+no insert policy at all, so a client can never fabricate an audit entry; only the admin client,
+via `auditLogSink`, can write one. A sink failure (including the audit-log insert itself) is
+caught inside `logEvent()` and logged, never thrown back into the caller — an audit-logging
+hiccup can never turn an otherwise-successful action into an error response. That
+never-throws-back guarantee is exactly why it's the *wrong* mechanism for one category of
+mutation — see below.
 
-`audit_logs` rows are retained for **30 days**. `purge_old_audit_logs()` (a SECURITY DEFINER SQL
-function added in `supabase/migrations/20260823090000_admin.sql`) deletes anything older than
-that, but **no scheduler invokes it yet** — this is a deliberate, known gap: wiring up `pg_cron`
-(or an external scheduler hitting an admin-only route) is follow-up work, not silently forgotten.
+**Organization permission changes are the one exception to `logEvent()`.** `update_member_role`,
+`remove_member`, `leave_organization`, and `transfer_organization_ownership` (Pomočnik,
+ADR-0008) write their audit row *inside the same Postgres transaction* as the mutation itself,
+as a SECURITY DEFINER function, rather than via a plain RLS-scoped mutation plus a separate
+`logEvent()` call from the action layer. The reason is the guarantee described in the paragraph
+above: `logEvent()`'s sinks are deliberately best-effort and never throw, which is correct for
+supplementary logging but wrong for a mutation the spec treats as requiring a guaranteed audit
+record. If the `auditLogSink` insert failed after a role change already succeeded, the caller
+would see success with a silent gap in the audit trail — acceptable for most actions, not for a
+permission change. These four functions also each replicate `has_organization_role()`'s
+owner/admin check explicitly in the function body (SECURITY DEFINER bypasses RLS, so the check
+has to happen there instead) rather than relying on the caller having already passed an RLS
+policy.
+
+`audit_logs` rows are retained for **2 years** (extended from the original 30-day admin-only
+window, ADR-0005, once this table started also carrying Pomočnik's business audit —
+`supabase/migrations/20260827000000_audit_log_retention.sql`). `purge_old_audit_logs()` (added in
+`20260823090000_admin.sql`) deletes anything older than that, but **no scheduler invokes it
+yet** — this is a deliberate, known gap: wiring up `pg_cron` (or an external scheduler hitting an
+admin-only route) is follow-up work, not silently forgotten.

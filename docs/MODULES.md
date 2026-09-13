@@ -14,6 +14,7 @@ those functions read/write, see [DATABASE.md](DATABASE.md).
 | Billing | Optional | Stripe |
 | Credits | Optional | Billing |
 | Files | Optional | Supabase Storage |
+| Documents | Optional | Organizations, Supabase Storage, Paperless — Pomočnik |
 | Notifications | Optional | Auth |
 | Admin | Optional | Auth |
 | Audit Logs | Recommended | Auth (the write side, `src/lib/events/`, has no dependency on Admin — only the `/admin/audit-log` read UI does) |
@@ -36,12 +37,20 @@ own members, roles, and pending invitations.
 `organization_invitations` tables defined in the initial schema migration, plus the
 `create_organization`, `get_organization_invitation`, `accept_organization_invitation`, and
 `transfer_organization_ownership` SECURITY DEFINER functions from
-`supabase/migrations/20260820120000_organizations_functions.sql`. See `docs/SECURITY.md` for why
-these operations need SECURITY DEFINER functions instead of plain RLS-scoped queries.
+`supabase/migrations/20260820120000_organizations_functions.sql`, and (Pomočnik,
+`20260912195634_transactional_membership_audit.sql`) `update_member_role`, `remove_member`, and
+`leave_organization` — these three used to be plain RLS-scoped mutations from
+`organizations.actions.ts`; they became SECURITY DEFINER functions specifically so their audit
+row writes transactionally with the mutation (ADR-0008), not because RLS was ever the blocker.
+See `docs/SECURITY.md` for why each category needs what it needs.
 
 **Configuration**: gated by `features.organizations` in `src/config/features.ts`. Roles are
-`owner`, `admin`, `member` (the `organization_role` enum); role permissions are defined in
-`src/modules/auth/authorization.ts`'s `can()` helper.
+`owner`, `admin`, `member`, `read-only` (the `organization_role` enum — the 4th role added for
+Pomočnik, `supabase/migrations/20260824000000_pomocnik_orgs_extension.sql`); role permissions
+are defined in `src/modules/auth/authorization.ts`'s `can()` helper. `read-only` has the same
+read access as `member` but no write access anywhere — enforced at the RLS layer by
+`has_organization_write_access()`, not just by `can()`, since RLS is the real boundary
+(`docs/SECURITY.md`).
 
 **How to enable**: set `FEATURE_ORGANIZATIONS=true` (default). The "Organizations" and "Team" nav
 entries in `src/config/navigation.ts` and the `/settings/team` tab appear automatically once
@@ -210,6 +219,74 @@ yet — add one only once a real need for private-within-org files shows up). De
 org-scoped file as an org admin (not just the file's owner) reuses `can(role, "organization.files.manage")`
 from the Organizations module's RBAC, the same pattern as billing's permission checks.
 
+## Documents — Pomočnik
+
+**Purpose**: tenant document upload → Paperless ingestion → a queryable local mirror
+(`documents`), with a real UI to exercise it (`/dashboard/documents`) rather than only API
+routes. Paperless owns the file and its OCR text; this module never re-implements OCR or
+full-text search — see `specs/00-overview.md`'s locked decisions (D1) for why.
+
+**Dependency**: Organizations (every document belongs to an org), Supabase Storage
+(direct-to-storage upload, `document-uploads` bucket), Paperless (the actual document engine,
+reached via `src/lib/paperless/client.ts`'s `paperlessFor(orgId)`), and a running `worker`
+process — uploads do nothing without one.
+
+**Configuration**: gated by `features.documents`. Size cap and MIME allowlist in
+`src/config/documents.ts` (separate from the generic Files module's `src/config/files.ts` — a
+100MB cap and PDF/image/office-doc allowlist, not the generic module's smaller/simpler one).
+
+**How to enable**: set `FEATURE_DOCUMENTS=true` (default). The "Documents" nav entry
+(`src/config/navigation.ts`) and `/dashboard/documents` appear automatically once enabled.
+
+**The pipeline** (`specs/01-architecture.md` §Upload), each stage a separate BullMQ job so a
+crash partway through resumes rather than restarting from scratch:
+
+1. `createUploadIntent()`/`completeUpload()` (`documents.service.ts`) — the browser PUTs the
+   file directly to Storage using a signed URL; our server never buffers the bytes. Enqueues
+   `validate-upload`.
+2. `worker/jobs/validate-upload.ts` — MIME re-sniff + a real ClamAV scan
+   (`src/lib/files/scan.ts`, see `docs/SECURITY.md#documents-paperless-integration--pomočnik`
+   for why this exists and how it's implemented). Claimed via a single atomic RPC
+   (`claim_upload_validation()`), which also accepts re-claiming its own prior attempt after a
+   retry — see `docs/DATABASE.md`'s Functions table for why that matters.
+3. `worker/jobs/submit-upload-to-paperless.ts` — POSTs to Paperless as the tenant's own service
+   user, persists the returned task id *immediately* (the checkpoint a retry resumes from,
+   since re-POSTing would create a duplicate document), polls until consumption finishes, then
+   PATCHes tenant-group permissions onto the result (`post_document/` doesn't grant these
+   itself — confirmed live, not assumed).
+4. `worker/jobs/sync-paperless-document.ts` — the one place that ever writes the `documents`
+   mirror row, upserting rather than claiming (multiple callers can legitimately race here — see
+   below). Also the first-ever writer of a `paperless_object_map` row with `object_type='document'`,
+   done defensively (a conflict is only trusted as "already ours" after confirming the org
+   matches). Fires the `document.ingested` rule trigger (the rule engine itself isn't built —
+   this only enqueues the trigger) and notifies the uploader.
+
+**Three independent paths call `sync-paperless-document.ts`** with the same
+`{orgId, paperlessDocumentId, uploadId?}` shape: the upload pipeline above (`uploadId` set), the
+Paperless post-consume webhook (`/api/internal/paperless/document-consumed`, HMAC-verified —
+`docs/SECURITY.md`), and the reconciliation sweep below (no `uploadId`). This is why it's
+idempotent-by-upsert rather than claim-based like the first two jobs.
+
+**Reconciliation** (`worker/jobs/reconcile-incremental.ts`, every 5 min;
+`worker/jobs/reconcile-full-sweep.ts`, daily) is the backstop for the webhook's best-effort
+delivery — "the post-consume script is the source of *latency*, reconciliation is the source of
+*correctness*" (`specs/01-architecture.md`). Incremental queries Paperless for documents
+added/modified since the tenant's `last_reconciled_at` and re-syncs them; full sweep additionally
+lists *every* document a tenant has and flags anything mirrored-but-gone as `orphaned` — the only
+one of the two that can detect a Paperless-side deletion, since incremental only ever sees a
+filtered window, never the full set. Both are the first jobs in this codebase registered as an
+actual recurring schedule (BullMQ v6 `Queue.upsertJobScheduler()`, `worker/index.ts`) rather than
+enqueued on demand — the same pattern `worker/jobs/expire-abandoned-uploads.ts` (a global,
+non-tenant-scoped sweep for stuck `document_uploads` rows) already established.
+
+**How to extend**: `documents.service.ts`'s `listDocuments()`/`listRecentUploads()` back the
+current UI — deliberately unfiltered/unpaginated-by-filter (recency-ordered, capped at 50); the
+full mixed-filter `listDocuments()` (`type`/`date`/`entity`/`status`/full-text `q` passthrough to
+Paperless) is Phase 2 scope, not built yet. `listRecentUploads()` exists specifically to surface
+`document_uploads` rows with no `documents` row yet — without it, an upload is invisible in the
+UI for the entire window between "upload-complete returned" and "sync-paperless-document.ts
+finishes."
+
 ## Admin
 
 **Purpose**: an application-admin dashboard — user administration (search, suspend/unsuspend,
@@ -272,7 +349,7 @@ never-throw convention as `sendEmail()`).
 call `logEvent()` without creating one.
 
 **Configuration**: not feature-flagged — `logEvent()` always runs; whether an event is worth
-logging is a call-site decision, not a config toggle. `audit_logs` rows are retained for 30 days;
+logging is a call-site decision, not a config toggle. `audit_logs` rows are retained for 2 years;
 see `docs/SECURITY.md` for the retention mechanism.
 
 **How to extend**: call `logEvent({ actorId, action, entityType?, entityId?, organizationId?,
@@ -280,9 +357,22 @@ metadata? })` from any real mutation worth an audit trail — action names are d
 (`auth.login`, `organization.member.removed`, `admin.user.suspended`, `billing.subscription.updated`,
 `file.deleted`, etc.). Current callers: every admin-issued mutation in this module, plus the most
 security/state-changing existing flows in auth (`auth.actions.ts`), organizations
-(`organizations.actions.ts`), the Stripe webhook handler (actor is `null` for these — system/Stripe-
-initiated), and files (`files.service.ts`). Read-only actions (listing, viewing) are intentionally
-not logged. If an event's `organization_id` references an organization about to be deleted in the
-same action, log it **before** the delete — `audit_logs.organization_id` is a real foreign key, and
-inserting after the org is gone would fail (see `deleteOrganizationAdmin` in
+(`organizations.actions.ts` — for everything *except* the four permission-change actions below),
+the Stripe webhook handler (actor is `null` for these — system/Stripe-initiated), and files
+(`files.service.ts`). Read-only
+actions (listing, viewing) are intentionally not logged. **Organization permission changes are
+the one exception**: `update_member_role`/`remove_member`/`leave_organization`/
+`transfer_organization_ownership` in `organizations.actions.ts` no longer call `logEvent()` at
+all — they write their audit row transactionally inside the Postgres function itself instead
+(ADR-0008, `docs/SECURITY.md#audit-logs`), precisely because `logEvent()`'s never-throws
+guarantee is the wrong shape for a mutation that needs a *guaranteed* audit record. If an event's
+`organization_id` references an organization about to be deleted in the same action, log it
+**before** the delete — `audit_logs.organization_id` is a real foreign key, and inserting after
+the org is gone would fail (see `deleteOrganizationAdmin` in
 `src/modules/admin/organizations.service.ts` for the reference ordering).
+
+**Reading it back**: `listAuditLogs()` (`src/modules/admin/audit-log.service.ts`) is the
+app-admin global feed behind `/admin/audit-log`. `listAuditLogsForSubject(entityType, entityId)`
+— Pomočnik — is the same cursor-paginated shape scoped to one entity's history instead (a
+document, an `organization_member`); it adds no authorization of its own, relying entirely on
+the same select RLS as the global feed.
