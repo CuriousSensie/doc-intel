@@ -186,6 +186,31 @@ export class PaperlessClient {
     return this.request<T>(path, { method: "POST", form, timeoutMs: UPLOAD_TIMEOUT_MS });
   }
 
+  // For binary responses (document preview/download) that request()'s JSON/text decoding would
+  // mangle — returns the raw Response so the caller can stream `.body` straight through to the
+  // browser. ADR-0009: our Route Handler is what the browser talks to, authenticated by our own
+  // session cookie; the real Paperless token never reaches the client, unlike a redirect would.
+  // No retry here (interactive request, not idempotent-safe to replay a partially-read stream).
+  async getStream(path: string): Promise<Response> {
+    const res = await fetch(`${this.creds.baseUrl}${path}`, {
+      headers: { Authorization: `Token ${this.creds.token}` }
+    });
+
+    logger.info("paperless.request", {
+      orgId: this.orgId,
+      method: "GET",
+      path,
+      status: res.status,
+      durationMs: 0
+    });
+
+    if (!res.ok) {
+      throw await mapPaperlessError(res, { orgId: this.orgId, path });
+    }
+
+    return res;
+  }
+
   // Shared by createOwnedObject() and setOwnedObjectPermissions() — the one guard that makes
   // isolation test #20 ("no creation/grant without explicit, tenant-matching permissions") a
   // compile-time-adjacent guarantee instead of a convention two call sites could each get wrong.

@@ -27,7 +27,8 @@ export type PaperlessTask = {
 // (2026-09-12) — page_count and mime_type are direct fields; there is no byte_size field
 // anywhere on this response (checked both the list and detail shapes), so that still has to
 // come from document_uploads on the upload path only. checksum lives on the root entry of
-// `versions`, not as a top-level field.
+// `versions`, not as a top-level field. custom_fields confirmed live (2026-09-13): a flat
+// `{field, value}[]` array embedded directly on the document object, no separate endpoint.
 export type PaperlessDocument = {
   id: number;
   title: string;
@@ -43,6 +44,7 @@ export type PaperlessDocument = {
   owner: number | null;
   page_count: number | null;
   mime_type: string | null;
+  custom_fields: Array<{ field: number; value: unknown }>;
   versions: Array<{
     id: number;
     added: string;
@@ -50,6 +52,18 @@ export type PaperlessDocument = {
     checksum: string;
     is_root: boolean;
   }>;
+};
+
+// Confirmed live (2026-09-13) against GET /api/documents/:id/history/ — not paginated on this
+// version (a plain array, no PaperlessListEnvelope). `actor` is null for system-initiated
+// changes (e.g. the initial post_document/ create), populated for a PATCH made under a real
+// tenant service-user token.
+export type PaperlessDocumentHistoryEntry = {
+  id: number;
+  timestamp: string;
+  action: "create" | "update" | "delete" | string;
+  changes: Record<string, unknown>;
+  actor: { id: number; username: string } | null;
 };
 
 // Per-object owner/ACL payload. Field is `set_permissions` on this pinned version, not

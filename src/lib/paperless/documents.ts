@@ -1,11 +1,43 @@
 import type { PaperlessClient } from "./client";
-import type { PaperlessDocument, PaperlessListEnvelope } from "./types";
+import type {
+  PaperlessDocument,
+  PaperlessDocumentHistoryEntry,
+  PaperlessListEnvelope
+} from "./types";
 
 export function getPaperlessDocument(
   client: PaperlessClient,
   paperlessDocumentId: number
 ): Promise<PaperlessDocument> {
   return client.get<PaperlessDocument>(`/api/documents/${paperlessDocumentId}/`);
+}
+
+// specs/03-api.md's PATCH /documents/:id — title/date/type/custom-field writes always go
+// through here, never mirror-only (specs/02-data-model.md: "Paperless wins on conflict", we
+// never write a mirrored field in our DB without also writing it through to Paperless in the
+// same operation). Returns Paperless's own post-write representation so the caller mirrors
+// exactly what Paperless actually stored, not what was requested.
+export function updatePaperlessDocument(
+  client: PaperlessClient,
+  paperlessDocumentId: number,
+  patch: {
+    title?: string;
+    created?: string;
+    document_type?: number | null;
+    custom_fields?: Array<{ field: number; value: unknown }>;
+  }
+): Promise<PaperlessDocument> {
+  return client.patch<PaperlessDocument>(`/api/documents/${paperlessDocumentId}/`, patch);
+}
+
+// Confirmed live (2026-09-13): not paginated on this version, a plain array.
+export function getPaperlessDocumentHistory(
+  client: PaperlessClient,
+  paperlessDocumentId: number
+): Promise<PaperlessDocumentHistoryEntry[]> {
+  return client.get<PaperlessDocumentHistoryEntry[]>(
+    `/api/documents/${paperlessDocumentId}/history/`
+  );
 }
 
 export function getPaperlessDocumentTypeName(
