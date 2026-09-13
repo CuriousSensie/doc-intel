@@ -49,7 +49,7 @@ export default async function DocumentsPage() {
     return <EmptyDocumentsState />;
   }
 
-  const [documents, uploads] = await Promise.all([
+  const [{ items: documents }, uploads] = await Promise.all([
     listDocuments(organizationId),
     listRecentUploads(organizationId)
   ]);
@@ -100,8 +100,9 @@ export default async function DocumentsPage() {
           </p>
         ) : (
           documents.map((document) => (
-            <div
-              className="flex flex-col justify-between gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm sm:flex-row sm:items-center"
+            <Link
+              className="flex flex-col justify-between gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm transition-colors hover:bg-panel-strong/40 sm:flex-row sm:items-center"
+              href={`/dashboard/documents/${document.id}`}
               key={document.id}
             >
               <div>
@@ -115,7 +116,7 @@ export default async function DocumentsPage() {
                 </p>
               </div>
               <StatusBadge status={document.status} />
-            </div>
+            </Link>
           ))
         )}
       </section>

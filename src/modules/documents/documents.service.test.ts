@@ -4,8 +4,44 @@ afterEach(() => {
   vi.doUnmock("@/lib/supabase/server");
   vi.doUnmock("@/lib/supabase/admin");
   vi.doUnmock("@/lib/queue");
+  vi.doUnmock("@/lib/events");
+  vi.doUnmock("@/lib/paperless/client");
+  vi.doUnmock("@/lib/paperless/documents");
+  vi.doUnmock("@/modules/connections/connections.service");
+  vi.doUnmock("@/modules/organizations/organizations.service");
   vi.resetModules();
 });
+
+// Chainable + thenable fake, same shape used across the entities/connections test suites —
+// every method returns itself, and awaiting at any point resolves to the configured result.
+function makeChain(result: unknown) {
+  const target: Record<string, unknown> = {};
+  const proxy: unknown = new Proxy(target, {
+    get(_t, prop) {
+      if (prop === "then") {
+        return (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+          Promise.resolve(result).then(resolve, reject);
+      }
+      if (prop === "maybeSingle" || prop === "single") {
+        return () => Promise.resolve(result);
+      }
+      return () => proxy;
+    }
+  });
+  return proxy;
+}
+
+function makeQueryClient(responses: Record<string, unknown[]>) {
+  const counters: Record<string, number> = {};
+  return {
+    from: (table: string) => {
+      const idx = counters[table] ?? 0;
+      counters[table] = idx + 1;
+      const queued = responses[table];
+      return makeChain(queued?.[idx] ?? { data: null, error: null });
+    }
+  };
+}
 
 describe("createUploadIntent", () => {
   it("rejects a file over the size limit before touching Supabase", async () => {
@@ -192,5 +228,121 @@ describe("completeUpload", () => {
       orgId: "org-1",
       uploadId: "upload-1"
     });
+  });
+});
+
+describe("getDocument", () => {
+  const DOC_ROW = { id: "doc-1", organization_id: "org-1", paperless_document_id: 42, title: "Invoice" };
+
+  it("returns the mirror row with connections and Paperless custom fields", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/connections/connections.service", () => ({
+      getConnections: vi.fn().mockResolvedValue([{ id: "conn-1" }])
+    }));
+    vi.doMock("@/lib/paperless/client", () => ({
+      paperlessFor: vi.fn().mockResolvedValue({})
+    }));
+    vi.doMock("@/lib/paperless/documents", () => ({
+      getPaperlessDocument: vi.fn().mockResolvedValue({ custom_fields: [{ field: 1, value: "x" }] })
+    }));
+
+    const { getDocument } = await import("@/modules/documents/documents.service");
+    const result = await getDocument("org-1", "doc-1");
+
+    expect(result.connections).toEqual([{ id: "conn-1" }]);
+    expect(result.paperless).toEqual({ customFields: [{ field: 1, value: "x" }] });
+  });
+
+  it("degrades to paperless: null when Paperless is unreachable, without failing the page", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/connections/connections.service", () => ({
+      getConnections: vi.fn().mockResolvedValue([])
+    }));
+    vi.doMock("@/lib/paperless/client", () => ({
+      paperlessFor: vi.fn().mockRejectedValue(new Error("unreachable"))
+    }));
+
+    const { getDocument } = await import("@/modules/documents/documents.service");
+    const result = await getDocument("org-1", "doc-1");
+
+    expect(result.paperless).toBeNull();
+  });
+
+  it("throws NotFoundError for a wrong-org or missing document id", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: null, error: null }] })
+    }));
+
+    const { getDocument } = await import("@/modules/documents/documents.service");
+    await expect(getDocument("org-1", "doc-missing")).rejects.toThrow(/not found/i);
+  });
+});
+
+describe("updateDocument", () => {
+  const DOC_ROW = { id: "doc-1", organization_id: "org-1", paperless_document_id: 42, title: "Old title" };
+
+  it("rejects a read-only member before touching Paperless", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "read-only" })
+    }));
+    const paperlessFor = vi.fn();
+    vi.doMock("@/lib/paperless/client", () => ({ paperlessFor }));
+
+    const { updateDocument } = await import("@/modules/documents/documents.service");
+    await expect(
+      updateDocument("user-1", "org-1", "doc-1", { title: "New title" })
+    ).rejects.toThrow(/write access/);
+
+    expect(paperlessFor).not.toHaveBeenCalled();
+  });
+
+  it("writes the title through to Paperless, then mirrors Paperless's own response", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "member" })
+    }));
+    vi.doMock("@/lib/paperless/client", () => ({
+      paperlessFor: vi.fn().mockResolvedValue({})
+    }));
+    const updatePaperlessDocument = vi.fn().mockResolvedValue({ title: "New title" });
+    vi.doMock("@/lib/paperless/documents", () => ({ updatePaperlessDocument }));
+
+    let mirrorUpdatePayload: unknown;
+    vi.doMock("@/lib/supabase/admin", () => ({
+      createAdminClient: () => ({
+        from: () => ({
+          update: (payload: unknown) => {
+            mirrorUpdatePayload = payload;
+            return {
+              eq: () => ({
+                eq: () => ({
+                  select: () => ({
+                    single: () =>
+                      Promise.resolve({ data: { ...DOC_ROW, title: "New title" }, error: null })
+                  })
+                })
+              })
+            };
+          }
+        })
+      })
+    }));
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
+
+    const { updateDocument } = await import("@/modules/documents/documents.service");
+    const result = await updateDocument("user-1", "org-1", "doc-1", { title: "New title" });
+
+    expect(updatePaperlessDocument).toHaveBeenCalledWith({}, 42, { title: "New title" });
+    expect(mirrorUpdatePayload).toEqual({ title: "New title" });
+    expect(result.title).toBe("New title");
   });
 });
