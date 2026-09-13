@@ -5,6 +5,7 @@ export type NavigationIcon =
   | "Bell"
   | "Building2"
   | "CreditCard"
+  | "FileText"
   | "FolderKanban"
   | "History"
   | "LayoutDashboard"
@@ -36,6 +37,12 @@ export const dashboardNavigation: NavigationItem[] = [
     icon: "Bell"
   },
   { label: "Files", href: "/dashboard/files", feature: "files", icon: "Paperclip" },
+  {
+    label: "Documents",
+    href: "/dashboard/documents",
+    feature: "documents",
+    icon: "FileText"
+  },
   { label: "Billing", href: "/settings/billing", feature: "billing", icon: "CreditCard" },
   { label: "Organizations", href: "/organizations", feature: "organizations", icon: "Building2" },
   { label: "Team", href: "/settings/team", feature: "organizations", icon: "Users" },

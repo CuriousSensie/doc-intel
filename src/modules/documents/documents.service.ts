@@ -8,6 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
 export type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"];
+export type Document = Database["public"]["Tables"]["documents"]["Row"];
+
+const RECENT_LIST_LIMIT = 50;
 
 function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9.\-_]/g, "_").slice(-150);
@@ -116,4 +119,37 @@ export async function completeUpload(userId: string, uploadId: string): Promise<
   });
 
   return updated;
+}
+
+// Minimal listing for the Phase 1 documents page — RLS (documents_select_member) does the only
+// authorization that matters here. specs/02-data-model.md's full mixed-filter listDocuments()
+// (type/date/entity/status/full-text `q`) is Phase 2 work; this just orders by recency.
+export async function listDocuments(organizationId: string): Promise<Document[]> {
+  const db = await createClient();
+  const { data, error } = await db
+    .from("documents")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(RECENT_LIST_LIMIT);
+
+  if (error) throw error;
+  return data;
+}
+
+// Surfaces the upload pipeline's in-flight/failed state (validating, submitting, processing,
+// failed) that has no row in `documents` yet — without this, an upload sits invisible between
+// "upload-complete returned" and "sync-paperless-document.ts finishes."
+export async function listRecentUploads(organizationId: string): Promise<DocumentUpload[]> {
+  const db = await createClient();
+  const { data, error } = await db
+    .from("document_uploads")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(RECENT_LIST_LIMIT);
+
+  if (error) throw error;
+  return data;
 }
