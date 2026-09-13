@@ -25,11 +25,11 @@ export default async function BillingSettingsPage({
   const context = await requireUser("/settings/billing");
   const owner = await requireBillingOwner(context);
 
-  const [params, currentPlan, creditBalance, projectsUsage, membership] = await Promise.all([
+  const [params, currentPlan, creditBalance, teamMembersUsage, membership] = await Promise.all([
     searchParams,
     getOwnerPlan(owner),
     getCreditBalance(owner),
-    checkUsageLimit(owner, "projects", currentUsagePeriod("monthly")),
+    checkUsageLimit(owner, "teamMembers", currentUsagePeriod("monthly")),
     owner.type === "organization" ? getMembership(owner.id, context.user.id) : Promise.resolve(null)
   ]);
 
@@ -68,7 +68,7 @@ export default async function BillingSettingsPage({
             <h2 className="text-xl font-black">Current plan</h2>
             <p className="mt-1 text-2xl font-black">{billingConfig.plans[currentPlan].name}</p>
             <p className="mt-1 text-sm text-muted">
-              {projectsUsage.used} / {projectsUsage.limit} projects used this period
+              {teamMembersUsage.used} / {teamMembersUsage.limit} team members used this period
             </p>
           </div>
           {showPortalButton ? (

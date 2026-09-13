@@ -40,8 +40,8 @@ export default async function PricingPage() {
               </p>
               <dl className="mt-5 space-y-2 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-muted">Projects</dt>
-                  <dd className="font-semibold">{plan.features.projects}</dd>
+                  <dt className="text-muted">Team members</dt>
+                  <dd className="font-semibold">{plan.features.teamMembers}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-muted">Storage</dt>
