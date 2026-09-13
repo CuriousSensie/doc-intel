@@ -626,6 +626,196 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Pomočnik Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md).
+      entities: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entity_type_id: string;
+          display_name: string;
+          status: "active" | "archived";
+          data: Json;
+          search_tsv: unknown;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entity_type_id: string;
+          display_name: string;
+          status?: "active" | "archived";
+          data?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          display_name?: string;
+          status?: "active" | "archived";
+          data?: Json;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // The import matching key — normalized is what makes "SI 1234 5678"/"si12345678" collide.
+      entity_identifiers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entity_id: string;
+          kind: string;
+          value: string;
+          normalized: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entity_id: string;
+          kind: string;
+          value: string;
+          normalized: string;
+          created_at?: string;
+        };
+        Update: {
+          value?: string;
+          normalized?: string;
+        };
+        Relationships: [];
+      };
+      // The core primitive — one row, read from either direction via
+      // src/modules/connections/connections.service.ts's getConnections(). No FK on
+      // source_id/target_id: polymorphic (document | entity), app-layer enforced by design.
+      connections: {
+        Row: {
+          id: string;
+          organization_id: string;
+          source_kind: "document" | "entity";
+          source_id: string;
+          target_kind: "document" | "entity";
+          target_id: string;
+          relation: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
+          metadata: Json;
+          created_by: string | null;
+          created_via: "manual" | "rule" | "import" | "template" | "ai_accepted";
+          rule_id: string | null;
+          created_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          source_kind: "document" | "entity";
+          source_id: string;
+          target_kind: "document" | "entity";
+          target_id: string;
+          relation?: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
+          metadata?: Json;
+          created_by?: string | null;
+          created_via?: "manual" | "rule" | "import" | "template" | "ai_accepted";
+          rule_id?: string | null;
+          created_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // Mirror of Paperless custom field *definitions* only — never read from Paperless's
+      // /api/custom_fields/ directly (cross-tenant leak, docs/spike-findings.md §1 #6).
+      custom_field_defs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          key: string;
+          label: string;
+          data_type:
+            | "string"
+            | "integer"
+            | "float"
+            | "monetary"
+            | "date"
+            | "boolean"
+            | "select"
+            | "documentlink"
+            | "url";
+          options: Json | null;
+          applies_to: string[];
+          paperless_custom_field_id: number | null;
+          is_required: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          key: string;
+          label: string;
+          data_type:
+            | "string"
+            | "integer"
+            | "float"
+            | "monetary"
+            | "date"
+            | "boolean"
+            | "select"
+            | "documentlink"
+            | "url";
+          options?: Json | null;
+          applies_to?: string[];
+          paperless_custom_field_id?: number | null;
+          is_required?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          label?: string;
+          options?: Json | null;
+          applies_to?: string[];
+          is_required?: boolean;
+        };
+        Relationships: [];
+      };
+      saved_views: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          scope: "documents" | "entities";
+          entity_type_id: string | null;
+          filters: Json;
+          columns: Json;
+          sort: Json | null;
+          is_shared: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          scope: "documents" | "entities";
+          entity_type_id?: string | null;
+          filters?: Json;
+          columns?: Json;
+          sort?: Json | null;
+          is_shared?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          filters?: Json;
+          columns?: Json;
+          sort?: Json | null;
+          is_shared?: boolean;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -723,6 +913,10 @@ export type Database = {
       };
       fail_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      merge_entities: {
+        Args: { p_keep_id: string; p_merge_id: string };
         Returns: undefined;
       };
     };
