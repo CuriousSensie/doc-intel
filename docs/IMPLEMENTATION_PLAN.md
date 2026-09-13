@@ -424,18 +424,43 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 
 ## Phase 2 — Level 1 Structure & Connections
 
-- [ ] Migration: `entity_types`, `entities`, `entity_identifiers`, `connections`,
-      `custom_field_defs`, `saved_views` (+ `documents` if not already created in Phase 1)
-- [ ] `src/modules/entities/` (CRUD, identifier normalization, unit tests)
-- [ ] `src/modules/connections/` (`getConnections()` — the one union-query helper)
-- [ ] `entity-merge.service.ts` + `merge_entities()` Postgres function
-- [ ] Custom-field decision-rule runtime assertion. **Also**: the entities/custom-fields UI and
-      every Server Action must read custom field *definitions* from our own `custom_field_defs`
-      mirror only, never `GET /api/custom_fields/` directly — confirmed via the Phase 0
-      isolation spike that Paperless's own endpoint leaks definitions across tenants even with
-      `owner`/`set_permissions` correctly set (`docs/spike-findings.md` §1, #6). Also add
-      isolation coverage for custom field *values* on documents (test #7) as a first priority —
-      untested in Phase 0, could be a deeper leak than definitions since we don't mirror values.
+- [x] Migration: `entities`, `entity_identifiers`, `connections`, `custom_field_defs`,
+      `saved_views` (`entity_types` already existed from Phase 1) —
+      `supabase/migrations/20260914000000_entities_connections_fields_views.sql`, plus
+      `merge_entities()`. Verified against a throwaway Postgres container: all 17 migrations
+      apply cleanly in order; unique constraints (`entity_identifiers`, `connections_unique_pair`,
+      `custom_field_defs`) correctly reject duplicates; `merge_entities()` moves
+      identifiers/connections, archives the merged entity, writes one audit row, and rejects
+      unauthenticated/cross-org/self-merge calls; RLS itself (as a real non-superuser role, not
+      just the helper functions) blocks a cross-tenant read and write. Pushed to the live
+      Supabase Cloud project — a prior migration (`20260913120000_drop_files_and_projects.sql`)
+      had to be fixed first: Supabase Cloud rejects direct SQL writes to `storage.objects`/
+      `storage.buckets` (SQLSTATE 42501, "use the Storage API instead"), so that migration's
+      bucket cleanup was dropped (the `files` bucket is left as a harmless orphan).
+- [x] `src/modules/entities/` (CRUD, identifier normalization, dynamic per-entity-type data
+      validation, unit tests) + `src/modules/entity-types/` (field-schema evolution rules: add/
+      rename-label/lossless-type-change/soft-remove, per specs/05). 24 unit tests; verified
+      end-to-end against the real live Supabase project (not mocks) — entity type + field CRUD,
+      identifier auto-promotion, duplicate-identifier conflict rejection, search-by-identifier.
+- [x] `src/modules/connections/` (`getConnections()` — the one union-query helper, hydrated with
+      the other side's label) + `entity-merge.service.ts` (thin wrapper over `merge_entities()`,
+      maps its raised exceptions onto the app's error taxonomy). Verified end-to-end against the
+      real live project, including a real merge through an actual authenticated session (the RPC
+      checks `auth.uid()` itself, so this only works with a request-context client, not the
+      admin client) — self-connection rejection, duplicate-pair rejection (reversed order),
+      direction-symmetric hydration, real merge re-pointing connections, self/cross-org/
+      unauthenticated merge rejection.
+- [x] Custom-field decision-rule runtime assertion — `src/modules/custom-fields/
+      custom-field-defs.service.ts` rejects any `documentlink`-typed field def with a non-null
+      `paperless_custom_field_id` (specs/12-agent-rules.md rule 6: an entity link can never be
+      backed by a real Paperless field). **Also**: this module is the only place custom field
+      *definitions* are ever read for the tenant-facing app — confirmed via the Phase 0 isolation
+      spike that Paperless's own `GET /api/custom_fields/` leaks definitions across tenants even
+      with `owner`/`set_permissions` correctly set (`docs/spike-findings.md` §1, #6). Isolation
+      test #7 (custom field *values* on a document, cross-tenant) added to
+      `e2e/isolation.spec.ts` — two angles: the same per-document 404 as test #3 now with a real
+      value attached, and a `custom_field_query` filter attempt using the leaked definition id
+      from #6, neither of which surfaces tenant A's document to tenant B.
 - [ ] `documents.service.ts` — `listDocuments()` mixed-filter, `getDocument()`,
       `updateDocument()`
 - [ ] Dashboard nav entries + feature flags for `documents`/`entities`
