@@ -13,7 +13,19 @@ export type ConnectionWithOther = {
   createdVia: Connection["created_via"];
   ruleId: string | null;
   createdAt: string;
-  other: { kind: ConnectableKind; id: string; label: string | null };
+  other: {
+    kind: ConnectableKind;
+    id: string;
+    label: string | null;
+    // Only set for kind: "entity" — this is what lets the Connections panel group by entity
+    // type (specs/05-level-1-structure.md: "the highest-value surface in the product").
+    entityTypeKey: string | null;
+    entityTypeName: string | null;
+    // specs/05: "Deleting an entity does not hard-delete connections; it soft-deletes and the
+    // UI shows 'connected entity was deleted' rather than silently dropping the link." label
+    // keeps the last-known name (still useful context) rather than going null.
+    isDeleted: boolean;
+  };
 };
 
 const UNIQUE_VIOLATION = "23505";
@@ -49,35 +61,74 @@ export async function getConnections(
   const entityIds = [...new Set(others.filter((o) => o.kind === "entity").map((o) => o.id))];
   const documentIds = [...new Set(others.filter((o) => o.kind === "document").map((o) => o.id))];
 
-  const [entityLabels, documentLabels] = await Promise.all([
+  const [entityRows, documentLabels] = await Promise.all([
     entityIds.length > 0
       ? ctx.db
           .from("entities")
-          .select("id, display_name")
+          .select("id, display_name, entity_type_id, deleted_at")
           .eq("organization_id", ctx.orgId)
           .in("id", entityIds)
-      : Promise.resolve({ data: [] as { id: string; display_name: string }[], error: null }),
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            display_name: string;
+            entity_type_id: string;
+            deleted_at: string | null;
+          }[],
+          error: null
+        }),
     documentIds.length > 0
       ? ctx.db
           .from("documents")
-          .select("id, title")
+          .select("id, title, deleted_at")
           .eq("organization_id", ctx.orgId)
           .in("id", documentIds)
-      : Promise.resolve({ data: [] as { id: string; title: string }[], error: null })
+      : Promise.resolve({
+          data: [] as { id: string; title: string; deleted_at: string | null }[],
+          error: null
+        })
   ]);
 
-  if (entityLabels.error) throw entityLabels.error;
+  if (entityRows.error) throw entityRows.error;
   if (documentLabels.error) throw documentLabels.error;
 
-  const entityLabelById = new Map((entityLabels.data ?? []).map((e) => [e.id, e.display_name]));
-  const documentLabelById = new Map((documentLabels.data ?? []).map((d) => [d.id, d.title]));
+  const entityTypeIds = [...new Set((entityRows.data ?? []).map((e) => e.entity_type_id))];
+  const { data: entityTypes, error: entityTypesError } =
+    entityTypeIds.length > 0
+      ? await ctx.db.from("entity_types").select("id, key, name").in("id", entityTypeIds)
+      : { data: [] as { id: string; key: string; name: string }[], error: null };
+
+  if (entityTypesError) throw entityTypesError;
+
+  const entityTypeById = new Map((entityTypes ?? []).map((t) => [t.id, t]));
+  const entityById = new Map((entityRows.data ?? []).map((e) => [e.id, e]));
+  const documentById = new Map((documentLabels.data ?? []).map((d) => [d.id, d]));
 
   return rows.map((row, index) => {
     const other = others[index];
-    const label =
-      other.kind === "entity"
-        ? (entityLabelById.get(other.id) ?? null)
-        : (documentLabelById.get(other.id) ?? null);
+
+    if (other.kind === "entity") {
+      const entity = entityById.get(other.id);
+      const entityType = entity ? entityTypeById.get(entity.entity_type_id) : undefined;
+
+      return {
+        id: row.id,
+        relation: row.relation,
+        createdVia: row.created_via,
+        ruleId: row.rule_id,
+        createdAt: row.created_at,
+        other: {
+          kind: "entity" as const,
+          id: other.id,
+          label: entity?.display_name ?? null,
+          entityTypeKey: entityType?.key ?? null,
+          entityTypeName: entityType?.name ?? null,
+          isDeleted: entity ? entity.deleted_at !== null : true
+        }
+      };
+    }
+
+    const document = documentById.get(other.id);
 
     return {
       id: row.id,
@@ -85,7 +136,14 @@ export async function getConnections(
       createdVia: row.created_via,
       ruleId: row.rule_id,
       createdAt: row.created_at,
-      other: { kind: other.kind, id: other.id, label }
+      other: {
+        kind: "document" as const,
+        id: other.id,
+        label: document?.title ?? null,
+        entityTypeKey: null,
+        entityTypeName: null,
+        isDeleted: document ? document.deleted_at !== null : true
+      }
     };
   });
 }

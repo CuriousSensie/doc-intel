@@ -138,8 +138,21 @@ describe("getConnections", () => {
 
     const db = makeDb({
       connections: [{ data: rows, error: null }],
-      entities: [{ data: [{ id: "e2", display_name: "Other Entity" }], error: null }],
-      documents: [{ data: [{ id: "doc-1", title: "Invoice 42" }], error: null }]
+      entities: [
+        {
+          data: [
+            {
+              id: "e2",
+              display_name: "Other Entity",
+              entity_type_id: "type-customer",
+              deleted_at: null
+            }
+          ],
+          error: null
+        }
+      ],
+      entity_types: [{ data: [{ id: "type-customer", key: "customer", name: "Customer" }], error: null }],
+      documents: [{ data: [{ id: "doc-1", title: "Invoice 42", deleted_at: null }], error: null }]
     });
 
     const { getConnections } = await import("@/modules/connections/connections.service");
@@ -152,7 +165,14 @@ describe("getConnections", () => {
         createdVia: "manual",
         ruleId: null,
         createdAt: "2026-01-01T00:00:00Z",
-        other: { kind: "document", id: "doc-1", label: "Invoice 42" }
+        other: {
+          kind: "document",
+          id: "doc-1",
+          label: "Invoice 42",
+          entityTypeKey: null,
+          entityTypeName: null,
+          isDeleted: false
+        }
       },
       {
         id: "conn-2",
@@ -160,8 +180,54 @@ describe("getConnections", () => {
         createdVia: "manual",
         ruleId: null,
         createdAt: "2026-01-02T00:00:00Z",
-        other: { kind: "entity", id: "e2", label: "Other Entity" }
+        other: {
+          kind: "entity",
+          id: "e2",
+          label: "Other Entity",
+          entityTypeKey: "customer",
+          entityTypeName: "Customer",
+          isDeleted: false
+        }
       }
     ]);
+  });
+
+  it("marks the other side as deleted when it was soft-deleted, keeping its last-known label", async () => {
+    const rows = [
+      {
+        id: "conn-3",
+        source_kind: "entity",
+        source_id: "e1",
+        target_kind: "entity",
+        target_id: "e-gone",
+        relation: "related",
+        created_via: "manual",
+        rule_id: null,
+        created_at: "2026-01-03T00:00:00Z"
+      }
+    ];
+
+    const db = makeDb({
+      connections: [{ data: rows, error: null }],
+      entities: [
+        {
+          data: [
+            {
+              id: "e-gone",
+              display_name: "Merged Away Ltd",
+              entity_type_id: "type-customer",
+              deleted_at: "2026-01-04T00:00:00Z"
+            }
+          ],
+          error: null
+        }
+      ],
+      entity_types: [{ data: [{ id: "type-customer", key: "customer", name: "Customer" }], error: null }]
+    });
+
+    const { getConnections } = await import("@/modules/connections/connections.service");
+    const result = await getConnections(makeCtx(db), "entity", "e1");
+
+    expect(result[0].other).toMatchObject({ label: "Merged Away Ltd", isDeleted: true });
   });
 });
