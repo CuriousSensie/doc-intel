@@ -41,6 +41,7 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
   let correspondentId: number;
   let storagePathId: number;
   let customFieldId: number;
+  let customFieldValue: string;
   const uniqueName = `isolation_${Date.now()}`;
   const secretString = `SECRET_TENANT_A_${uniqueName}`;
 
@@ -117,6 +118,15 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
     // post_document/ doesn't itself grant the tenant group view/change (docs/spike-findings.md)
     // — the same PATCH submit-upload-to-paperless.ts does in production.
     await paperlessA.setOwnedObjectPermissions(`/api/documents/${documentId}/`, ownershipA);
+
+    // A real custom field VALUE on A's document — test #7 (below) is the still-open question
+    // docs/spike-findings.md §1 flagged: definitions leak (#6, confirmed), but do values leak
+    // too? Unlike definitions we don't mirror values locally, so if this leaks it's a deeper,
+    // unmitigated hole.
+    customFieldValue = `secret_value_${uniqueName}`;
+    await paperlessA.patch(`/api/documents/${documentId}/`, {
+      custom_fields: [{ field: customFieldId, value: customFieldValue }]
+    });
   });
 
   test.afterAll(async () => {
@@ -171,6 +181,31 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
     const paperlessB = await paperlessFor(orgB);
     const data = await paperlessB.get<{ results: Array<{ id: number }> }>("/api/custom_fields/");
     expect(data.results.some((o) => o.id === customFieldId)).toBe(false);
+  });
+
+  test("#7 B reads a custom field value on A's document — 404", async () => {
+    // specs/10-nonfunctional.md test #7 — docs/spike-findings.md §1 flagged this as
+    // high-priority for Phase 2's first pass: #6 confirmed definitions leak, but values are
+    // riskier since we never mirror them locally and rely entirely on Paperless's own
+    // per-document ACL. Two angles, since Paperless embeds values inline on the document
+    // object rather than exposing a separate value endpoint:
+    const paperlessB = await paperlessFor(orgB);
+
+    // (a) the same per-document 404 test #3 already exercises, now with a real value attached
+    // — proving a populated custom_fields array creates no alternate access path.
+    await expect(paperlessB.get(`/api/documents/${documentId}/`)).rejects.toThrow();
+
+    // (b) B knows customFieldId is a real field (the leaked list from #6) — filtering the
+    // document list by that field's value must not surface A's document either, which is the
+    // "deeper leak" the spike explicitly worried about: a curious tenant using a definition id
+    // leaked via #6 to go fishing for values across tenants.
+    const query = encodeURIComponent(
+      JSON.stringify([customFieldId, "exact", customFieldValue])
+    );
+    const data = await paperlessB.get<{ results: Array<{ id: number }> }>(
+      `/api/documents/?custom_field_query=${query}`
+    );
+    expect(data.results.some((d) => d.id === documentId)).toBe(false);
   });
 
   test("#8 B downloads A's document by direct URL — denied", async () => {
