@@ -42,6 +42,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      # Host-exposed for local dev only (pgAdmin/psql) — same convention as redis-app/clamav.
+      - "127.0.0.1:5433:5432"
 
   redis-paperless:
     image: redis:7-alpine
@@ -190,6 +193,10 @@ services:
       timeout: 10s
       retries: 10
       start_period: 180s
+    ports:
+      # Host-exposed for local dev only (running `worker` natively) — same convention as
+      # redis-app/paperless-webserver's dev-only ports above.
+      - "127.0.0.1:3310:3310"
 
   web:
     build:
