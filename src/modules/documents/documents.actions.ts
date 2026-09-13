@@ -2,6 +2,7 @@
 
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
+import { requireUser } from "@/modules/auth/session";
 import {
   getDocument,
   getDocumentHistory,
@@ -16,16 +17,19 @@ export async function listDocumentsAction(options: ListDocumentsOptions = {}) {
   return listDocuments(ctx.orgId, options);
 }
 
+// No buildRequestContext() here on purpose — that resolves an active org first (a real, measured
+// round trip), which getDocument()/getDocumentHistory() don't need: RLS scopes the read by
+// itself. requireUser() alone is enough (auth only, no org resolution).
 export async function getDocumentAction(documentId: string) {
   requireFeature("documents");
-  const ctx = await buildRequestContext();
-  return getDocument(ctx.orgId, documentId);
+  await requireUser();
+  return getDocument(documentId);
 }
 
 export async function getDocumentHistoryAction(documentId: string) {
   requireFeature("documents");
-  const ctx = await buildRequestContext();
-  return getDocumentHistory(ctx.orgId, documentId);
+  await requireUser();
+  return getDocumentHistory(documentId);
 }
 
 export async function updateDocumentAction(

@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NotFoundError } from "@/lib/errors";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
-import { getDocument, getDocumentHistory } from "@/modules/documents/documents.service";
-import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
+import { getDocument } from "@/modules/documents/documents.service";
 
 export const dynamic = "force-dynamic";
 
@@ -32,22 +31,22 @@ export default async function DocumentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   requireFeature("documents");
-  const [{ id }, { user }] = await Promise.all([params, requireUser("/dashboard/documents")]);
-  const organizationId = await getActiveOrganizationId(user.id);
-  if (!organizationId) notFound();
+  // Only `params` and auth are needed up front — getDocument() no longer needs a pre-resolved
+  // active org (see its own doc comment): one fewer sequential round trip before the document
+  // itself even starts loading.
+  const [{ id }] = await Promise.all([params, requireUser("/dashboard/documents")]);
 
   // specs/03-api.md: cross-tenant access is 404, never 403 — getDocument()'s own RLS-scoped
   // query already returns this as "not found" rather than a distinguishable denial.
   let document: Awaited<ReturnType<typeof getDocument>>;
   try {
-    document = await getDocument(organizationId, id);
+    document = await getDocument(id);
   } catch (error) {
     if (error instanceof NotFoundError) notFound();
     throw error;
   }
 
-  // Best-effort — a missing/unreachable Paperless history endpoint shouldn't break the page.
-  const history = await getDocumentHistory(organizationId, id).catch(() => []);
+  const { history } = document;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

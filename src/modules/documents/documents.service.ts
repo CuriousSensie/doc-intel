@@ -255,39 +255,55 @@ export async function listDocuments(
 export type DocumentDetails = Document & {
   connections: ConnectionWithOther[];
   paperless: { customFields: Array<{ field: number; value: unknown }> } | null;
+  history: DocumentHistoryEntry[];
 };
 
-// specs/03-api.md GET /documents/:id — mirror row + connections + a best-effort Paperless read.
-// A Paperless failure (orphaned document, transient outage) degrades to `paperless: null` rather
-// than failing the whole page — the mirror-backed metadata and connections are still useful on
-// their own, and specs/05 explicitly wants "connected entity was deleted"-style graceful
-// degradation, not a hard error, when the other side of a relationship is gone.
-export async function getDocument(organizationId: string, documentId: string): Promise<DocumentDetails> {
+// specs/03-api.md GET /documents/:id — mirror row + connections + history + a best-effort
+// Paperless read, all in one round of parallel fan-out off a single document-row fetch. This
+// used to be two separate exported functions (getDocument + getDocumentHistory), each fetching
+// the document row independently and running its own work sequentially after the caller's
+// first `await` finished — on a remote Supabase Cloud DB, every one of those round trips is
+// real, measurable latency (400-800ms each, measured), and stacking them sequentially is what
+// made the page slow. Paperless failures (orphaned document, transient outage) degrade to
+// `paperless: null`/a Paperless-less `history` rather than failing the whole page — specs/05
+// wants graceful degradation, not a hard error, when the other side of a relationship is gone.
+//
+// Deliberately takes only `documentId`, not `organizationId` — the caller doesn't need to
+// resolve an active org first (that was a whole extra ~400-600ms round trip on its own,
+// measured). `documents_select_member`'s RLS policy already scopes this select to orgs the
+// caller is a member of; a document belonging to an org they're not in simply doesn't come
+// back, which is exactly the specs/03-api.md "404, never 403" behavior this needs anyway.
+// organization_id for every downstream call (Paperless, connections) comes off the row itself.
+export async function getDocument(documentId: string): Promise<DocumentDetails> {
   const db = await createClient();
   const { data: doc, error } = await db
     .from("documents")
     .select("*")
     .eq("id", documentId)
-    .eq("organization_id", organizationId)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (error) throw error;
   if (!doc) throw new NotFoundError("Document not found");
 
+  const organizationId = doc.organization_id;
   const ctx: ServiceContext = { db, orgId: organizationId, actorId: null, correlationId: randomUUID() };
-  const connections = await getConnections(ctx, "document", documentId);
 
-  let paperless: DocumentDetails["paperless"] = null;
-  try {
-    const client = await paperlessFor(organizationId);
-    const paperlessDoc = await getPaperlessDocument(client, doc.paperless_document_id);
-    paperless = { customFields: paperlessDoc.custom_fields };
-  } catch {
-    paperless = null;
-  }
+  const [connections, paperless, history] = await Promise.all([
+    getConnections(ctx, "document", documentId),
+    (async (): Promise<DocumentDetails["paperless"]> => {
+      try {
+        const client = await paperlessFor(organizationId);
+        const paperlessDoc = await getPaperlessDocument(client, doc.paperless_document_id);
+        return { customFields: paperlessDoc.custom_fields };
+      } catch {
+        return null;
+      }
+    })(),
+    getDocumentHistory(documentId, { db, organizationId, paperlessDocumentId: doc.paperless_document_id })
+  ]);
 
-  return { ...doc, connections, paperless };
+  return { ...doc, connections, paperless, history };
 }
 
 export type DocumentHistoryEntry =
@@ -311,26 +327,40 @@ export type DocumentHistoryEntry =
 // specs/03-api.md GET /documents/:id/history — merged Paperless document history + our own
 // business audit_logs, per specs/02-data-model.md's explicit "never duplicate Paperless's
 // document history; the document detail UI shows both, fetched from their respective sources."
+// `getDocument()` already has the document row (organization_id + paperless_document_id) and a
+// client by the time it needs history, so it passes both through to skip a second, redundant
+// row fetch. A standalone caller only needs `documentId` — same RLS-scoped, no-pre-resolved-org
+// pattern as `getDocument()` itself.
 export async function getDocumentHistory(
-  organizationId: string,
-  documentId: string
+  documentId: string,
+  options: {
+    db?: Awaited<ReturnType<typeof createClient>>;
+    organizationId?: string;
+    paperlessDocumentId?: number;
+  } = {}
 ): Promise<DocumentHistoryEntry[]> {
-  const db = await createClient();
-  const { data: doc, error } = await db
-    .from("documents")
-    .select("id, paperless_document_id")
-    .eq("id", documentId)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
+  const db = options.db ?? (await createClient());
+  let organizationId = options.organizationId;
+  let paperlessDocumentId = options.paperlessDocumentId;
 
-  if (error) throw error;
-  if (!doc) throw new NotFoundError("Document not found");
+  if (organizationId === undefined || paperlessDocumentId === undefined) {
+    const { data: doc, error } = await db
+      .from("documents")
+      .select("organization_id, paperless_document_id")
+      .eq("id", documentId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!doc) throw new NotFoundError("Document not found");
+    organizationId = doc.organization_id;
+    paperlessDocumentId = doc.paperless_document_id;
+  }
 
   const [paperlessEntries, businessEntries] = await Promise.all([
     (async (): Promise<DocumentHistoryEntry[]> => {
       try {
         const client = await paperlessFor(organizationId);
-        const history = await getPaperlessDocumentHistory(client, doc.paperless_document_id);
+        const history = await getPaperlessDocumentHistory(client, paperlessDocumentId);
         return history.map((entry) => ({
           source: "paperless" as const,
           id: entry.id,

@@ -249,7 +249,7 @@ describe("getDocument", () => {
     }));
 
     const { getDocument } = await import("@/modules/documents/documents.service");
-    const result = await getDocument("org-1", "doc-1");
+    const result = await getDocument("doc-1");
 
     expect(result.connections).toEqual([{ id: "conn-1" }]);
     expect(result.paperless).toEqual({ customFields: [{ field: 1, value: "x" }] });
@@ -267,7 +267,7 @@ describe("getDocument", () => {
     }));
 
     const { getDocument } = await import("@/modules/documents/documents.service");
-    const result = await getDocument("org-1", "doc-1");
+    const result = await getDocument("doc-1");
 
     expect(result.paperless).toBeNull();
   });
@@ -278,7 +278,7 @@ describe("getDocument", () => {
     }));
 
     const { getDocument } = await import("@/modules/documents/documents.service");
-    await expect(getDocument("org-1", "doc-missing")).rejects.toThrow(/not found/i);
+    await expect(getDocument("doc-missing")).rejects.toThrow(/not found/i);
   });
 });
 
