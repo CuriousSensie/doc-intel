@@ -11,11 +11,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * allowlist, then an AV scan — all before submit-upload-to-paperless.ts hands the file to
  * Paperless.
  *
- * Concurrency: claimed via a conditional UPDATE (uploaded -> validating), same rationale as
- * provisionTenant() (src/modules/tenants/provision-tenant.ts) — the real work (storage
- * download, AV scan) spans round-trips a session-scoped advisory lock wouldn't cover.
+ * Concurrency: claimed via a conditional UPDATE (uploaded|validating -> validating — the second
+ * arm lets a BullMQ retry of this same job reclaim its own prior attempt's row; see
+ * claim_upload_validation()'s migration comment), same rationale as provisionTenant()
+ * (src/modules/tenants/provision-tenant.ts) — the real work (storage download, AV scan) spans
+ * round-trips a session-scoped advisory lock wouldn't cover.
+ *
+ * isLastAttempt gates the 'failed' write: found live that writing it on every failure — even
+ * one BullMQ will retry — raced with the claim above (a retry couldn't reclaim past
+ * 'validating' before the relax-claim fix, and even with that fix, prematurely surfacing
+ * 'failed' to the UI on an attempt that's about to succeed is misleading either way).
  */
-export async function validateUpload(orgId: string, uploadId: string): Promise<void> {
+export async function validateUpload(
+  orgId: string,
+  uploadId: string,
+  isLastAttempt: boolean
+): Promise<void> {
   const db = createAdminClient();
 
   const { data: claimed, error: claimError } = await db.rpc("claim_upload_validation", {
@@ -65,19 +76,26 @@ export async function validateUpload(orgId: string, uploadId: string): Promise<v
     logger.info("documents.validate_upload.completed", { orgId, uploadId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error("documents.validate_upload.failed", { orgId, uploadId, errorMessage: message });
-
-    const { error: failError } = await db.rpc("fail_upload_validation", {
-      p_upload_id: uploadId,
-      p_organization_id: orgId,
-      p_reason: message.slice(0, 500)
+    logger.error("documents.validate_upload.failed", {
+      orgId,
+      uploadId,
+      isLastAttempt,
+      errorMessage: message
     });
-    if (failError) {
-      logger.error("documents.validate_upload.fail_rpc_failed", {
-        orgId,
-        uploadId,
-        errorMessage: failError.message
+
+    if (isLastAttempt) {
+      const { error: failError } = await db.rpc("fail_upload_validation", {
+        p_upload_id: uploadId,
+        p_organization_id: orgId,
+        p_reason: message.slice(0, 500)
       });
+      if (failError) {
+        logger.error("documents.validate_upload.fail_rpc_failed", {
+          orgId,
+          uploadId,
+          errorMessage: failError.message
+        });
+      }
     }
     throw err;
   }

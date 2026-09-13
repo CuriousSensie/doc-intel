@@ -43,7 +43,20 @@ export function getQueue(name: QueueName): Queue {
     return existing;
   }
 
-  const queue = new Queue(name, { connection: getConnection() });
+  // No job here configured any retry policy — BullMQ's own default is `attempts: 1`, so a
+  // one-off transient failure (a network blip on a single Paperless POST, found live during
+  // e2e testing: an isolated "fetch failed" that succeeded on a bare retry moments later)
+  // permanently failed the job with zero retries, contradicting every job's own resumability
+  // design (checkpointing via paperless_task_id, conditional claims, etc. all assume a retry
+  // actually happens). 3 attempts, exponential backoff — same attempt count as
+  // PaperlessClient's own idempotent-GET retry (src/lib/paperless/client.ts's MAX_RETRIES).
+  const queue = new Queue(name, {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: "exponential", delay: 2_000 }
+    }
+  });
   queues.set(name, queue);
   return queue;
 }

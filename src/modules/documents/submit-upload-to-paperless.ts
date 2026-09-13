@@ -21,8 +21,19 @@ const ACTIVE_STATUSES = ["validated", "submitting", "processing"];
  * claim step — `paperless_task_id` on the row IS the checkpoint. A retry that finds it already
  * set skips straight to polling instead of re-POSTing the file (post_document/ is not
  * idempotent — a second POST would create a duplicate document).
+ *
+ * The initial claim accepts 'validated' OR 'submitting' (not just 'validated') so a BullMQ
+ * retry of this same job — after a purely transient failure, found live: an isolated one-off
+ * "fetch failed" on post_document/ that a bare retry moments later sailed through — can reclaim
+ * its own prior attempt's row instead of losing the claim race against itself and silently
+ * no-opping. isLastAttempt similarly gates the 'failed' write: only the final attempt writes a
+ * terminal status, so a mid-retry failure leaves the row resumable rather than stuck.
  */
-export async function submitUploadToPaperless(orgId: string, uploadId: string): Promise<void> {
+export async function submitUploadToPaperless(
+  orgId: string,
+  uploadId: string,
+  isLastAttempt: boolean
+): Promise<void> {
   const db = createAdminClient();
 
   const { data: upload, error: fetchError } = await db
@@ -55,7 +66,7 @@ export async function submitUploadToPaperless(orgId: string, uploadId: string): 
         .update({ status: "submitting" })
         .eq("id", uploadId)
         .eq("organization_id", orgId)
-        .eq("status", "validated")
+        .in("status", ["validated", "submitting"])
         .select("id");
       if (claimError) throw claimError;
       if (!claimedRows?.length) {
@@ -120,19 +131,26 @@ export async function submitUploadToPaperless(orgId: string, uploadId: string): 
     logger.info("documents.submit_upload.completed", { orgId, uploadId, paperlessDocumentId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error("documents.submit_upload.failed", { orgId, uploadId, errorMessage: message });
+    logger.error("documents.submit_upload.failed", {
+      orgId,
+      uploadId,
+      isLastAttempt,
+      errorMessage: message
+    });
 
-    const { error: failError } = await db
-      .from("document_uploads")
-      .update({ status: "failed", error_message: message.slice(0, 500) })
-      .eq("id", uploadId)
-      .eq("organization_id", orgId);
-    if (failError) {
-      logger.error("documents.submit_upload.fail_update_failed", {
-        orgId,
-        uploadId,
-        errorMessage: failError.message
-      });
+    if (isLastAttempt) {
+      const { error: failError } = await db
+        .from("document_uploads")
+        .update({ status: "failed", error_message: message.slice(0, 500) })
+        .eq("id", uploadId)
+        .eq("organization_id", orgId);
+      if (failError) {
+        logger.error("documents.submit_upload.fail_update_failed", {
+          orgId,
+          uploadId,
+          errorMessage: failError.message
+        });
+      }
     }
     throw err;
   }

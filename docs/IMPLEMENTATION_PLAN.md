@@ -325,6 +325,43 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       the full sweep (confirmed `ready`, 0 orphaned), deleted the document in Paperless, ran the
       full sweep again — `status` flipped to `orphaned`, `last_reconciled_at` updated. Test
       tenant and its Paperless-side objects cleaned up afterward.
+- [x] Upload pipeline job retry resilience — a real bug, not a hypothetical: BullMQ jobs had no
+      retry policy anywhere (`attempts` defaults to `1`), so a single transient failure (found
+      live during e2e testing: an isolated `AggregateError [ECONNREFUSED]` on one
+      `post_document/` call) permanently failed the job with zero retries, contradicting every
+      job's own resumability design (checkpointing via `paperless_task_id`, conditional claims)
+      which assumes a retry actually happens. Fixed in `src/lib/queue/index.ts` —
+      `defaultJobOptions: { attempts: 3, backoff: exponential }`. Enabling retries then surfaced
+      a second real bug: `validate-upload.ts`'s claim (`uploaded -> validating`) and
+      `submit-upload-to-paperless.ts`'s claim (`validated -> submitting`) each only matched
+      their *starting* status, so once a first attempt claimed the row, a BullMQ retry of that
+      *same* job could never reclaim it — the claim UPDATE matched zero rows, the job logged
+      "skipped_not_claimable" and returned successfully without doing anything, permanently
+      stranding the row. Fixed by relaxing both claims to also accept the status the job itself
+      transitions to (migration `20260913061540_relax_upload_claim_for_retries.sql` for the
+      RPC; a widened `.in("status", [...])` for the plain-SQL one) and by threading a new
+      `isLastAttempt` flag (`worker/context.ts`) through all three jobs so only the *final*
+      attempt writes a terminal `'failed'` status — a mid-retry failure now leaves the row in
+      its in-progress status, resumable by the next attempt, instead of stuck. Also improved
+      `PaperlessClient`'s error logging (`src/lib/paperless/client.ts`) to unwrap
+      `AggregateError`'s nested `.errors[]` — the top-level `.message` for a connection failure
+      is just the unhelpful generic `"fetch failed"`, which is what made this whole class of bug
+      invisible until deliberately dug into.
+- [x] Minimal documents UI (`/dashboard/documents`) — list + direct-to-storage upload form,
+      enough to actually exercise the upload pipeline through the real app rather than only via
+      API routes. `listDocuments()`/`listRecentUploads()` added to `documents.service.ts` (a
+      deliberately minimal, unfiltered version — the full mixed-filter `listDocuments()` with
+      `q`/type/date/entity filters is Phase 2 scope per the plan; search passthrough below still
+      depends on that). Client-side upload (`document-upload-form.tsx`) is the first real
+      browser-side caller of `src/lib/supabase/client.ts` — which surfaced a genuine,
+      previously-invisible bug: `NEXT_PUBLIC_*` env vars were never actually reaching the client
+      bundle (see the dedicated fix commit). Verified end-to-end with a real Playwright e2e test
+      (`e2e/documents.spec.ts` + new `e2e/helpers/test-fixtures.ts` — a real confirmed Supabase
+      Auth user, a real provisioned tenant via the actual `provision-tenant` queue, a real
+      worker container, a real Paperless instance): login → upload a PDF → watch it move through
+      validate → submit-to-paperless → sync → `ready`, visible in the UI. Needed a real minimal
+      PDF fixture, not an arbitrary image — a 1×1 PNG with no DPI metadata is a genuine Paperless
+      rejection (`"no DPI information is present... OCR_IMAGE_DPI is not set"`), not a bug.
 - [ ] Search passthrough on `documents.service.ts`
 - [ ] `e2e/isolation.spec.ts` — tests 1–8, 17–20 (the raw checks were run manually as
       `scripts/spike/isolation.ts` this session — 9 of these 11 passed live against a real

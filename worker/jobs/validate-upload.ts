@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 
 import { validateUpload } from "@/modules/documents/validate-upload";
 
-import type { JobPayload } from "../context";
+import { isLastAttempt, type JobPayload } from "../context";
 
 type ValidateUploadPayload = JobPayload & { uploadId: string };
 
@@ -11,5 +11,5 @@ export async function validateUploadJob(job: Job<JobPayload>): Promise<void> {
   if (!uploadId) {
     throw new Error("validate-upload job payload missing uploadId");
   }
-  await validateUpload(orgId, uploadId);
+  await validateUpload(orgId, uploadId, isLastAttempt(job));
 }

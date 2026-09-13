@@ -23,12 +23,14 @@ import { createNotification } from "@/modules/notifications/notifications.servic
  * — multiple callers can legitimately race to sync the same document (e.g. the webhook firing
  * while reconciliation is also running), and `documents`' own unique
  * (organization_id, paperless_document_id) constraint is what makes re-running this safe, not a
- * status-transition guard.
+ * status-transition guard. isLastAttempt only gates the 'failed' write (cosmetic here, unlike
+ * the other two jobs — there's no claim to strand, a retry just re-runs the whole thing).
  */
 export async function syncPaperlessDocument(
   orgId: string,
   paperlessDocumentId: number,
-  uploadId?: string | null
+  uploadId: string | null | undefined,
+  isLastAttempt: boolean
 ): Promise<void> {
   const db = createAdminClient();
 
@@ -140,10 +142,11 @@ export async function syncPaperlessDocument(
       orgId,
       paperlessDocumentId,
       uploadId,
+      isLastAttempt,
       errorMessage: message
     });
 
-    if (uploadId) {
+    if (uploadId && isLastAttempt) {
       const { error: failError } = await db
         .from("document_uploads")
         .update({ status: "failed", error_message: message.slice(0, 500) })

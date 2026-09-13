@@ -32,6 +32,19 @@ function decodePostgresBytea(value: string): Buffer {
   return Buffer.from(hex, "hex");
 }
 
+// undici wraps connection-level failures (ECONNREFUSED, ENOTFOUND, etc.) as an AggregateError
+// with an empty top-level .message — the real detail is one level deeper, in .errors[].
+function describeErrorCause(cause: unknown): string | undefined {
+  if (cause instanceof AggregateError) {
+    return cause.errors
+      .map((e: unknown) => (e instanceof Error ? e.message : String(e)))
+      .join("; ");
+  }
+  if (cause instanceof Error) return cause.message;
+  if (cause !== undefined) return String(cause);
+  return undefined;
+}
+
 // No default — makes isolation test #20 ("no creation without explicit permissions") a
 // compile-time guarantee, not just a convention.
 export type OwnedObjectPermissions = { ownerId: number; groupId: number };
@@ -120,7 +133,13 @@ export class PaperlessClient {
           method,
           path,
           durationMs,
-          errorMessage: err.message
+          errorMessage: err.message,
+          // err.message is frequently just the unhelpful generic "fetch failed" for undici
+          // errors — found live, diagnosing a real post_document/ failure that gave no other
+          // signal: the actual reason is nested under .cause, and for a connection-level
+          // failure .cause is itself an AggregateError (e.g. ECONNREFUSED) whose own .message
+          // is empty — the real detail is in .cause.errors[].
+          errorCause: describeErrorCause(err.cause)
         });
 
         if (isRetryablePaperlessError(null, err) && attempt < attempts) {

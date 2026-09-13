@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 
 import { syncPaperlessDocument } from "@/modules/documents/sync-paperless-document";
 
-import type { JobPayload } from "../context";
+import { isLastAttempt, type JobPayload } from "../context";
 
 type SyncPaperlessDocumentPayload = JobPayload & {
   paperlessDocumentId: number;
@@ -14,5 +14,5 @@ export async function syncPaperlessDocumentJob(job: Job<JobPayload>): Promise<vo
   if (!paperlessDocumentId) {
     throw new Error("sync-paperless-document job payload missing paperlessDocumentId");
   }
-  await syncPaperlessDocument(orgId, paperlessDocumentId, uploadId);
+  await syncPaperlessDocument(orgId, paperlessDocumentId, uploadId, isLastAttempt(job));
 }
