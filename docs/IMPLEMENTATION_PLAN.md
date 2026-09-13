@@ -363,10 +363,25 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       PDF fixture, not an arbitrary image — a 1×1 PNG with no DPI metadata is a genuine Paperless
       rejection (`"no DPI information is present... OCR_IMAGE_DPI is not set"`), not a bug.
 - [ ] Search passthrough on `documents.service.ts`
-- [ ] `e2e/isolation.spec.ts` — tests 1–8, 17–20 (the raw checks were run manually as
-      `scripts/spike/isolation.ts` this session — 9 of these 11 passed live against a real
-      instance; #6 and #8's equivalents failed and are tracked above, not silently dropped;
-      lifting these into real Playwright specs is still open)
+- [x] `e2e/isolation.spec.ts` — tests 1, 3, 4, 5, 6, 8, 17, 18, 19, 20 (2 and 7 need routes/data
+      that don't exist yet — our own `documents.getDocument()` and Paperless custom field
+      *values* on a document — tracked as still-open, not silently dropped; 9-16 excluded, blocked
+      on Phase 2-5 features; 12 tracked separately). Ported from `scripts/spike/isolation.ts`
+      using the real production client (`paperlessFor()`, `createOwnedObject()`,
+      `postForm()`/`pollPaperlessTask()`) instead of the spike's standalone hand-rolled helpers —
+      real two tenants, real Paperless, real Supabase, no mocks. Two new checks the spike
+      couldn't cover, both exercising Phase 1 code that didn't exist yet when the spike ran: #18
+      (a real `authenticated`-role Supabase client, not the admin client, denied downloading
+      another org's upload by its storage path — confirms the private-bucket-no-RLS-grant design
+      holds) and #19 (`upsertDocumentObjectMap()`, exported for this test, correctly throws
+      instead of reassigning when a `paperless_object_map` row is already claimed by another
+      org — the normal call path can't reach this branch since Paperless's own ACL already stops
+      a leak from surfacing, so this calls it directly to prove the defense-in-depth guard
+      itself works). #6 (`custom_field_defs` leak) uses `test.fail()`, not an inverted
+      assertion — this is `docs/spike-findings.md` §1's confirmed, still-open Paperless bug, so
+      the test is *expected* to fail; if Paperless ever fixes it upstream this starts
+      unexpectedly passing, which Playwright flags loudly rather than silently going green.
+      Verified live: 10/10 report correctly (9 real passes, 1 tracked expected-failure).
 - [x] `.github/workflows/ci.yml` (lint/typecheck/test/build + Playwright against a real
       Paperless container and a CI-scoped Supabase Cloud/local Supabase test project) — written;
       not yet run in actual GitHub Actions (no push to a remote this session)

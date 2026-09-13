@@ -169,7 +169,11 @@ export async function syncPaperlessDocument(
 // model.md) — a conflict here would mean two different orgs' documents mapping to the same
 // Paperless id, which should be structurally impossible under correct tenant isolation. Treat
 // it as a loud failure, not something to silently paper over by reassigning the mapping.
-async function upsertDocumentObjectMap(
+// Exported for e2e/isolation.spec.ts's test #19 ("reconciliation sweep does not adopt B's
+// documents") — the normal call path can't exercise this guard (Paperless's own ACL already
+// stops org B from ever seeing org A's document, so the conflict path is only reachable by
+// calling this directly with a paperless_id already claimed by another org).
+export async function upsertDocumentObjectMap(
   db: ReturnType<typeof createAdminClient>,
   orgId: string,
   paperlessDocumentId: number,

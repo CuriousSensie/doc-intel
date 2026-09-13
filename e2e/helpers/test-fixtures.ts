@@ -1,7 +1,11 @@
 import type { Page } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { requireEnv } from "@/lib/env";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { provisionTenant } from "@/modules/tenants/provision-tenant";
+import type { Database } from "@/types/database";
 
 import { loadDotEnv } from "./env";
 
@@ -27,6 +31,23 @@ export async function createConfirmedTestUser(): Promise<TestUser> {
 export async function deleteTestUser(userId: string): Promise<void> {
   const admin = createAdminClient();
   await admin.auth.admin.deleteUser(userId);
+}
+
+// A real, RLS-scoped client authenticated as a specific test user — for asserting what a user
+// actually can/can't read via Supabase directly (e2e/isolation.spec.ts's tests #2/#18), without
+// needing a browser. Uses the publishable key + a real password sign-in, same as the browser
+// client would, just without cookies/document.
+export async function createUserClient(user: TestUser): Promise<SupabaseClient<Database>> {
+  const client = createClient<Database>(
+    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+  );
+  const { error } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password
+  });
+  if (error) throw error;
+  return client;
 }
 
 export async function loginAsTestUser(page: Page, user: TestUser): Promise<void> {
@@ -92,4 +113,14 @@ export async function provisionTestOrganization(organizationId: string): Promise
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`Provisioning timed out for org ${organizationId}`);
+}
+
+// The direct-call counterpart to provisionTestOrganization() above — for specs like
+// isolation.spec.ts that do *all* their Paperless work in this same host process (no browser,
+// no separate worker container involved anywhere in the test), so there's no cross-process
+// base_url mismatch to avoid. Calling this from a spec that also needs a containerized worker
+// (e.g. one that uploads through the real API) would persist the wrong base_url for that
+// worker to use — see provisionTestOrganization()'s comment.
+export async function provisionTestOrganizationDirect(organizationId: string): Promise<void> {
+  await provisionTenant(organizationId);
 }
