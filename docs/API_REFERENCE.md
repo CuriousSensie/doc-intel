@@ -48,7 +48,7 @@ Conventions used throughout the codebase, so they aren't repeated per entry belo
 - `hasFeature(plan: PlanKey, feature: keyof PlanFeatureMap): boolean`
 - `getLimit(plan: PlanKey, limit: keyof PlanFeatureMap): number`
 - `requireSubscription(owner: BillingOwner, allowedPlans: PlanKey[]): Promise<PlanKey>` — throws `AuthorizationError` if the owner's plan isn't in the list.
-- `can(role: "owner" | "admin" | "member", permission: string): boolean` — permission strings: `"organization.billing.manage"`, `"organization.members.invite"`, `"organization.settings.manage"`, `"organization.files.manage"`, `"organization.read"`, `"organization.*"` (owner wildcard).
+- `can(role: "owner" | "admin" | "member", permission: string): boolean` — permission strings: `"organization.billing.manage"`, `"organization.members.invite"`, `"organization.settings.manage"`, `"organization.read"`, `"organization.*"` (owner wildcard).
 
 ### `redirects.ts`
 - `getSafeRedirectPath(value: FormDataEntryValue | string | null | undefined): string` — defaults to `/dashboard`; blocks protocol-relative/backslash/newline paths.
@@ -190,24 +190,20 @@ the enum value to `env.ts`. See [MODULES.md#email](MODULES.md#email).
 - `markAsReadAction(formData: FormData)`
 - `markAllAsReadAction()`
 
-## `src/modules/files/` and `src/lib/files/validate.ts`
+## `src/modules/profile/avatar.service.ts` and `src/lib/files/validate.ts`
 
-### `files.service.ts`
-- `type FileRecord`
-- `uploadFile(actor: AuthContext, input: { buffer, filename, declaredMimeType, size }): Promise<FileRecord>` — category `"document"`; validates, uploads to the `files` bucket, inserts the row, logs `file.uploaded`; rolls back the storage object if the insert fails.
-- `uploadAvatar(actor, input: { buffer, declaredMimeType, size }): Promise<string>` — category `"avatar"`; uploads to `avatars`, updates `profiles.avatar_url`, deletes the previous avatar object, logs `avatar.uploaded`, returns the public URL.
-- `listFiles(options?): Promise<{ items, nextCursor }>` — cursor-paginated, default limit 20, RLS does the visibility filtering.
-- `deleteFile(actor, fileId): Promise<void>` — throws `NotFoundError`/`AuthorizationError`; removes the storage object + row atomically; logs `file.deleted`.
-- `getFileDownloadUrl(fileId): Promise<string>` — throws `NotFoundError`; returns a signed URL (`filesConfig.signedUrlExpirySeconds`).
+The boilerplate's generic Files module (`src/modules/files/`) was removed entirely — see
+[MODULES.md](MODULES.md). Avatar upload, the one part of it still needed, moved here.
 
-### `files.actions.ts`
-- `uploadFileAction(formData: FormData)`
-- `deleteFileAction(formData: FormData)`
+### `avatar.service.ts`
+- `uploadAvatar(actor, input: { buffer, declaredMimeType, size }): Promise<string>` — validates against `avatarConfig`, uploads to `avatars`, updates `profiles.avatar_url`, deletes the previous avatar object, logs `avatar.uploaded`, returns the public URL.
+
+### `avatar.actions.ts`
 - `uploadAvatarAction(formData: FormData)`
 
 ### `src/lib/files/validate.ts`
-- `sniffMimeType(buffer: Buffer): string | null` — magic-byte detection: PNG/JPEG/GIF/WEBP/PDF.
-- `validateFile(input: { buffer, declaredMimeType, size }, category: FileCategory): string` — returns the resolved MIME type; throws `ValidationError` on a size/type mismatch or disallowed type.
+- `sniffMimeType(buffer: Buffer): string | null` — magic-byte detection: PNG/JPEG/GIF/WEBP/PDF/TIFF/zip.
+- `validateFileAgainstConfig(input: { buffer, declaredMimeType, size }, config: { maxSizeBytes, allowedMimeTypes }): string` — returns the resolved MIME type; throws `ValidationError` on a size/type mismatch or disallowed type. Used by both `avatarConfig` (avatar upload) and `documentsConfig` (the Documents upload pipeline).
 
 ## `src/modules/admin/`
 
@@ -330,7 +326,7 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `appConfig` — `{ name, description, url, supportEmail, logo, social, auth: {...}, features: featureConfig, billing: billingConfig }`.
 
 ### `features.ts`
-- `featureConfig` — `{ billing, organizations, credits, files, admin, notifications, mfa, outgoingWebhooks, cookieConsent }`.
+- `featureConfig` — `{ billing, organizations, credits, documents, admin, notifications, mfa, outgoingWebhooks, cookieConsent }`.
 - `type FeatureKey = keyof typeof featureConfig`
 - `isFeatureEnabled(feature: FeatureKey): boolean`
 
@@ -340,11 +336,10 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `billingConfig` — `{ currency, creditPacks, plans }`.
 
 ### `documents.ts`
-- `documentsConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes, pendingExpiryMinutes }` — Pomočnik, separate from `files.ts`'s generic config (direct-to-storage, no spec'd size limit — see the file's own comment for the reasoning).
+- `documentsConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes, pendingExpiryMinutes }` — Pomočnik, direct-to-storage, no spec'd size limit (see the file's own comment for the reasoning).
 
-### `files.ts`
-- `type FileCategory = "avatar" | "document"`, `FileCategoryConfig`.
-- `filesConfig: { categories: Record<FileCategory, FileCategoryConfig>; signedUrlExpirySeconds }`.
+### `avatar.ts`
+- `avatarConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes }`.
 
 ### `navigation.ts`
 - `type NavigationItem = { label, href, feature?: FeatureKey }`

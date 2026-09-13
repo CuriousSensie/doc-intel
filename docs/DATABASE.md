@@ -134,19 +134,6 @@ erDiagram
     timestamptz created_at
   }
 
-  FILES {
-    uuid id PK
-    uuid owner_id FK "auth.users"
-    uuid organization_id FK "nullable"
-    text bucket
-    text path
-    text filename
-    text mime_type
-    bigint size "> 0"
-    jsonb metadata
-    timestamptz created_at
-  }
-
   AUDIT_LOGS {
     uuid id PK
     uuid actor_id FK "auth.users, set null, nullable = system-initiated"
@@ -170,16 +157,6 @@ erDiagram
     jsonb payload
     text error
     timestamptz processed_at
-    timestamptz created_at
-    timestamptz updated_at
-  }
-
-  PROJECTS {
-    uuid id PK
-    uuid owner_id FK "auth.users"
-    uuid organization_id FK "nullable"
-    text name
-    text description
     timestamptz created_at
     timestamptz updated_at
   }
@@ -276,12 +253,8 @@ erDiagram
   PROFILES ||--o{ USAGE_COUNTERS : "owns (user mode)"
   ORGANIZATIONS ||--o{ USAGE_COUNTERS : "owns (org mode)"
   PROFILES ||--o{ NOTIFICATIONS : "receives"
-  PROFILES ||--o{ FILES : "owns"
-  ORGANIZATIONS ||--o{ FILES : "scopes (optional)"
   PROFILES ||--o{ AUDIT_LOGS : "acts (optional — null = system)"
   ORGANIZATIONS ||--o{ AUDIT_LOGS : "scopes (optional)"
-  PROFILES ||--o{ PROJECTS : "owns"
-  ORGANIZATIONS ||--o{ PROJECTS : "scopes (optional)"
 ```
 
 `stripe_customers`, `subscriptions`, `credit_transactions`, and `usage_counters` all share the
@@ -313,7 +286,7 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | `is_app_admin()` | `true` if the current session's user has `profiles.is_app_admin = true` and isn't suspended. Used in nearly every RLS policy as the admin-bypass clause. |
 | `is_organization_member(target_organization_id)` | `true` if the current session's user is a member of the org **and** the org isn't suspended. The suspension check lives here, not in application code — see [SECURITY.md](SECURITY.md#admin). |
 | `has_organization_role(target_organization_id, allowed_roles)` | Same as above, plus a role check. |
-| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Pomočnik. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `files_insert_owner`). |
+| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Pomočnik. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `document_uploads_insert_member`). |
 | `protect_system_columns()` | Trigger function on `organizations` — rejects a non-`service_role` write to `provisioning_status` or `ai_enabled` (system-managed; set only by the tenant-provisioning job and the AI opt-in flow). RLS is row-level, not column-level, so this is the enforcement point — Pomočnik. |
 | `create_organization(org_name, org_slug)` | Creates an org and the creator's `owner` membership in one transaction (the creator has no RLS access to insert their own membership otherwise — see [SECURITY.md](SECURITY.md#organizations)). |
 | `get_organization_invitation(p_token)` | Looks up an invitation by its token hash — the invitee isn't a member yet, so this can't be a plain RLS-scoped select. |
@@ -337,12 +310,12 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | Bucket | Visibility | Size limit | Used by |
 | --- | --- | --- | --- |
 | `avatars` | Public | 5 MB | `uploadAvatar()` — served via `getPublicUrl`, no signed URL needed |
-| `files` | Private | 20 MB | `uploadFile()` / `getFileDownloadUrl()` — every read is a short-lived signed URL |
-| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Pomočnik. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other two buckets use); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
+| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Pomočnik. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other bucket uses); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
 
 No `storage.objects` RLS policies exist for either bucket — every read/write goes through the
-service-role admin client from trusted server code. See
-[MODULES.md#files](MODULES.md#files).
+service-role admin client from trusted server code. The boilerplate's private `files` bucket was
+dropped along with the Files module — see
+`supabase/migrations/20260913120000_drop_files_and_projects.sql`.
 
 ## Tables reference
 
@@ -360,10 +333,8 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `credit_transactions` | select only (owner or admin) — **no insert policy**, admin client only. | `(user_id)`, `(organization_id)` |
 | `usage_counters` | select only (owner or admin) — **no insert/update policy**, admin client only. | partial unique `(owner_type,user_id,feature,period) where organization_id is null`; partial unique `(owner_type,organization_id,feature,period) where user_id is null` |
 | `notifications` | select-own, update-own — **no insert policy**, admin client only. | `notifications_user_created_idx (user_id, created_at desc)` |
-| `files` | select: owner, org member, or admin. insert: owner (and org member **with write access** if org-scoped — `has_organization_write_access()`, so a `read-only` member cannot upload, per Pomočnik's migration). delete: owner, org owner/admin, or admin. **No update policy.** | `files_owner_created_idx`, `files_organization_created_idx` (both `created_at desc, id desc`, for cursor pagination) |
 | `audit_logs` | select: admin, or org owner/admin for their own org's rows. **No insert policy at all** — `logEvent()`'s `auditLogSink` (admin client) is the only writer. | `audit_logs_actor_idx (actor_id, created_at desc)` |
 | `webhook_events` | No policies read in application code (admin-client only, used solely by the Stripe webhook handler for idempotency). | unique `(provider, event_id)` |
-| `projects` | Scaffolded in the initial schema; no module currently reads/writes it. | — |
 | `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` — Pomočnik. | PK is `organization_id` itself (1:1) |
 | `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Pomočnik. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
 | `entity_types` | select: org member or admin. write (insert/update/delete): org member **with write access** or admin — `has_organization_write_access()`, so `read-only` can't create/edit entity types either. Seeded (4 system rows per org) by `complete_provisioning()`, not application code — Pomočnik. | `(organization_id)` |
@@ -392,6 +363,7 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260912125436_document_upload_validation_functions.sql` | **Pomočnik Level 0.** Adds `claim_upload_validation()`/`complete_upload_validation()`/`fail_upload_validation()` for `worker/jobs/validate-upload.ts`, following the provisioning trio's claim/complete/fail pattern but explicitly service-role-only (see the Functions table above for why). First migration this session pushed to the real, live Supabase Cloud project rather than a throwaway container — see the previous two `pomocnik_orgs_extension`/`pomocnik_write_access_function` rows for the bug that surfaced doing so. |
 | `20260912195634_transactional_membership_audit.sql` | **Pomočnik.** Adds `update_member_role()`, `remove_member()`, `leave_organization()`, and augments `transfer_organization_ownership()` so organization permission-change audit rows are written in the same transaction as the mutation (ADR-0008) — see the Functions table above. Verified live: each function called unauthenticated against the real project correctly raises `P0001: Authentication required` from inside the right function body (not a generic SQL error), confirming argument types and column references resolve correctly. |
 | `20260913061540_relax_upload_claim_for_retries.sql` | **Pomočnik.** Widens `claim_upload_validation()`'s claimable source statuses from `uploaded` only to `uploaded` or `validating` — a bug enabling BullMQ retries surfaced live: a same-job retry landing after a transient failure left the row at `validating`, and the claim could never re-match it, permanently stranding the upload with no error. |
+| `20260913120000_drop_files_and_projects.sql` | **Pomočnik Level 1.** Drops the boilerplate's `files` and `projects` tables (with their policies/indexes) and the `files` Storage bucket entirely — neither is part of the product; Documents/Paperless and the `project` entity type supersede them. `has_organization_write_access()` is kept (load-bearing elsewhere by now). Avatar upload was extracted out of the files module first — see `src/modules/profile/avatar.service.ts`. |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

@@ -13,7 +13,6 @@ those functions read/write, see [DATABASE.md](DATABASE.md).
 | RBAC | Optional | Organizations |
 | Billing | Optional | Stripe |
 | Credits | Optional | Billing |
-| Files | Optional | Supabase Storage |
 | Documents | Optional | Organizations, Supabase Storage, Paperless — Pomočnik |
 | Notifications | Optional | Auth |
 | Admin | Optional | Auth |
@@ -188,36 +187,12 @@ consider centralizing into a small event-dispatch module (`event type -> channel
 point — not before, per temp.md §109's guidance against abstraction layers with only one real
 caller.
 
-## Files
-
-**Purpose**: Supabase Storage-backed file uploads with ownership, ownership-based access, MIME/size
-validation, and signed downloads — a generic `/dashboard/files` list plus the concrete avatar
-upload workflow on `/settings/profile`.
-
-**Dependency**: Supabase Storage. Uses the `files` table from the initial schema (select-own/select-org-member/select-admin,
-insert-owner, delete-owner-or-org-admin RLS — no update policy) plus the `avatars` (public) and
-`files` (private) Storage buckets created in
-`supabase/migrations/20260822090000_files_storage.sql`.
-
-**Configuration**: gated by `features.files`. Per-category size caps and MIME allowlists
-(`avatar`, `document`) live in `src/config/files.ts`, along with the signed-URL expiry used for
-private downloads.
-
-**How to enable**: set `FEATURE_FILES=true` (default). `/dashboard/files` and the avatar section
-on `/settings/profile` appear automatically once enabled.
-
-**How to extend**: `src/modules/files/files.service.ts` holds all Storage/DB access —
-`uploadFile`/`uploadAvatar` (validate via `src/lib/files/validate.ts`'s magic-byte sniffing, then
-write through the admin client), `listFiles` (cursor-paginated, reusing `src/lib/pagination.ts`
-through the user-scoped client so RLS does the visibility filtering), `deleteFile` (an
-app-level ownership/org-admin check via `canManageFile` before an atomic storage-object + row
-delete through the admin client), and `getFileDownloadUrl` (confirms visibility via the
-user-scoped client, then mints a signed URL through the admin client — see
-`src/app/api/files/[id]/download/route.ts`). Uploads are automatically scoped to the uploader's
-active organization when organizations are enabled (no per-upload "share with org" toggle exists
-yet — add one only once a real need for private-within-org files shows up). Deleting an
-org-scoped file as an org admin (not just the file's owner) reuses `can(role, "organization.files.manage")`
-from the Organizations module's RBAC, the same pattern as billing's permission checks.
+**Note**: the boilerplate's original generic "Files" module (a `/dashboard/files` list backed by
+a `public.files` table and a private `files` Storage bucket) has been removed entirely — not
+deprecated — in favor of the Documents module below. Avatar upload, the one thing that lived
+inside that module and is still needed, was extracted to `src/modules/profile/avatar.service.ts`
++ `src/config/avatar.ts` (still uses the `avatars` Storage bucket, which was never Files-specific).
+See `supabase/migrations/20260913120000_drop_files_and_projects.sql`.
 
 ## Documents — Pomočnik
 
@@ -232,8 +207,8 @@ reached via `src/lib/paperless/client.ts`'s `paperlessFor(orgId)`), and a runnin
 process — uploads do nothing without one.
 
 **Configuration**: gated by `features.documents`. Size cap and MIME allowlist in
-`src/config/documents.ts` (separate from the generic Files module's `src/config/files.ts` — a
-100MB cap and PDF/image/office-doc allowlist, not the generic module's smaller/simpler one).
+`src/config/documents.ts` — a 100MB cap and PDF/image/office-doc allowlist, distinct from
+`src/config/avatar.ts`'s much smaller image-only config.
 
 **How to enable**: set `FEATURE_DOCUMENTS=true` (default). The "Documents" nav entry
 (`src/config/navigation.ts`) and `/dashboard/documents` appear automatically once enabled.
@@ -355,11 +330,11 @@ see `docs/SECURITY.md` for the retention mechanism.
 **How to extend**: call `logEvent({ actorId, action, entityType?, entityId?, organizationId?,
 metadata? })` from any real mutation worth an audit trail — action names are dot-namespaced
 (`auth.login`, `organization.member.removed`, `admin.user.suspended`, `billing.subscription.updated`,
-`file.deleted`, etc.). Current callers: every admin-issued mutation in this module, plus the most
+`avatar.uploaded`, etc.). Current callers: every admin-issued mutation in this module, plus the most
 security/state-changing existing flows in auth (`auth.actions.ts`), organizations
 (`organizations.actions.ts` — for everything *except* the four permission-change actions below),
-the Stripe webhook handler (actor is `null` for these — system/Stripe-initiated), and files
-(`files.service.ts`). Read-only
+the Stripe webhook handler (actor is `null` for these — system/Stripe-initiated), and profile
+avatar uploads (`avatar.service.ts`). Read-only
 actions (listing, viewing) are intentionally not logged. **Organization permission changes are
 the one exception**: `update_member_role`/`remove_member`/`leave_organization`/
 `transfer_organization_ownership` in `organizations.actions.ts` no longer call `logEvent()` at

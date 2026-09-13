@@ -27,8 +27,8 @@ supabase/       SQL migrations — the schema, indexes, functions, triggers, and
 e2e/            Playwright specs, one file per module.
 ```
 
-A module's internal split is deliberate and consistent across all nine of them (`auth`,
-`organizations`, `email`, `billing`, `notifications`, `files`, `admin`, `users`): **`service.ts`
+A module's internal split is deliberate and consistent across all of them (`auth`,
+`organizations`, `email`, `billing`, `notifications`, `documents`, `admin`, `users`): **`service.ts`
 never imports `next/navigation` or reads `FormData`, and `actions.ts` never constructs a Supabase
 query directly.** A service function is a plain async function you could call from a script, a
 cron job, or another module — an action is a thin adapter between a `<form>` and that function.
@@ -37,12 +37,12 @@ cron job, or another module — an action is a thin adapter between a `<form>` a
 
 UI (`src/app/**`) imports from `src/modules/**` and `src/components/**`. Modules import from
 `src/lib/**` and `src/config/**`, and — sparingly, only where a real cross-module need
-exists — from each other's `service.ts` (e.g. `src/modules/files/files.service.ts` imports
-`can()` from `src/modules/auth/authorization.ts`; `src/modules/admin/*.service.ts` imports
-`logEvent` from `src/lib/events/`). `src/lib/**` and `src/config/**` never import from
+exists — from each other's `service.ts` (e.g. `src/modules/profile/avatar.service.ts` imports
+`validateFileAgainstConfig` from `src/lib/files/validate.ts`; `src/modules/admin/*.service.ts`
+imports `logEvent` from `src/lib/events/`). `src/lib/**` and `src/config/**` never import from
 `src/modules/**` or `src/app/**` — infrastructure doesn't know about features built on top of it.
 This is what lets `src/lib/events/`, for instance, be called from `auth`, `organizations`,
-`billing`, `files`, and `admin` without any of those creating a dependency on each other.
+`billing`, `documents`, and `admin` without any of those creating a dependency on each other.
 
 ## Request flow
 
@@ -165,8 +165,8 @@ database.
   `organizations`/`organization_members`/`organization_invitations` directly; `billing.service.ts`
   and `credits.service.ts` own the billing tables. Cross-module reads happen through the other
   module's exported service function, not a raw query against its table.
-- **Feature flags gate at the boundary, not inside business logic.** `requireFeature("files")`
-  (or `isFeatureEnabled("files")` for a conditional render) is called at the top of an action or
+- **Feature flags gate at the boundary, not inside business logic.** `requireFeature("documents")`
+  (or `isFeatureEnabled("documents")` for a conditional render) is called at the top of an action or
   page — the service functions underneath assume the feature is on. The one deliberate exception
   is `createNotification`, which no-ops internally when `features.notifications` is off, so every
   *producer* (a dozen call sites across other modules) doesn't have to remember to check first.
@@ -238,7 +238,7 @@ every attempt.
 
 ### Cursor-based pagination
 
-Every paginated list in the app (notifications, files, admin users/organizations/audit log) uses
+Every paginated list in the app (notifications, documents, admin users/organizations/audit log) uses
 the same `encodeCursor`/`decodeCursor` pair (`src/lib/pagination.ts`) over `(created_at, id)`
 rather than offset/limit — stable under concurrent inserts and doesn't degrade on large tables the
 way `OFFSET` does. One generic implementation, reused rather than reinvented per list.
