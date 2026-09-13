@@ -168,6 +168,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      # Host-exposed for local dev only (running `web`/`worker` natively against a dockerized
+      # queue, e.g. e2e runs) — same convention as paperless-webserver's own dev-only port
+      # below. 6380, not 6379, since a host-installed Redis commonly already holds 6379.
+      - "127.0.0.1:6380:6379"
 
   # validate-upload.ts's AV scan (specs/10-nonfunctional.md §Security). Official image ships its
   # own freshclam; signature DB download on first boot can take several minutes, hence the long
