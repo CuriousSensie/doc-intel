@@ -31,13 +31,6 @@ export const moduleMatrix: ModuleDefinition[] = [
   { key: "billing", name: "Billing", status: "optional", dependency: "Stripe", feature: "billing" },
   { key: "credits", name: "Credits", status: "optional", dependency: "Billing", feature: "credits" },
   {
-    key: "files",
-    name: "Files",
-    status: "optional",
-    dependency: "Supabase Storage",
-    feature: "files"
-  },
-  {
     key: "notifications",
     name: "Notifications",
     status: "optional",

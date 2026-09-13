@@ -2,7 +2,6 @@ export const featureConfig = {
   billing: true,
   organizations: true,
   credits: true,
-  files: true,
   documents: true,
   admin: true,
   notifications: true,

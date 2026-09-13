@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { avatarConfig } from "@/config/avatar";
 import { documentsConfig } from "@/config/documents";
 import { ValidationError } from "@/lib/errors";
-import { sniffMimeType, validateFile, validateFileAgainstConfig } from "@/lib/files/validate";
+import { sniffMimeType, validateFileAgainstConfig } from "@/lib/files/validate";
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const PDF_BYTES = Buffer.from("%PDF-1.4\n", "ascii");
@@ -36,52 +37,43 @@ describe("sniffMimeType", () => {
   });
 });
 
-describe("validateFile", () => {
-  it("accepts a file whose sniffed type matches the declared type and category allowlist", () => {
+describe("validateFileAgainstConfig", () => {
+  it("accepts a file whose sniffed type matches the declared type and config allowlist", () => {
     expect(
-      validateFile(
+      validateFileAgainstConfig(
         { buffer: PNG_BYTES, declaredMimeType: "image/png", size: PNG_BYTES.length },
-        "avatar"
+        avatarConfig
       )
     ).toBe("image/png");
   });
 
   it("rejects a file whose sniffed type disagrees with the declared type", () => {
     expect(() =>
-      validateFile(
+      validateFileAgainstConfig(
         { buffer: PDF_BYTES, declaredMimeType: "image/png", size: PDF_BYTES.length },
-        "document"
+        documentsConfig
       )
     ).toThrow(ValidationError);
   });
 
-  it("rejects a file type not on the category's allowlist even if declared and sniffed agree", () => {
+  it("rejects a file type not on the config's allowlist even if declared and sniffed agree", () => {
     expect(() =>
-      validateFile(
+      validateFileAgainstConfig(
         { buffer: PDF_BYTES, declaredMimeType: "application/pdf", size: PDF_BYTES.length },
-        "avatar"
+        avatarConfig
       )
     ).toThrow(ValidationError);
   });
 
-  it("rejects a file over the category's size cap", () => {
+  it("rejects a file over the config's size cap", () => {
     expect(() =>
-      validateFile(
+      validateFileAgainstConfig(
         { buffer: PNG_BYTES, declaredMimeType: "image/png", size: 999_999_999 },
-        "avatar"
+        avatarConfig
       )
     ).toThrow(ValidationError);
   });
 
-  it("falls back to the declared type for content with no known signature, still enforcing the allowlist", () => {
-    const buffer = Buffer.from("name,age\nAda,36\n", "ascii");
-    expect(
-      validateFile({ buffer, declaredMimeType: "text/csv", size: buffer.length }, "document")
-    ).toBe("text/csv");
-  });
-});
-
-describe("validateFileAgainstConfig", () => {
   it("accepts a zip-container file whose declared type is one of the known OOXML/ODT variants", () => {
     const declaredMimeType =
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
