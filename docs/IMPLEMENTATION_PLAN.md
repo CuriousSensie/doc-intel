@@ -461,14 +461,39 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       `e2e/isolation.spec.ts` — two angles: the same per-document 404 as test #3 now with a real
       value attached, and a `custom_field_query` filter attempt using the leaked definition id
       from #6, neither of which surfaces tenant A's document to tenant B.
-- [ ] `documents.service.ts` — `listDocuments()` mixed-filter, `getDocument()`,
-      `updateDocument()`
-- [ ] Dashboard nav entries + feature flags for `documents`/`entities`
-- [ ] Routes: `documents/`, `documents/[id]/`, `entities/[typeKey]/`, `entities/[typeKey]/[id]/`,
-      `entity-types/`
-- [ ] `pdf-viewer.tsx` (sandboxed, no embedded JS)
-- [ ] `connections-panel.tsx`
-- [ ] Empty/loading/error states on every new page
+- [x] `documents.service.ts` — `listDocuments()` mixed-filter (type/date/status served from our
+      own mirror; `q`/`tag` delegated to Paperless since we don't mirror content or tags;
+      `entityId`/`hasNoConnections` business filters served entirely from our DB), `getDocument()`
+      (mirror + `getConnections()` + best-effort live Paperless custom fields, degrading to
+      `null` rather than failing the page on a Paperless outage/orphaned document), 
+      `updateDocument()` (title/date/type/custom-field writes go through to Paperless first, the
+      mirror is updated from Paperless's own response via the admin client — `documents` has no
+      update RLS policy at all, so the write-access/read-only check that RLS would otherwise
+      provide is done explicitly in application code), `getDocumentHistory()` (merged Paperless
+      `/api/documents/:id/history/` — confirmed live, not paginated on this version — plus our
+      own business `audit_logs`). New `src/lib/paperless/documents.ts` wrappers
+      (`updatePaperlessDocument`, `getPaperlessDocumentHistory`) and a `getStream()` method on
+      `PaperlessClient` for binary preview/download proxying. `connections.service.ts`'s
+      `getConnections()` extended to hydrate entity type key/name (for panel grouping) and an
+      `isDeleted` flag (specs/05: "connected entity was deleted" soft-delete UX, not a silently
+      dropped link).
+- [x] Routes: `src/app/api/documents/[id]/preview/route.ts` and `.../download/route.ts` —
+      streamed through our own session-authenticated Route Handler (ADR-0009), never a redirect
+      to a raw Paperless URL carrying the tenant service-user token.
+- [x] `src/app/(dashboard)/dashboard/documents/[id]/page.tsx` — `pdf-viewer.tsx` (sandboxed
+      `<object>`, no PDF.js dependency, no embedded-JS surface) + `connections-panel.tsx`
+      (grouped by entity type — "the highest-value surface in the product" per specs/05) +
+      metadata + custom fields + merged history. Empty/loading/error states: `loading.tsx`
+      skeleton, `notFound()` for a missing/cross-tenant id, graceful Paperless-unavailable
+      degradation. Documents list page now links each row to its detail page.
+      Verified end-to-end (`e2e/document-detail.spec.ts`, new) against the real live Paperless +
+      Supabase Cloud stack — page render with metadata/empty-connections state, cross-org id
+      correctly 404s via `notFound()`, and the preview route streams the real file content
+      authenticated only by the session cookie. Full `e2e/isolation.spec.ts` (11 tests)
+      re-verified green after these changes.
+- [ ] Dashboard nav entries + feature flags for `entities` UI (the `entities` flag itself already
+      added in the entities-module commit; nav wiring is the Entities/Views UI shell milestone)
+- [ ] Routes: `entities/[typeKey]/`, `entities/[typeKey]/[id]/`, `entity-types/`
 - [ ] `src/modules/saved-views/`
 - [ ] `data-table.tsx` (Paperless-delegated vs. our-DB-filter split)
 - [ ] Bulk connect/disconnect (audited transactionally) + bulk edit proxy +

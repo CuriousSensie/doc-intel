@@ -268,7 +268,7 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; `paperlessAdminClient()` is provisioning-only (ESLint-restricted to `src/modules/tenants/**` and `worker/jobs/provision-tenant.ts`).
 
 ### `client.ts`
-- `class PaperlessClient` — `get<T>(path)`, `post<T>(path, body)`, `patch<T>(path, body)`, `delete(path)`, `postForm<T>(path, form)` (120s timeout), `createOwnedObject<T>(path, body, { ownerId, groupId })` (permissions required, validated against the client's own tenant — isolation test #20).
+- `class PaperlessClient` — `get<T>(path)`, `post<T>(path, body)`, `patch<T>(path, body)`, `delete(path)`, `postForm<T>(path, form)` (120s timeout), `createOwnedObject<T>(path, body, { ownerId, groupId })` (permissions required, validated against the client's own tenant — isolation test #20), `getStream(path): Promise<Response>` — raw fetch Response for binary content (document preview/download), no retry, so a Route Handler can pipe `.body` straight through without JSON-decoding mangling it.
 - `paperlessFor(orgId: string): Promise<PaperlessClient>` — resolves `tenant_paperless_config` via the admin Supabase client; 60s in-memory cache per org.
 - `paperlessAdminClient(): Promise<PaperlessClient>` — logs in with `PAPERLESS_ADMIN_USER`/`PASSWORD` against `PAPERLESS_ADMIN_URL`; 1h token cache.
 - `resolveTenantForPaperlessDocument(paperlessDocumentId: number): Promise<string | null>` — `paperless_object_map` lookup for the event-bridge webhook.
@@ -281,8 +281,14 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `encryptPaperlessToken(plaintext: string): Buffer` / `decryptPaperlessToken(encrypted: Buffer): string` — AES-256-GCM, key from `PAPERLESS_TOKEN_ENCRYPTION_KEY`.
 
 ### `types.ts`
-- `type PaperlessTask`, `type PaperlessDocument`, `type PaperlessSetPermissions`, `type PaperlessListEnvelope<T>`
+- `type PaperlessTask`, `type PaperlessDocument` (includes `custom_fields: {field, value}[]`, confirmed live), `type PaperlessDocumentHistoryEntry`, `type PaperlessSetPermissions`, `type PaperlessListEnvelope<T>`
 - `const TENANT_MODEL_PERMISSIONS: string[]` — Django group permission codenames a tenant group needs (bare `codename`, confirmed live — `docs/spike-findings.md` §1).
+
+### `documents.ts` — Pomočnik
+- `getPaperlessDocument(client, paperlessDocumentId): Promise<PaperlessDocument>`
+- `updatePaperlessDocument(client, paperlessDocumentId, patch: {title?, created?, document_type?, custom_fields?}): Promise<PaperlessDocument>` — specs/03-api.md `PATCH /documents/:id`'s write-through; returns Paperless's own post-write shape so the caller mirrors what was actually stored.
+- `getPaperlessDocumentHistory(client, paperlessDocumentId): Promise<PaperlessDocumentHistoryEntry[]>` — confirmed live: a plain array, not paginated on this version.
+- `getPaperlessDocumentTypeName(client, documentTypeId): Promise<string>`, `getPaperlessCorrespondentName(client, correspondentId): Promise<string>`, `listAllPaperlessDocumentIds(client, queryString?): Promise<Set<number>>`, `toDocumentTypeKey(name): string`
 
 ## `src/modules/tenants/`
 
@@ -293,9 +299,16 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 ## `src/modules/documents/`
 
 ### `documents.service.ts`
-- `type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"]`
+- `type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"]`, `type Document`, `type DocumentDetails = Document & {connections, paperless}`, `type DocumentHistoryEntry`, `type ListDocumentsOptions`
 - `createUploadIntent(userId, organizationId, { filename, size, mimeType }): Promise<{ uploadId, signedUrl, token, path }>` — validates against `src/config/documents.ts`; inserts via the caller's own RLS-scoped client; deletes the row if `createSignedUploadUrl()` fails.
 - `completeUpload(userId, uploadId): Promise<DocumentUpload>` — confirms the object exists in storage (`storage.list()`) before flipping `pending` → `uploaded` and enqueueing `validateUpload`.
+- `listDocuments(organizationId, options?: ListDocumentsOptions): Promise<{items, nextCursor}>` — mixed-filter (specs/05): `documentTypeKey`/`status`/`dateFrom`/`dateTo` served from our mirror; `q`/`tag` delegated to Paperless first (capped at 2000 ids), then intersected; `entityId`/`hasNoConnections` business filters resolved entirely from our DB.
+- `getDocument(organizationId, documentId): Promise<DocumentDetails>` — mirror row + `getConnections()` + a best-effort live Paperless read (`paperless: null` on any failure, never fails the page).
+- `getDocumentHistory(organizationId, documentId): Promise<DocumentHistoryEntry[]>` — merged Paperless `/api/documents/:id/history/` + our own `audit_logs`, sorted by timestamp.
+- `updateDocument(userId, organizationId, documentId, {title?, documentDate?, documentTypeId?, customFieldValues?}): Promise<Document>` — write-through to Paperless first, mirror updated via the admin client from Paperless's own response (`documents` has no update RLS policy); explicitly rejects a `read-only` member before calling Paperless at all.
+
+### `documents.actions.ts`
+- `listDocumentsAction`, `getDocumentAction`, `getDocumentHistoryAction`, `updateDocumentAction` — typed Server Action wrappers (ADR-0009), `buildRequestContext()`-based.
 
 ## `src/lib/api-response.ts`
 
