@@ -6,10 +6,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   experimental: {
-    // Above filesConfig.categories.document.maxSizeBytes (20MB), with headroom for
-    // multipart/form-data boundary/field overhead — see src/config/files.ts.
+    // Headroom above avatarConfig.maxSizeBytes (5MB) for multipart/form-data boundary/field
+    // overhead — the only server-action file upload left; Documents uploads go direct-to-storage
+    // and never hit this limit. See src/config/avatar.ts.
     serverActions: {
-      bodySizeLimit: "21mb"
+      bodySizeLimit: "6mb"
     }
   }
 };
