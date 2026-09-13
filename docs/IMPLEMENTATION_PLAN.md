@@ -72,9 +72,14 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 
 - [x] `docs/adr/0001`–`0010` written
 - [x] `docs/GLOSSARY.md`, `docs/SPEC_TRACEABILITY.md` created
-- [ ] `docs/audit-boilerplate.md` — formal writeup of the boilerplate audit findings (this
-      session's audit findings are captured in the ADRs and `docs/spike-findings.md`, but the
-      standalone doc `specs/04-level-0-foundation.md` asks for hasn't been written yet)
+- [x] `docs/audit-boilerplate.md` — consolidates the 8 questions `specs/04-level-0-foundation.md`
+      asks for into one document, citing the ADR/code that already answered each rather than
+      re-litigating them (they were answered incrementally as ADRs during the actual build, not
+      as a single upfront gate). Bottom line: extend, don't replace — every boilerplate
+      primitive (RLS, role model, BullMQ, Supabase Storage, migration tooling) already fit.
+      Surfaced one real, newly-fixed gap while writing it: no queue anywhere had a retry policy
+      configured, contradicting every job's own resumability design (see this session's
+      queue/index.ts fix, above).
 - [x] Worker process: `worker/index.ts`, `worker/registry.ts`, `worker/queues.ts`,
       `worker/context.ts`, `Dockerfile.worker` — scaffolded and confirmed booting (real BullMQ
       Workers start, path aliases resolve via `tsx`); job handlers are still honest
