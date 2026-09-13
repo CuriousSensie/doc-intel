@@ -6,11 +6,9 @@ export type NavigationIcon =
   | "Building2"
   | "CreditCard"
   | "FileText"
-  | "FolderKanban"
   | "History"
   | "LayoutDashboard"
   | "Lock"
-  | "Paperclip"
   | "ShieldCheck"
   | "User"
   | "Users";
@@ -29,14 +27,12 @@ export const marketingNavigation: NavigationItem[] = [
 
 export const dashboardNavigation: NavigationItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
-  { label: "Projects", href: "/dashboard/projects", icon: "FolderKanban" },
   {
     label: "Notifications",
     href: "/dashboard/notifications",
     feature: "notifications",
     icon: "Bell"
   },
-  { label: "Files", href: "/dashboard/files", feature: "files", icon: "Paperclip" },
   {
     label: "Documents",
     href: "/dashboard/documents",
