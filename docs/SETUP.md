@@ -121,20 +121,29 @@ stack.
 cd infra
 cp .env.example .env
 # fill in PAPERLESS_DBPASS, PAPERLESS_ADMIN_USER/PASSWORD/MAIL, PAPERLESS_TOKEN_ENCRYPTION_KEY
-# (openssl rand -base64 32), POMOCNIK_WEBHOOK_SECRET (openssl rand -hex 32), and the app's
-# Supabase/Stripe/SMTP vars from the repo root .env.example.
+# (openssl rand -base64 32), POMOCNIK_WEBHOOK_SECRET (openssl rand -hex 32), CLAMAV_HOST/PORT
+# (defaults are fine: localhost/3310 outside Docker, clamav/3310 inside the compose network),
+# and the app's Supabase/Stripe/SMTP vars from the repo root .env.example.
 
 # Just Paperless + its dependencies — enough for the Phase 0 spike scripts:
 docker compose --profile paperless up -d
 
-# Everything, including our app and worker:
+# Everything, including our app, worker, and ClamAV:
 docker compose --profile full up -d
 ```
 
 Paperless's web UI/API is reachable at `http://localhost:8010` in this local setup (see the
 `ports` mapping on `paperless-webserver` in `infra/docker-compose.yml` — production binds this
 only to nginx, not the host). Our app is at `http://localhost:3000` once the `full` profile is
-up.
+up. `redis-app` (the queue `worker` and `web` share, separate from Paperless's own Redis) is
+also host-exposed for local dev, at `localhost:6380` — not `6379`, which a host-installed Redis
+commonly already occupies — useful when running `web`/`worker` natively against the
+dockerized queue instead of inside Compose (e.g. the e2e suite does this).
+
+`clamav` (the AV scanner `validate-upload.ts` calls before any file reaches Paperless — see
+[ADR-0012](adr/0012-clamav-scan-service.md)) starts with the `full` profile alongside
+everything else. Its signature-database download on first boot can take several minutes, hence
+a generous `start_period` on its healthcheck — `worker` won't start until it reports healthy.
 
 ### What's in the compose file
 

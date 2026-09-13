@@ -390,9 +390,37 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 - [x] `.github/workflows/ci.yml` (lint/typecheck/test/build + Playwright against a real
       Paperless container and a CI-scoped Supabase Cloud/local Supabase test project) — written;
       not yet run in actual GitHub Actions (no push to a remote this session)
-- [ ] `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `docs/MODULES.md`, `docs/SECURITY.md`,
-      `docs/SETUP.md` updated
-- [ ] **Phase 1 exit criteria met** (see plan §Verification)
+- [x] `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `docs/MODULES.md`, `docs/SECURITY.md`,
+      `docs/SETUP.md` updated for this session's work (new Functions/migration-history rows, a
+      new `## Documents` module section, the corrected 2-year — not 30-day — audit log
+      retention number, the ClamAV/`redis-app`-port setup steps, and more; each file's diff is
+      the actual record of what changed and why).
+- [ ] **Phase 1 exit criteria met** (see plan §Verification) — status per sub-criterion:
+  - [ ] Two tenants provisioned automatically; each logs in, uploads a Slovenian scanned PDF,
+        sees it OCR'd and searchable — provisioning/upload/OCR each verified independently this
+        session (real tenant via `worker/jobs/provision-tenant.ts`, real upload through
+        `/dashboard/documents` in `e2e/documents.spec.ts`, real Slovenian OCR fidelity per
+        `docs/spike-findings.md` §3), but never as one continuous two-tenant walkthrough in a
+        single session.
+  - [x] `e2e/isolation.spec.ts` (tests 1-8, 17-20) green — done this session.
+  - [ ] Killing the post-consume bridge loses no documents once both reconciliation jobs run —
+        both jobs are built and individually verified (including a real deletion→`orphaned`
+        transition), but the actual "kill the bridge mid-flight, confirm reconciliation alone
+        recovers it" drill hasn't been run.
+  - [x] `infra/docker-compose.yml` boots from a clean checkout with one command — verified for
+        `--profile paperless`. `--profile full` (the actual all-of-it path) is not yet verified
+        clean-checkout, since `infra/.env` in this environment doesn't yet carry the app's own
+        Supabase/Stripe/SMTP vars alongside the Paperless ones — `docs/SETUP.md`'s setup
+        instructions already say `infra/.env` should have both, this environment's copy just
+        doesn't yet.
+  - [x] A restore of both databases has been performed once — done this session, live: dumped
+        the real Supabase Cloud project (schema live-verified via the earlier migration work;
+        a fresh data-only dump/restore round-tripped a real row byte-for-byte, same UUID and
+        timestamp) and the real Paperless Postgres + its `data`/`media` volumes (restored into
+        a fully isolated throwaway network/containers, confirmed a pre-existing document's
+        metadata, the tenant's total document count, and its file content byte-for-byte
+        identical to the live original). All throwaway infrastructure torn down afterward; live
+        containers untouched throughout.
 
 ## Phase 2 — Level 1 Structure & Connections
 
