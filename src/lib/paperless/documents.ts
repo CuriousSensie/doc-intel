@@ -30,6 +30,25 @@ export function updatePaperlessDocument(
   return client.patch<PaperlessDocument>(`/api/documents/${paperlessDocumentId}/`, patch);
 }
 
+// specs/05-level-1-structure.md §Bulk business actions: "Paperless's [bulk actions]: change
+// document type, tags, correspondent, custom field values, reprocess, delete — proxied to
+// Paperless bulk_edit, not reimplemented." Paperless applies these atomically server-side
+// (its own task queue), so this is a single synchronous proxy call, not a worker job.
+export function bulkEditPaperlessDocuments(
+  client: PaperlessClient,
+  input: {
+    documentIds: number[];
+    method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess";
+    parameters?: Record<string, unknown>;
+  }
+): Promise<{ result: string }> {
+  return client.post<{ result: string }>("/api/documents/bulk_edit/", {
+    documents: input.documentIds,
+    method: input.method,
+    parameters: input.parameters ?? {}
+  });
+}
+
 // Confirmed live (2026-09-13): not paginated on this version, a plain array.
 export function getPaperlessDocumentHistory(
   client: PaperlessClient,
