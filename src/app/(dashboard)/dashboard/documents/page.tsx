@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DocumentUploadForm } from "@/components/documents/document-upload-form";
+import { DocumentsBulkList } from "@/components/documents/documents-bulk-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { documentsConfig } from "@/config/documents";
@@ -136,33 +137,23 @@ export default async function DocumentsPage({
         </div>
       ) : null}
 
-      <section className="grid gap-3">
-        {documents.length === 0 ? (
-          <p className="rounded-lg border border-border bg-panel p-6 text-muted">
-            {isFiltered ? "No documents match this view." : "You have no documents yet."}
-          </p>
-        ) : (
-          documents.map((document) => (
-            <Link
-              className="flex flex-col justify-between gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm transition-colors hover:bg-panel-strong/40 sm:flex-row sm:items-center"
-              href={`/dashboard/documents/${document.id}`}
-              key={document.id}
-            >
-              <div>
-                <p className="font-semibold">{document.title}</p>
-                <p className="mt-1 text-xs text-muted">
-                  {document.document_type_key ?? "Uncategorized"}
-                  {document.correspondent_name ? ` · ${document.correspondent_name}` : ""}
-                  {document.page_count ? ` · ${document.page_count} pages` : ""}
-                  {" · "}
-                  {new Date(document.created_at).toLocaleString()}
-                </p>
-              </div>
-              <StatusBadge status={document.status} />
-            </Link>
-          ))
-        )}
-      </section>
+      {documents.length === 0 ? (
+        <p className="rounded-lg border border-border bg-panel p-6 text-muted">
+          {isFiltered ? "No documents match this view." : "You have no documents yet."}
+        </p>
+      ) : (
+        <DocumentsBulkList
+          documents={documents}
+          filter={{
+            documentTypeKey: search.documentTypeKey,
+            status: asDocumentStatus(search.status),
+            dateFrom: search.dateFrom,
+            dateTo: search.dateTo,
+            q: search.q,
+            hasNoConnections: search.hasNoConnections === "true"
+          }}
+        />
+      )}
     </div>
   );
 }
