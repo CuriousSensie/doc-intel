@@ -6,13 +6,17 @@ import {
   Building2,
   CreditCard,
   FileText,
+  FolderKanban,
   History,
   LayoutDashboard,
+  ListFilter,
   Lock,
   type LucideIcon,
   PanelLeftClose,
   PanelLeftOpen,
   ShieldCheck,
+  Sparkles,
+  Upload,
   User,
   Users
 } from "lucide-react";
@@ -35,10 +39,14 @@ const iconMap: Record<NavigationIcon, LucideIcon> = {
   Building2,
   CreditCard,
   FileText,
+  FolderKanban,
   History,
   LayoutDashboard,
+  ListFilter,
   Lock,
   ShieldCheck,
+  Sparkles,
+  Upload,
   User,
   Users
 };
