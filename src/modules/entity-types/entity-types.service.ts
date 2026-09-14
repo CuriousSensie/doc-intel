@@ -45,6 +45,20 @@ export async function getEntityType(ctx: ServiceContext, entityTypeId: string): 
   return fetchEntityType(ctx, entityTypeId);
 }
 
+// Routes address entity types by key (/dashboard/entities/customer), not id.
+export async function getEntityTypeByKey(ctx: ServiceContext, key: string): Promise<EntityType> {
+  const { data, error } = await ctx.db
+    .from("entity_types")
+    .select("*")
+    .eq("key", key)
+    .eq("organization_id", ctx.orgId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new NotFoundError("Entity type not found");
+  return data;
+}
+
 export async function createEntityType(
   ctx: ServiceContext,
   input: { key: string; name: string; namePlural: string; icon?: string; fieldSchema?: EntityFieldDefinition[] }

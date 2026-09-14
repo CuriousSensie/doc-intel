@@ -1,12 +1,16 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
+import { withStatus } from "@/modules/auth/redirects";
 import {
   addField,
   changeFieldType,
   createEntityType,
   getEntityType,
+  getEntityTypeByKey,
   listEntityTypes,
   removeField,
   renameFieldLabel,
@@ -21,6 +25,11 @@ import {
   updateEntityTypeMetaSchema
 } from "@/modules/entity-types/entity-types.schemas";
 
+function redirectWithError(path: string, error: unknown): never {
+  const message = error instanceof Error ? error.message : "Something went wrong";
+  redirect(withStatus(path, "error", message));
+}
+
 export async function listEntityTypesAction() {
   requireFeature("entities");
   const ctx = await buildRequestContext();
@@ -31,6 +40,12 @@ export async function getEntityTypeAction(entityTypeId: string) {
   requireFeature("entities");
   const ctx = await buildRequestContext();
   return getEntityType(ctx, entityTypeId);
+}
+
+export async function getEntityTypeByKeyAction(key: string) {
+  requireFeature("entities");
+  const ctx = await buildRequestContext();
+  return getEntityTypeByKey(ctx, key);
 }
 
 export async function createEntityTypeAction(input: unknown) {
@@ -73,4 +88,63 @@ export async function removeFieldAction(entityTypeId: string, input: unknown) {
   const parsed = removeFieldSchema.parse(input);
   const ctx = await buildRequestContext();
   return removeField(ctx, entityTypeId, parsed.fieldKey);
+}
+
+// Plain-form variants (native <form action>, redirect on completion) for the entity-types admin
+// page — matches this codebase's existing form convention (e.g. settings/team) rather than
+// introducing a client-side dialog pattern for a first, simple pass at this UI.
+
+export async function createEntityTypeFormAction(formData: FormData) {
+  requireFeature("entities");
+  const ctx = await buildRequestContext();
+
+  try {
+    const parsed = createEntityTypeSchema.parse({
+      key: formData.get("key"),
+      name: formData.get("name"),
+      namePlural: formData.get("namePlural")
+    });
+    await createEntityType(ctx, parsed);
+  } catch (error) {
+    redirectWithError("/dashboard/entity-types", error);
+  }
+
+  // See createEntityFormAction's comment (src/modules/entities/entities.actions.ts) — a bare
+  // redirect back to the same page doesn't change the URL, so Next.js won't refetch stale data.
+  redirect(withStatus("/dashboard/entity-types", "message", "Created"));
+}
+
+export async function addFieldFormAction(formData: FormData) {
+  requireFeature("entities");
+  const ctx = await buildRequestContext();
+  const entityTypeId = String(formData.get("entityTypeId"));
+
+  try {
+    const parsed = addFieldSchema.parse({
+      key: formData.get("key"),
+      label: formData.get("label"),
+      type: formData.get("type"),
+      required: formData.get("required") === "on"
+    });
+    await addField(ctx, entityTypeId, parsed);
+  } catch (error) {
+    redirectWithError(`/dashboard/entity-types/${entityTypeId}`, error);
+  }
+
+  redirect(withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", "Field added"));
+}
+
+export async function removeFieldFormAction(formData: FormData) {
+  requireFeature("entities");
+  const ctx = await buildRequestContext();
+  const entityTypeId = String(formData.get("entityTypeId"));
+
+  try {
+    const parsed = removeFieldSchema.parse({ fieldKey: formData.get("fieldKey") });
+    await removeField(ctx, entityTypeId, parsed.fieldKey);
+  } catch (error) {
+    redirectWithError(`/dashboard/entity-types/${entityTypeId}`, error);
+  }
+
+  redirect(withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", "Field hidden"));
 }
