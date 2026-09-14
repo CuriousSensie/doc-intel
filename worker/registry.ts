@@ -4,7 +4,9 @@ import { logger } from "@/lib/logger";
 import { QUEUE_NAMES, type QueueName } from "@/lib/queue";
 
 import type { JobPayload } from "./context";
+import { bulkActionJob } from "./jobs/bulk-action";
 import { expireAbandonedUploadsJob } from "./jobs/expire-abandoned-uploads";
+import { exportJob } from "./jobs/export";
 import { provisionTenantJob } from "./jobs/provision-tenant";
 import { reconcileFullSweepJob } from "./jobs/reconcile-full-sweep";
 import { reconcileIncrementalJob } from "./jobs/reconcile-incremental";
@@ -39,6 +41,6 @@ export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.backfillRule]: notImplemented(QUEUE_NAMES.backfillRule),
   [QUEUE_NAMES.fireDueReminders]: notImplemented(QUEUE_NAMES.fireDueReminders),
   [QUEUE_NAMES.runImportRow]: notImplemented(QUEUE_NAMES.runImportRow),
-  [QUEUE_NAMES.bulkAction]: notImplemented(QUEUE_NAMES.bulkAction),
-  [QUEUE_NAMES.export]: notImplemented(QUEUE_NAMES.export)
+  [QUEUE_NAMES.bulkAction]: bulkActionJob,
+  [QUEUE_NAMES.export]: exportJob
 };
