@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { ConnectionPicker } from "@/components/connections/connection-picker";
 import { ConnectionsPanel } from "@/components/documents/connections-panel";
 import { PdfViewer } from "@/components/documents/pdf-viewer";
 import { Badge } from "@/components/ui/badge";
@@ -106,8 +107,9 @@ export default async function DocumentDetailPage({
         ) : null}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
             <CardTitle>Connections</CardTitle>
+            <ConnectionPicker sourceId={document.id} sourceKind="document" />
           </CardHeader>
           <CardContent>
             <ConnectionsPanel connections={document.connections} />
