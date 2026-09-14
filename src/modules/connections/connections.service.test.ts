@@ -231,3 +231,65 @@ describe("getConnections", () => {
     expect(result[0].other).toMatchObject({ label: "Merged Away Ltd", isDeleted: true });
   });
 });
+
+describe("bulkCreateConnections", () => {
+  it("separates created, skipped-as-duplicate, and failed source ids, tagging created_via bulk", async () => {
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
+    const insertedPayloads: Array<{ source_id: string }> = [];
+
+    const db = {
+      from: (table: string) => {
+        if (table !== "connections") return makeChain({ data: null, error: null });
+        return {
+          insert: (payload: { source_id: string }) => {
+            insertedPayloads.push(payload);
+            if (payload.source_id === "dup") {
+              return {
+                select: () => ({
+                  single: () =>
+                    Promise.resolve({ data: null, error: { code: "23505", message: "duplicate" } })
+                })
+              };
+            }
+            if (payload.source_id === "boom") {
+              return {
+                select: () => ({
+                  single: () =>
+                    Promise.resolve({ data: null, error: { code: "500", message: "db exploded" } })
+                })
+              };
+            }
+            return {
+              select: () => ({
+                single: () =>
+                  Promise.resolve({
+                    data: { id: `conn-${payload.source_id}`, relation: "related", created_via: "bulk", rule_id: null },
+                    error: null
+                  })
+              })
+            };
+          }
+        };
+      }
+    } as unknown as ServiceContext["db"];
+
+    const { bulkCreateConnections } = await import("@/modules/connections/connections.service");
+    const progressCalls: Array<[number, number]> = [];
+
+    const result = await bulkCreateConnections(
+      makeCtx(db),
+      { sourceKind: "document", sourceIds: ["d1", "dup", "boom"], targetKind: "entity", targetId: "e1" },
+      (processed, total) => {
+        progressCalls.push([processed, total]);
+      }
+    );
+
+    expect(result.createdIds).toEqual(["conn-d1"]);
+    expect(result.skippedIds).toEqual(["dup"]);
+    expect(result.failures).toEqual([{ id: "boom", error: "db exploded" }]);
+    expect(
+      insertedPayloads.every((p) => (p as unknown as { created_via: string }).created_via === "bulk")
+    ).toBe(true);
+    expect(progressCalls).toEqual([[1, 3], [2, 3], [3, 3]]);
+  });
+});

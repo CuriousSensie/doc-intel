@@ -1,4 +1,4 @@
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError, describeError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
 import type { ServiceContext } from "@/lib/service-context";
 import type { Database } from "@/types/database";
@@ -205,6 +205,57 @@ export async function createConnection(
   });
 
   return data;
+}
+
+export type BulkConnectResult = {
+  createdIds: string[];
+  skippedIds: string[]; // already connected — ConflictError, not a failure
+  failures: Array<{ id: string; error: string }>;
+};
+
+// specs/05-level-1-structure.md §Bulk business actions: "connect to entity" is the one
+// required bulk primitive. Reuses createConnection per-item (so the unique-pair/self-
+// connection rules never diverge between single and bulk paths) rather than a bulk insert
+// that would have to reimplement them.
+export async function bulkCreateConnections(
+  ctx: ServiceContext,
+  input: {
+    sourceKind: ConnectableKind;
+    sourceIds: string[];
+    targetKind: ConnectableKind;
+    targetId: string;
+    relation?: Relation;
+    createdVia?: Connection["created_via"];
+  },
+  onProgress?: (processed: number, total: number) => Promise<void> | void
+): Promise<BulkConnectResult> {
+  const createdIds: string[] = [];
+  const skippedIds: string[] = [];
+  const failures: Array<{ id: string; error: string }> = [];
+
+  for (let i = 0; i < input.sourceIds.length; i++) {
+    const sourceId = input.sourceIds[i];
+    try {
+      const connection = await createConnection(ctx, {
+        sourceKind: input.sourceKind,
+        sourceId,
+        targetKind: input.targetKind,
+        targetId: input.targetId,
+        relation: input.relation,
+        createdVia: input.createdVia ?? "bulk"
+      });
+      createdIds.push(connection.id);
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        skippedIds.push(sourceId);
+      } else {
+        failures.push({ id: sourceId, error: describeError(error) });
+      }
+    }
+    if (onProgress) await onProgress(i + 1, input.sourceIds.length);
+  }
+
+  return { createdIds, skippedIds, failures };
 }
 
 export async function deleteConnection(ctx: ServiceContext, connectionId: string): Promise<void> {
