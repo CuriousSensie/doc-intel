@@ -252,6 +252,30 @@ export async function listDocuments(
   };
 }
 
+// specs/05-level-1-structure.md §Bulk business actions/§Export: "select all matching filter"
+// needs the full id set behind a filter, not one page of it. Loops listDocuments()'s own
+// cursor rather than duplicating its filter-building — capped at the same
+// MAX_PAPERLESS_ID_SET ceiling the spec calls out as the one place naive code won't scale.
+export async function listDocumentIds(
+  organizationId: string,
+  options: Omit<ListDocumentsOptions, "cursor" | "limit"> = {},
+  cap = MAX_PAPERLESS_ID_SET
+): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | null = null;
+  const pageSize = 200;
+
+  while (ids.length < cap) {
+    const { items, nextCursor }: { items: Document[]; nextCursor: string | null } =
+      await listDocuments(organizationId, { ...options, cursor, limit: pageSize });
+    ids.push(...items.map((d) => d.id));
+    if (!nextCursor) break;
+    cursor = nextCursor;
+  }
+
+  return ids.slice(0, cap);
+}
+
 export type DocumentDetails = Document & {
   connections: ConnectionWithOther[];
   paperless: { customFields: Array<{ field: number; value: unknown }> } | null;
