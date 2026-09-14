@@ -346,3 +346,21 @@ export async function removeIdentifier(ctx: ServiceContext, identifierId: string
 
   if (error) throw error;
 }
+
+// Entity count per entity_type_id — the Entities index page's "N customers, N projects..." grid
+// and the Home dashboard's owner/admin summary both need this same tally.
+export async function countEntitiesByType(ctx: ServiceContext): Promise<Record<string, number>> {
+  const { data, error } = await ctx.db
+    .from("entities")
+    .select("entity_type_id")
+    .eq("organization_id", ctx.orgId)
+    .is("deleted_at", null);
+
+  if (error) throw error;
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.entity_type_id] = (counts[row.entity_type_id] ?? 0) + 1;
+  }
+  return counts;
+}
