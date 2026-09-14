@@ -702,7 +702,7 @@ export type Database = {
           relation: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
           metadata: Json;
           created_by: string | null;
-          created_via: "manual" | "rule" | "import" | "template" | "ai_accepted";
+          created_via: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
           rule_id: string | null;
           created_at: string;
           deleted_at: string | null;
@@ -717,7 +717,7 @@ export type Database = {
           relation?: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
           metadata?: Json;
           created_by?: string | null;
-          created_via?: "manual" | "rule" | "import" | "template" | "ai_accepted";
+          created_via?: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
           rule_id?: string | null;
           created_at?: string;
           deleted_at?: string | null;
@@ -813,6 +813,58 @@ export type Database = {
           columns?: Json;
           sort?: Json | null;
           is_shared?: boolean;
+        };
+        Relationships: [];
+      };
+      // Pomočnik Level 1 Milestone 7 (specs/05-level-1-structure.md §Bulk business actions/§Export).
+      background_operations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          kind: "bulk_connect" | "bulk_paperless_edit" | "export";
+          status: "pending" | "processing" | "completed" | "failed";
+          params: Json;
+          total_count: number | null;
+          processed_count: number;
+          success_count: number;
+          failure_count: number;
+          failures: Json;
+          result: Json | null;
+          error_message: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          kind: "bulk_connect" | "bulk_paperless_edit" | "export";
+          status?: "pending" | "processing" | "completed" | "failed";
+          params?: Json;
+          total_count?: number | null;
+          processed_count?: number;
+          success_count?: number;
+          failure_count?: number;
+          failures?: Json;
+          result?: Json | null;
+          error_message?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          status?: "pending" | "processing" | "completed" | "failed";
+          total_count?: number | null;
+          processed_count?: number;
+          success_count?: number;
+          failure_count?: number;
+          failures?: Json;
+          result?: Json | null;
+          error_message?: string | null;
+          updated_at?: string;
+          completed_at?: string | null;
         };
         Relationships: [];
       };
