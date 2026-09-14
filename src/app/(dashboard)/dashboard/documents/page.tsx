@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { documentsConfig } from "@/config/documents";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
-import { listDocuments, listRecentUploads } from "@/modules/documents/documents.service";
+import { listDocuments, listRecentUploads, type Document } from "@/modules/documents/documents.service";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,19 @@ function formatSize(bytes: number) {
 
 const FAILED_STATUSES = new Set(["failed", "orphaned", "expired"]);
 const DONE_STATUSES = new Set(["ready", "completed"]);
+const VALID_DOCUMENT_STATUSES = new Set<Document["status"]>([
+  "pending",
+  "processing",
+  "ready",
+  "failed",
+  "orphaned"
+]);
+
+function asDocumentStatus(value: string | undefined): Document["status"] | undefined {
+  return VALID_DOCUMENT_STATUSES.has(value as Document["status"])
+    ? (value as Document["status"])
+    : undefined;
+}
 
 function StatusBadge({ status }: { status: string }) {
   if (FAILED_STATUSES.has(status)) return <Badge variant="danger">{status}</Badge>;
@@ -40,9 +53,20 @@ function EmptyDocumentsState() {
   );
 }
 
-export default async function DocumentsPage() {
+export default async function DocumentsPage({
+  searchParams
+}: {
+  searchParams: Promise<{
+    documentTypeKey?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    q?: string;
+    hasNoConnections?: string;
+  }>;
+}) {
   requireFeature("documents");
-  const context = await requireUser("/dashboard/documents");
+  const [context, search] = await Promise.all([requireUser("/dashboard/documents"), searchParams]);
   const organizationId = await getActiveOrganizationId(context.user.id);
 
   if (!organizationId) {
@@ -50,9 +74,19 @@ export default async function DocumentsPage() {
   }
 
   const [{ items: documents }, uploads] = await Promise.all([
-    listDocuments(organizationId),
+    listDocuments(organizationId, {
+      documentTypeKey: search.documentTypeKey,
+      status: asDocumentStatus(search.status),
+      dateFrom: search.dateFrom,
+      dateTo: search.dateTo,
+      q: search.q,
+      hasNoConnections: search.hasNoConnections === "true"
+    }),
     listRecentUploads(organizationId)
   ]);
+  const isFiltered = Boolean(
+    search.documentTypeKey || search.status || search.dateFrom || search.q || search.hasNoConnections
+  );
 
   // Only surface uploads that haven't (yet, or ever) landed in `documents` — an upload that
   // completed successfully is already represented by its own row in the list below.
@@ -93,10 +127,19 @@ export default async function DocumentsPage() {
         </section>
       ) : null}
 
+      {isFiltered ? (
+        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
+          <span>Showing a filtered view — {documents.length} document(s)</span>
+          <Link className="underline underline-offset-4" href="/dashboard/documents">
+            Clear filters
+          </Link>
+        </div>
+      ) : null}
+
       <section className="grid gap-3">
         {documents.length === 0 ? (
           <p className="rounded-lg border border-border bg-panel p-6 text-muted">
-            You have no documents yet.
+            {isFiltered ? "No documents match this view." : "You have no documents yet."}
           </p>
         ) : (
           documents.map((document) => (
