@@ -48,6 +48,10 @@ export function DocumentsBulkList({
   const [status, setStatus] = useState<string | null>(null);
   const [lastOperationId, setLastOperationId] = useState<string | null>(null);
   const [pollingOperationId, setPollingOperationId] = useState<string | null>(null);
+  // Exposed via a data attribute below purely as an e2e test hook (bulk-and-export.spec.ts) —
+  // downloads can't be asserted reliably through Playwright's download-UI heuristics, so the
+  // test polls/fetches this operation's status and file directly instead.
+  const [exportOperationId, setExportOperationId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -167,6 +171,7 @@ export function DocumentsBulkList({
         filter: selectAllMatching || !hasSelection ? filter : undefined,
         format
       });
+      setExportOperationId(operationId);
       setStatus("Preparing export…");
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(async () => {
@@ -187,7 +192,7 @@ export function DocumentsBulkList({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-3" data-export-operation-id={exportOperationId ?? ""}>
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-sm">
         <input
           checked={documents.length > 0 && selectedIds.size === documents.length}
@@ -275,6 +280,7 @@ export function DocumentsBulkList({
           documents.map((document) => (
             <div
               className="flex items-center gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm transition-colors hover:bg-panel-strong/40"
+              data-document-row={document.id}
               key={document.id}
             >
               <input
