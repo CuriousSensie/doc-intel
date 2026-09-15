@@ -1,4 +1,9 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { pipeline } from "node:stream/promises";
 import type { Readable } from "node:stream";
 
 import ExcelJS from "exceljs";
@@ -7,6 +12,7 @@ import { parse as parseCsv } from "csv-parse";
 import yauzl from "yauzl";
 
 import { readFileHead } from "@/lib/files/read-head";
+import type { DownloadedTempFile } from "@/lib/supabase/storage-stream";
 
 import { decodeBuffer, detectEncoding } from "./encoding";
 import { sniffDelimiter, type Delimiter } from "./delimiter";
@@ -266,4 +272,26 @@ export function openZipEntryStream(filePath: string, fileName: string): Promise<
       zipfile.on("error", reject);
     });
   });
+}
+
+// Extracts one named entry to a real temp file — for the manifest CSV/XLSX that may live
+// inside a "documents" kind archive (analyzeSource(), imports.service.ts), which then needs a
+// real file path to hand to analyzeDelimitedFile()/analyzeXlsxFile() the same as any other
+// uploaded source. Streamed, same as downloadStorageObjectToTempFile() — never buffers the
+// entry in memory even if it's a large spreadsheet.
+export async function extractZipEntryToTempFile(
+  zipPath: string,
+  fileName: string
+): Promise<DownloadedTempFile> {
+  const stream = await openZipEntryStream(zipPath, fileName);
+  const tempPath = join(tmpdir(), `import-manifest-${randomUUID()}`);
+
+  try {
+    await pipeline(stream, createWriteStream(tempPath));
+  } catch (err) {
+    await rm(tempPath, { force: true });
+    throw err;
+  }
+
+  return { path: tempPath, cleanup: () => rm(tempPath, { force: true }) };
 }

@@ -13,7 +13,7 @@ export const QUEUE_NAMES = {
   runRule: "run-rule",
   backfillRule: "backfill-rule",
   fireDueReminders: "fire-due-reminders",
-  runImportRow: "run-import-row",
+  runImportChunk: "run-import-chunk",
   bulkAction: "bulk-action",
   export: "export"
 } as const;

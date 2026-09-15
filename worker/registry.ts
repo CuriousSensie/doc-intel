@@ -48,7 +48,7 @@ export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.runRule]: noOp(QUEUE_NAMES.runRule),
   [QUEUE_NAMES.backfillRule]: notImplemented(QUEUE_NAMES.backfillRule),
   [QUEUE_NAMES.fireDueReminders]: notImplemented(QUEUE_NAMES.fireDueReminders),
-  [QUEUE_NAMES.runImportRow]: notImplemented(QUEUE_NAMES.runImportRow),
+  [QUEUE_NAMES.runImportChunk]: notImplemented(QUEUE_NAMES.runImportChunk),
   [QUEUE_NAMES.bulkAction]: bulkActionJob,
   [QUEUE_NAMES.export]: exportJob
 };

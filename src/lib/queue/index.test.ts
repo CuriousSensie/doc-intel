@@ -41,11 +41,11 @@ describe("queue helpers", () => {
 
     const { enqueueBulk, QUEUE_NAMES } = await import("@/lib/queue");
 
-    await enqueueBulk(QUEUE_NAMES.runImportRow, [{ orgId: "org-1", rowId: 1 }], { priority: 10 });
+    await enqueueBulk(QUEUE_NAMES.runImportChunk, [{ orgId: "org-1", rowId: 1 }], { priority: 10 });
 
     expect(addBulk).toHaveBeenCalledWith([
       {
-        name: "run-import-row",
+        name: "run-import-chunk",
         data: { orgId: "org-1", rowId: 1 },
         opts: { priority: 10 }
       }

@@ -41,7 +41,7 @@ export const queueRuntimeConfig: Record<QueueName, QueueRuntimeConfig> = {
   [QUEUE_NAMES.runRule]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.backfillRule]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.fireDueReminders]: { worker: { concurrency: 1 } },
-  [QUEUE_NAMES.runImportRow]: {
+  [QUEUE_NAMES.runImportChunk]: {
     worker: { concurrency: env.WORKER_INGEST_CONCURRENCY },
     defaultJobOptions: { priority: QUEUE_PRIORITY.importRow }
   },

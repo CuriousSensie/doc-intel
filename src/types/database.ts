@@ -1137,6 +1137,21 @@ export type Database = {
         Args: { p_import_job_id: string; p_organization_id: string; p_reason: string };
         Returns: boolean;
       };
+      bulk_update_import_rows: {
+        Args: { p_import_job_id: string; p_organization_id: string; p_rows: Json };
+        Returns: undefined;
+      };
+      increment_import_job_progress: {
+        Args: {
+          p_import_job_id: string;
+          p_organization_id: string;
+          p_processed_delta: number;
+          p_succeeded_delta: number;
+          p_failed_delta: number;
+          p_skipped_delta: number;
+        };
+        Returns: undefined;
+      };
       complete_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: undefined;
