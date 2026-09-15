@@ -1152,6 +1152,20 @@ export type Database = {
         };
         Returns: undefined;
       };
+      list_documents_without_connections: {
+        Args: {
+          p_organization_id: string;
+          p_document_type_key?: string | null;
+          p_status?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_paperless_ids?: number[] | null;
+          p_cursor_created_at?: string | null;
+          p_cursor_id?: string | null;
+          p_limit?: number;
+        };
+        Returns: Database["public"]["Tables"]["documents"]["Row"][];
+      };
       complete_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: undefined;

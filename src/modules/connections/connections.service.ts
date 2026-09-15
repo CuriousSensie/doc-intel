@@ -30,14 +30,18 @@ export type ConnectionWithOther = {
 
 const UNIQUE_VIOLATION = "23505";
 
-// The one required helper (specs/05-level-1-structure.md §Connections): a union query over
-// both directions, hydrated with the *other* side's minimal display info. No other feature
-// code is allowed to hand-roll this direction logic.
-export async function getConnections(
+type RawConnectionRow = Connection;
+type OtherRef = { kind: ConnectableKind; id: string };
+
+// Shared by getConnections() (needs the full rows, then hydrates labels) and
+// listConnectedIds() (needs only the "other side" ids — documents.service.ts's `entityId`
+// filter used to call getConnections() just to throw the label hydration away; that's the
+// duplicated union-query logic this centralizes).
+async function queryRawConnections(
   ctx: ServiceContext,
   kind: ConnectableKind,
   id: string
-): Promise<ConnectionWithOther[]> {
+): Promise<{ rows: RawConnectionRow[]; others: OtherRef[] }> {
   const { data, error } = await ctx.db
     .from("connections")
     .select("*")
@@ -57,6 +61,31 @@ export async function getConnections(
       ? { kind: row.target_kind, id: row.target_id }
       : { kind: row.source_kind, id: row.source_id };
   });
+
+  return { rows, others };
+}
+
+// The lightweight half of getConnections() — just which records the other side is, no label
+// hydration. documents.service.ts's `entityId` filter (find every document connected to this
+// entity) needs exactly this and nothing else; the entity/document display-name lookups
+// getConnections() also does are pure overhead for a filter that only needs ids.
+export async function listConnectedIds(
+  ctx: ServiceContext,
+  kind: ConnectableKind,
+  id: string
+): Promise<OtherRef[]> {
+  return (await queryRawConnections(ctx, kind, id)).others;
+}
+
+// The one required helper (specs/05-level-1-structure.md §Connections): a union query over
+// both directions, hydrated with the *other* side's minimal display info. No other feature
+// code is allowed to hand-roll this direction logic.
+export async function getConnections(
+  ctx: ServiceContext,
+  kind: ConnectableKind,
+  id: string
+): Promise<ConnectionWithOther[]> {
+  const { rows, others } = await queryRawConnections(ctx, kind, id);
 
   const entityIds = [...new Set(others.filter((o) => o.kind === "entity").map((o) => o.id))];
   const documentIds = [...new Set(others.filter((o) => o.kind === "document").map((o) => o.id))];
@@ -245,6 +274,14 @@ export type BulkConnectResult = {
 // required bulk primitive. Reuses createConnection per-item (so the unique-pair/self-
 // connection rules never diverge between single and bulk paths) rather than a bulk insert
 // that would have to reimplement them.
+// Phase 3 M7 rewrite: the importer needs this exact primitive at 500+ items and
+// specs/10-nonfunctional.md's target is < 30s — the original per-item loop (~4 round trips per
+// item: 2 ownership checks + 1 insert + 1 audit write, all serial) couldn't get there. Every
+// item shares the same target, so target ownership is checked once instead of per item; source
+// ownership and pre-existing-connection checks are each one batched query instead of N; the
+// insert is one statement instead of N; one audit row summarizes the whole call instead of one
+// per connection. The `BulkConnectResult` contract (createdIds/skippedIds/failures) is
+// unchanged — worker/jobs/bulk-action.ts and the undo path don't need to know this changed.
 export async function bulkCreateConnections(
   ctx: ServiceContext,
   input: {
@@ -257,31 +294,153 @@ export async function bulkCreateConnections(
   },
   onProgress?: (processed: number, total: number) => Promise<void> | void
 ): Promise<BulkConnectResult> {
-  const createdIds: string[] = [];
-  const skippedIds: string[] = [];
+  const relation = input.relation ?? "related";
+  const createdVia = input.createdVia ?? "bulk";
+  const total = input.sourceIds.length;
   const failures: Array<{ id: string; error: string }> = [];
 
-  for (let i = 0; i < input.sourceIds.length; i++) {
-    const sourceId = input.sourceIds[i];
-    try {
-      const connection = await createConnection(ctx, {
-        sourceKind: input.sourceKind,
-        sourceId,
-        targetKind: input.targetKind,
-        targetId: input.targetId,
-        relation: input.relation,
-        createdVia: input.createdVia ?? "bulk"
-      });
-      createdIds.push(connection.id);
-    } catch (error) {
-      if (error instanceof ConflictError) {
-        skippedIds.push(sourceId);
-      } else {
-        failures.push({ id: sourceId, error: describeError(error) });
+  if (onProgress) await onProgress(0, total);
+
+  const candidateIds = [...new Set(input.sourceIds)].filter((id) => {
+    if (input.sourceKind === input.targetKind && id === input.targetId) {
+      failures.push({ id, error: "Cannot connect a record to itself" });
+      return false;
+    }
+    return true;
+  });
+
+  if (candidateIds.length === 0) {
+    if (onProgress) await onProgress(total, total);
+    return { createdIds: [], skippedIds: [], failures };
+  }
+
+  // Checked once, not per item — every candidate connects to the same fixed target.
+  await assertBelongsToOrg(ctx, input.targetKind, input.targetId);
+
+  const sourceTable = input.sourceKind === "entity" ? "entities" : "documents";
+  const { data: validRows, error: validError } = await ctx.db
+    .from(sourceTable)
+    .select("id")
+    .eq("organization_id", ctx.orgId)
+    .is("deleted_at", null)
+    .in("id", candidateIds);
+  if (validError) throw validError;
+
+  const validIds = new Set((validRows ?? []).map((r) => r.id as string));
+  for (const id of candidateIds) {
+    if (!validIds.has(id)) failures.push({ id, error: `${input.sourceKind} not found` });
+  }
+  const ownedIds = candidateIds.filter((id) => validIds.has(id));
+
+  if (ownedIds.length === 0) {
+    if (onProgress) await onProgress(total, total);
+    return { createdIds: [], skippedIds: [], failures };
+  }
+
+  // connections_unique_pair is symmetric (least/greatest of the two ids) — an existing row
+  // could have source/target swapped relative to this call, so both orderings are checked in
+  // the same query rather than reimplementing the DB's own constraint logic per row.
+  const { data: existingRows, error: existingError } = await ctx.db
+    .from("connections")
+    .select("source_kind, source_id, target_kind, target_id")
+    .eq("organization_id", ctx.orgId)
+    .eq("relation", relation)
+    .is("deleted_at", null)
+    .or(
+      `and(source_kind.eq.${input.sourceKind},target_kind.eq.${input.targetKind},target_id.eq.${input.targetId}),` +
+        `and(source_kind.eq.${input.targetKind},target_kind.eq.${input.sourceKind},source_id.eq.${input.targetId})`
+    );
+  if (existingError) throw existingError;
+
+  const alreadyConnected = new Set<string>();
+  for (const row of existingRows ?? []) {
+    if (row.target_id === input.targetId && row.source_kind === input.sourceKind) {
+      alreadyConnected.add(row.source_id);
+    }
+    if (row.source_id === input.targetId && row.target_kind === input.sourceKind) {
+      alreadyConnected.add(row.target_id);
+    }
+  }
+
+  const skippedIds = ownedIds.filter((id) => alreadyConnected.has(id));
+  const toInsert = ownedIds.filter((id) => !alreadyConnected.has(id));
+
+  if (toInsert.length === 0) {
+    if (onProgress) await onProgress(total, total);
+    return { createdIds: [], skippedIds, failures };
+  }
+
+  const rowsToInsert = toInsert.map((sourceId) => ({
+    organization_id: ctx.orgId,
+    source_kind: input.sourceKind,
+    source_id: sourceId,
+    target_kind: input.targetKind,
+    target_id: input.targetId,
+    relation,
+    created_via: createdVia,
+    created_by: ctx.actorId
+  }));
+
+  const { data: inserted, error: insertError } = await ctx.db
+    .from("connections")
+    .insert(rowsToInsert)
+    .select("id, source_id");
+
+  let createdIds: string[];
+
+  if (insertError) {
+    // A concurrent request created one of these same pairs between the pre-check above and
+    // this insert — rare (bulk-connect targets are not typically under concurrent write
+    // pressure), but a single-statement multi-row insert fails atomically, so this falls back
+    // to the old per-item loop only for the conflicting batch rather than losing the whole
+    // bulk operation to a race the pre-check couldn't fully rule out.
+    if (insertError.code !== UNIQUE_VIOLATION) throw insertError;
+    createdIds = [];
+    for (const sourceId of toInsert) {
+      try {
+        const connection = await createConnection(ctx, {
+          sourceKind: input.sourceKind,
+          sourceId,
+          targetKind: input.targetKind,
+          targetId: input.targetId,
+          relation,
+          createdVia
+        });
+        createdIds.push(connection.id);
+      } catch (err) {
+        if (err instanceof ConflictError) {
+          skippedIds.push(sourceId);
+        } else {
+          failures.push({ id: sourceId, error: describeError(err) });
+        }
       }
     }
-    if (onProgress) await onProgress(i + 1, input.sourceIds.length);
+  } else {
+    createdIds = (inserted ?? []).map((row) => row.id);
   }
+
+  if (createdIds.length > 0) {
+    // One batched audit entry for the whole call, not one per connection — the same "batch
+    // the writes" principle specs/06-importer.md states explicitly for import counters applies
+    // here too; 500 individual logEvent() calls was part of what this rewrite exists to fix.
+    await logEvent({
+      actorId: ctx.actorId,
+      action: "connection.bulk_created",
+      entityType: "connection",
+      entityId: input.targetId,
+      organizationId: ctx.orgId,
+      metadata: {
+        source_kind: input.sourceKind,
+        target_kind: input.targetKind,
+        target_id: input.targetId,
+        relation,
+        created_via: createdVia,
+        count: createdIds.length
+      }
+    });
+  }
+
+  if (onProgress) await onProgress(total, total);
 
   return { createdIds, skippedIds, failures };
 }

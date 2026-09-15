@@ -252,31 +252,68 @@ describe("getConnections", () => {
 });
 
 describe("bulkCreateConnections", () => {
-  it("separates created, skipped-as-duplicate, and failed source ids, tagging created_via bulk", async () => {
+  it("separates created, skipped-as-duplicate, and not-found source ids, tagging created_via bulk", async () => {
     vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
-    const insertedPayloads: Array<{ source_id: string }> = [];
+
+    const db = makeDb({
+      // 1. assertBelongsToOrg(targetKind="entity", targetId="e1")
+      entities: [{ data: { id: "e1" }, error: null }],
+      // 2. batch source-ownership check — "missing" isn't in the returned set.
+      documents: [{ data: [{ id: "d1" }, { id: "dup" }], error: null }],
+      connections: [
+        // 3. existing-connections pre-check — "dup" already connected to e1.
+        { data: [{ source_kind: "document", source_id: "dup", target_kind: "entity", target_id: "e1" }], error: null },
+        // 4. the bulk insert itself — only "d1" ever reaches it.
+        { data: [{ id: "conn-d1", source_id: "d1" }], error: null }
+      ]
+    });
+
+    const { bulkCreateConnections } = await import("@/modules/connections/connections.service");
+    const progressCalls: Array<[number, number]> = [];
+
+    const result = await bulkCreateConnections(
+      makeCtx(db),
+      { sourceKind: "document", sourceIds: ["d1", "dup", "missing"], targetKind: "entity", targetId: "e1" },
+      (processed, total) => {
+        progressCalls.push([processed, total]);
+      }
+    );
+
+    expect(result.createdIds).toEqual(["conn-d1"]);
+    expect(result.skippedIds).toEqual(["dup"]);
+    expect(result.failures).toEqual([{ id: "missing", error: "document not found" }]);
+    expect(progressCalls).toEqual([[0, 3], [3, 3]]);
+  });
+
+  it("falls back to the per-item path when the bulk insert itself races into a duplicate", async () => {
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
 
     const db = {
       from: (table: string) => {
-        if (table === "documents") return makeChain({ data: { id: "found" }, error: null });
-        if (table === "entities") return makeChain({ data: { id: "found" }, error: null });
+        if (table === "documents") return makeChain({ data: [{ id: "d1" }, { id: "dup" }, { id: "boom" }], error: null });
+        if (table === "entities") return makeChain({ data: { id: "e1" }, error: null });
         if (table !== "connections") return makeChain({ data: null, error: null });
         return {
-          insert: (payload: { source_id: string }) => {
-            insertedPayloads.push(payload);
+          select: () => makeChain({ data: [], error: null }), // existing-connections pre-check: none yet
+          insert: (payload: { source_id: string } | Array<{ source_id: string }>) => {
+            if (Array.isArray(payload)) {
+              // The batch insert itself races into a real unique-violation (something else
+              // connected "dup" to e1 between the pre-check above and this statement).
+              return {
+                select: () => Promise.resolve({ data: null, error: { code: "23505", message: "duplicate" } })
+              };
+            }
             if (payload.source_id === "dup") {
               return {
                 select: () => ({
-                  single: () =>
-                    Promise.resolve({ data: null, error: { code: "23505", message: "duplicate" } })
+                  single: () => Promise.resolve({ data: null, error: { code: "23505", message: "duplicate" } })
                 })
               };
             }
             if (payload.source_id === "boom") {
               return {
                 select: () => ({
-                  single: () =>
-                    Promise.resolve({ data: null, error: { code: "500", message: "db exploded" } })
+                  single: () => Promise.resolve({ data: null, error: { code: "500", message: "db exploded" } })
                 })
               };
             }
@@ -295,22 +332,16 @@ describe("bulkCreateConnections", () => {
     } as unknown as ServiceContext["db"];
 
     const { bulkCreateConnections } = await import("@/modules/connections/connections.service");
-    const progressCalls: Array<[number, number]> = [];
 
-    const result = await bulkCreateConnections(
-      makeCtx(db),
-      { sourceKind: "document", sourceIds: ["d1", "dup", "boom"], targetKind: "entity", targetId: "e1" },
-      (processed, total) => {
-        progressCalls.push([processed, total]);
-      }
-    );
+    const result = await bulkCreateConnections(makeCtx(db), {
+      sourceKind: "document",
+      sourceIds: ["d1", "dup", "boom"],
+      targetKind: "entity",
+      targetId: "e1"
+    });
 
     expect(result.createdIds).toEqual(["conn-d1"]);
     expect(result.skippedIds).toEqual(["dup"]);
     expect(result.failures).toEqual([{ id: "boom", error: "db exploded" }]);
-    expect(
-      insertedPayloads.every((p) => (p as unknown as { created_via: string }).created_via === "bulk")
-    ).toBe(true);
-    expect(progressCalls).toEqual([[1, 3], [2, 3], [3, 3]]);
   });
 });

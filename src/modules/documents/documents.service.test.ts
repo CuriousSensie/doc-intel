@@ -346,3 +346,83 @@ describe("updateDocument", () => {
     expect(result.title).toBe("New title");
   });
 });
+
+describe("listDocuments — hasNoConnections", () => {
+  function makeRow(id: string) {
+    return { id, organization_id: "org-1", paperless_document_id: 1, title: "Invoice", created_at: "2026-01-01T00:00:00Z" };
+  }
+
+  it("dispatches to the list_documents_without_connections RPC instead of building a NOT IN list", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [makeRow("doc-1")], error: null });
+    const from = vi.fn(() => {
+      throw new Error("hasNoConnections must not touch documents/connections via .from()");
+    });
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from, rpc }) }));
+
+    const { listDocuments } = await import("@/modules/documents/documents.service");
+    const result = await listDocuments("org-1", { hasNoConnections: true, status: "ready" });
+
+    expect(rpc).toHaveBeenCalledWith(
+      "list_documents_without_connections",
+      expect.objectContaining({ p_organization_id: "org-1", p_status: "ready", p_limit: 26 })
+    );
+    expect(result.items).toHaveLength(1);
+  });
+
+  it("short-circuits to empty when hasNoConnections and entityId are both set (contradictory)", async () => {
+    const from = vi.fn(() => {
+      throw new Error("a contradictory filter must never reach a query");
+    });
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocuments } = await import("@/modules/documents/documents.service");
+    const result = await listDocuments("org-1", { hasNoConnections: true, entityId: "entity-1" });
+
+    expect(result).toEqual({ items: [], nextCursor: null });
+  });
+});
+
+describe("listDocumentIds", () => {
+  it("resolves the q/tag Paperless search once across multiple pages, not once per page", async () => {
+    const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }, { id: 2 }] });
+    vi.doMock("@/lib/paperless/client", () => ({ paperlessFor: async () => ({ get }) }));
+
+    let page = 0;
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: () => proxy,
+        limit: (n: number) => {
+          page++;
+          // Page 1: exactly n rows (limit+1) so hasMore is true and a second page is fetched.
+          // Page 2: nothing left. The Paperless search above must only ever run once regardless.
+          if (page === 1) {
+            const rows = Array.from({ length: n }, (_, i) => ({
+              id: `doc-${i}`,
+              organization_id: "org-1",
+              paperless_document_id: 1,
+              title: "Invoice",
+              created_at: `2026-01-01T00:00:0${i % 9}Z`
+            }));
+            return Promise.resolve({ data: rows, error: null });
+          }
+          return Promise.resolve({ data: [], error: null });
+        }
+      };
+      return proxy;
+    }
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocumentIds } = await import("@/modules/documents/documents.service");
+    const ids = await listDocumentIds("org-1", { q: "invoice" });
+
+    expect(page).toBeGreaterThan(1);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(ids.length).toBeGreaterThan(0);
+  });
+});

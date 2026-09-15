@@ -16,7 +16,11 @@ import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ServiceContext } from "@/lib/service-context";
-import { getConnections, type ConnectionWithOther } from "@/modules/connections/connections.service";
+import {
+  getConnections,
+  listConnectedIds,
+  type ConnectionWithOther
+} from "@/modules/connections/connections.service";
 import { getMembership } from "@/modules/organizations/organizations.service";
 import type { Database } from "@/types/database";
 
@@ -26,8 +30,14 @@ export type Document = Database["public"]["Tables"]["documents"]["Row"];
 const RECENT_LIST_LIMIT = 50;
 const DEFAULT_PAGE_SIZE = 25;
 // specs/05-level-1-structure.md: "Cap the Paperless id set and paginate carefully — this is the
-// one place where naive implementation will not scale past a few thousand documents."
+// one place where naive implementation will not scale past a few thousand documents." — the
+// q/tag search's own page size, a separate concern from the bulk-endpoint id cap below (this
+// one conflated both until Phase 3 M7; nothing actually needed them to be the same number).
 const MAX_PAPERLESS_ID_SET = 2000;
+// specs/03-api.md: "Bulk endpoints cap at 1,000 ids per request" — every current
+// listDocumentIds() caller (bulk connect, bulk export, the filter-match counter) is exactly
+// such an endpoint, so this is the real default, not the Paperless search page size above.
+const BULK_ID_CAP = 1000;
 
 function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9.\-_]/g, "_").slice(-150);
@@ -155,45 +165,76 @@ export type ListDocumentsOptions = {
   limit?: number;
 };
 
+const LIST_DOCUMENT_COLUMNS =
+  "id, organization_id, paperless_document_id, title, document_type_key, document_date, correspondent_name, page_count, byte_size, mime_type, checksum, status, source, import_job_id, synced_at, created_by, created_at, updated_at, deleted_at" as const;
+
+// Resolves the `q`/`tag` Paperless-first id set — factored out so listDocumentIds() can call
+// it once and reuse the result across every page instead of re-issuing the same Paperless
+// search on every 200-row page it loops (found reading this code before any importer existed
+// to make the cost visible: a filtered "select all matching" over 2,000 ids meant ~10 identical
+// searches against Paperless for the exact same query string).
+async function resolvePaperlessIdFilter(
+  organizationId: string,
+  options: Pick<ListDocumentsOptions, "q" | "tag">
+): Promise<Set<number> | null> {
+  if (!options.q && !options.tag) return null;
+
+  const client = await paperlessFor(organizationId);
+  const params = new URLSearchParams({ page_size: String(MAX_PAPERLESS_ID_SET) });
+  if (options.q) params.set("query", options.q);
+  if (options.tag) params.set("tags__name__iexact", options.tag);
+
+  const envelope = await client.get<{ results: { id: number }[] }>(
+    `/api/documents/?${params.toString()}`
+  );
+  return new Set(envelope.results.map((r) => r.id));
+}
+
 // specs/05-level-1-structure.md §Tables and saved views: "A mixed query resolves Paperless-side
 // first (returns ids), then intersects with our connection query, then hydrates." type/date are
 // mirrored exactly for listing (documents.document_type_key/document_date), so they're served
 // straight from our own DB rather than round-tripping to Paperless for values we already have —
 // only `q`/`tag`, which we deliberately don't mirror, actually need the Paperless-first step.
+//
+// `precomputed.paperlessIds` lets listDocumentIds() hoist resolvePaperlessIdFilter() out of its
+// own per-page loop instead of re-resolving it on every page.
 export async function listDocuments(
   organizationId: string,
-  options: ListDocumentsOptions = {}
+  options: ListDocumentsOptions = {},
+  precomputed: { paperlessIds?: Set<number> | null } = {}
 ): Promise<{ items: Document[]; nextCursor: string | null }> {
   const limit = options.limit ?? DEFAULT_PAGE_SIZE;
   const db = await createClient();
 
-  let paperlessIds: Set<number> | null = null;
-  if (options.q || options.tag) {
-    const client = await paperlessFor(organizationId);
-    const params = new URLSearchParams({ page_size: String(MAX_PAPERLESS_ID_SET) });
-    if (options.q) params.set("query", options.q);
-    if (options.tag) params.set("tags__name__iexact", options.tag);
+  const paperlessIds =
+    precomputed.paperlessIds !== undefined
+      ? precomputed.paperlessIds
+      : await resolvePaperlessIdFilter(organizationId, options);
+  if (paperlessIds && paperlessIds.size === 0) return { items: [], nextCursor: null };
 
-    const envelope = await client.get<{ results: { id: number }[] }>(
-      `/api/documents/?${params.toString()}`
-    );
-    paperlessIds = new Set(envelope.results.map((r) => r.id));
-    if (paperlessIds.size === 0) return { items: [], nextCursor: null };
+  // Contradictory by construction (a document "connected to entity X" necessarily has a
+  // connection) — never issued as a query, just short-circuited.
+  if (options.hasNoConnections && options.entityId) {
+    return { items: [], nextCursor: null };
+  }
+
+  if (options.hasNoConnections) {
+    return listDocumentsWithoutConnections(organizationId, options, limit, paperlessIds);
   }
 
   let entityConnectedDocIds: Set<string> | null = null;
   if (options.entityId) {
     const ctx: ServiceContext = { db, orgId: organizationId, actorId: null, correlationId: randomUUID() };
-    const connections = await getConnections(ctx, "entity", options.entityId);
-    entityConnectedDocIds = new Set(
-      connections.filter((c) => c.other.kind === "document").map((c) => c.other.id)
-    );
+    // listConnectedIds(), not getConnections() — this only needs which documents are on the
+    // other side, never the label/entity-type hydration getConnections() also does.
+    const others = await listConnectedIds(ctx, "entity", options.entityId);
+    entityConnectedDocIds = new Set(others.filter((o) => o.kind === "document").map((o) => o.id));
     if (entityConnectedDocIds.size === 0) return { items: [], nextCursor: null };
   }
 
   let query = db
     .from("documents")
-    .select("*")
+    .select(LIST_DOCUMENT_COLUMNS)
     .eq("organization_id", organizationId)
     .is("deleted_at", null);
 
@@ -203,28 +244,6 @@ export async function listDocuments(
   if (options.dateTo) query = query.lte("document_date", options.dateTo);
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
   if (entityConnectedDocIds) query = query.in("id", [...entityConnectedDocIds]);
-
-  if (options.hasNoConnections) {
-    // "Documents with no connections" — specs/05's workhorse view, how a tenant works through
-    // an import backlog. No FK on connections.source_id/target_id (polymorphic by design), so
-    // this resolves the excluded-id set in application code rather than a subquery join.
-    const { data: connectionRows, error: connError } = await db
-      .from("connections")
-      .select("source_kind, source_id, target_kind, target_id")
-      .eq("organization_id", organizationId)
-      .is("deleted_at", null);
-
-    if (connError) throw connError;
-
-    const connectedDocIds = new Set<string>();
-    for (const row of connectionRows ?? []) {
-      if (row.source_kind === "document") connectedDocIds.add(row.source_id);
-      if (row.target_kind === "document") connectedDocIds.add(row.target_id);
-    }
-    if (connectedDocIds.size > 0) {
-      query = query.not("id", "in", `(${[...connectedDocIds].join(",")})`);
-    }
-  }
 
   const cursor = decodeCursor(options.cursor);
   if (cursor) {
@@ -241,6 +260,13 @@ export async function listDocuments(
   const { data, error } = await query;
   if (error) throw error;
 
+  return paginate(data as Document[] | null, limit);
+}
+
+function paginate(
+  data: Document[] | null,
+  limit: number
+): { items: Document[]; nextCursor: string | null } {
   const items = data ?? [];
   const hasMore = items.length > limit;
   const page = hasMore ? items.slice(0, limit) : items;
@@ -252,6 +278,38 @@ export async function listDocuments(
   };
 }
 
+// "Documents with no connections" — specs/05's workhorse view, how a tenant works through an
+// import backlog. Used to pull every connection row for the org into memory to build a
+// `NOT IN (id, id, id, ...)` string — specs/10-nonfunctional.md's named anti-pattern, and the
+// first thing a real import's own "review your unconnected documents" flow would have hit at
+// scale. list_documents_without_connections() (supabase/migrations/
+// 20260916140000_documents_query_perf.sql) does the whole filtered, paginated query in one
+// indexed statement (NOT EXISTS against connections' existing partial indexes) instead.
+async function listDocumentsWithoutConnections(
+  organizationId: string,
+  options: ListDocumentsOptions,
+  limit: number,
+  paperlessIds: Set<number> | null
+): Promise<{ items: Document[]; nextCursor: string | null }> {
+  const db = await createClient();
+  const cursor = decodeCursor(options.cursor);
+
+  const { data, error } = await db.rpc("list_documents_without_connections", {
+    p_organization_id: organizationId,
+    p_document_type_key: options.documentTypeKey ?? null,
+    p_status: options.status ?? null,
+    p_date_from: options.dateFrom ?? null,
+    p_date_to: options.dateTo ?? null,
+    p_paperless_ids: paperlessIds ? [...paperlessIds] : null,
+    p_cursor_created_at: cursor?.createdAt ?? null,
+    p_cursor_id: cursor?.id ?? null,
+    p_limit: limit + 1
+  });
+  if (error) throw error;
+
+  return paginate(data, limit);
+}
+
 // specs/05-level-1-structure.md §Bulk business actions/§Export: "select all matching filter"
 // needs the full id set behind a filter, not one page of it. Loops listDocuments()'s own
 // cursor rather than duplicating its filter-building — capped at the same
@@ -259,15 +317,22 @@ export async function listDocuments(
 export async function listDocumentIds(
   organizationId: string,
   options: Omit<ListDocumentsOptions, "cursor" | "limit"> = {},
-  cap = MAX_PAPERLESS_ID_SET
+  cap = BULK_ID_CAP
 ): Promise<string[]> {
+  // Resolved once, not once per 200-row page — the q/tag Paperless search returns the same
+  // result regardless of which page listDocuments() is building, so re-issuing it every
+  // iteration was pure waste (found reading this loop before any importer existed to make a
+  // multi-thousand-id "select all matching filter" scan visible).
+  const paperlessIds = await resolvePaperlessIdFilter(organizationId, options);
+  if (paperlessIds && paperlessIds.size === 0) return [];
+
   const ids: string[] = [];
   let cursor: string | null = null;
   const pageSize = 200;
 
   while (ids.length < cap) {
     const { items, nextCursor }: { items: Document[]; nextCursor: string | null } =
-      await listDocuments(organizationId, { ...options, cursor, limit: pageSize });
+      await listDocuments(organizationId, { ...options, cursor, limit: pageSize }, { paperlessIds });
     ids.push(...items.map((d) => d.id));
     if (!nextCursor) break;
     cursor = nextCursor;
