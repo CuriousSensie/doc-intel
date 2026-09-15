@@ -577,6 +577,8 @@ export type Database = {
             | "expired";
           error_message: string | null;
           paperless_task_id: string | null;
+          import_row_id: number | null;
+          source_archive_key: string | null;
           document_id: string | null;
           created_by: string | null;
           created_at: string;
@@ -602,6 +604,8 @@ export type Database = {
             | "expired";
           error_message?: string | null;
           paperless_task_id?: string | null;
+          import_row_id?: number | null;
+          source_archive_key?: string | null;
           document_id?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -621,7 +625,169 @@ export type Database = {
             | "expired";
           error_message?: string | null;
           paperless_task_id?: string | null;
+          import_row_id?: number | null;
+          source_archive_key?: string | null;
           document_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Pomočnik Level 1 Phase 3 — import job, materialized rows, reusable mappings.
+      import_jobs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          status:
+            | "draft"
+            | "mapping"
+            | "validating"
+            | "ready"
+            | "running"
+            | "paused"
+            | "completed"
+            | "completed_with_errors"
+            | "failed"
+            | "cancelled";
+          kind: "documents" | "entities" | "metadata_only";
+          source_filename: string | null;
+          storage_key: string | null;
+          total_rows: number;
+          processed_rows: number;
+          succeeded_rows: number;
+          failed_rows: number;
+          skipped_rows: number;
+          mapping: Json;
+          options: Json;
+          error: string | null;
+          created_by: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          status?:
+            | "draft"
+            | "mapping"
+            | "validating"
+            | "ready"
+            | "running"
+            | "paused"
+            | "completed"
+            | "completed_with_errors"
+            | "failed"
+            | "cancelled";
+          kind: "documents" | "entities" | "metadata_only";
+          source_filename?: string | null;
+          storage_key?: string | null;
+          total_rows?: number;
+          processed_rows?: number;
+          succeeded_rows?: number;
+          failed_rows?: number;
+          skipped_rows?: number;
+          mapping?: Json;
+          options?: Json;
+          error?: string | null;
+          created_by?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?:
+            | "draft"
+            | "mapping"
+            | "validating"
+            | "ready"
+            | "running"
+            | "paused"
+            | "completed"
+            | "completed_with_errors"
+            | "failed"
+            | "cancelled";
+          source_filename?: string | null;
+          storage_key?: string | null;
+          total_rows?: number;
+          processed_rows?: number;
+          succeeded_rows?: number;
+          failed_rows?: number;
+          skipped_rows?: number;
+          mapping?: Json;
+          options?: Json;
+          error?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      import_rows: {
+        Row: {
+          id: number;
+          organization_id: string;
+          import_job_id: string;
+          row_number: number;
+          raw: Json;
+          status: "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
+          result: Json | null;
+          error_code: string | null;
+          error_message: string | null;
+          attempts: number;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: number;
+          organization_id: string;
+          import_job_id: string;
+          row_number: number;
+          raw: Json;
+          status?:
+            "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
+          result?: Json | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          attempts?: number;
+          processed_at?: string | null;
+        };
+        Update: {
+          status?:
+            "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
+          result?: Json | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          attempts?: number;
+          processed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      import_mappings: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          kind: "documents" | "entities" | "metadata_only";
+          mapping: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          kind: "documents" | "entities" | "metadata_only";
+          mapping?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          kind?: "documents" | "entities" | "metadata_only";
+          mapping?: Json;
           updated_at?: string;
         };
         Relationships: [];
@@ -957,6 +1123,18 @@ export type Database = {
       };
       claim_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      claim_import_chunk: {
+        Args: { p_import_job_id: string; p_organization_id: string; p_limit?: number };
+        Returns: Database["public"]["Tables"]["import_rows"]["Row"][];
+      };
+      complete_import_job: {
+        Args: { p_import_job_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      fail_import_job: {
+        Args: { p_import_job_id: string; p_organization_id: string; p_reason: string };
         Returns: boolean;
       };
       complete_upload_validation: {
