@@ -73,7 +73,11 @@ test.describe("entities UI", () => {
       .getByRole("link", { name: uniqueName })
       .click({ timeout: FORM_SUBMIT_TIMEOUT });
 
-    await expect(page.getByRole("heading", { name: uniqueName })).toBeVisible();
+    // Same Supabase Cloud round-trip latency as the create-form assertions above (ADR-0013) —
+    // this one was missed when Milestone 6 first wrote this test, unlike its neighbors.
+    await expect(page.getByRole("heading", { name: uniqueName })).toBeVisible({
+      timeout: FORM_SUBMIT_TIMEOUT
+    });
     await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Connections" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Activity" })).toBeVisible();
