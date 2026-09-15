@@ -173,4 +173,51 @@ test.describe("bulk actions and export (needs a live Paperless instance)", () =>
     expect(lines.length).toBeGreaterThanOrEqual(4); // header + at least the 3 bulk_e2e_* docs
     expect(lines.some((line) => line.includes(`Bulk E2E Customer ${runId}`))).toBe(true);
   });
+
+  // Level 1 definition-of-done item 8 explicitly names XLSX, not just CSV — file-builders.test.ts
+  // unit-tests buildXlsx() in isolation, but that never exercises the real worker job or the
+  // signed-download route, so this closes that gap the same way the CSV test above does.
+  test("exports a filtered dataset to XLSX, downloadable via the signed URL route", async ({ page }) => {
+    await loginAsTestUser(page, user);
+    await page.goto("/dashboard/documents");
+    await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
+
+    await page.getByText("Select all matching filter").click();
+    await expect(page.getByText(/\d+ selected/)).toBeVisible({ timeout: FORM_SUBMIT_TIMEOUT });
+    await page.getByRole("button", { name: "Export XLSX" }).click();
+
+    const container = page.locator("[data-export-operation-id]").first();
+    await expect
+      .poll(async () => container.getAttribute("data-export-operation-id"), { timeout: FORM_SUBMIT_TIMEOUT })
+      .not.toBe("");
+    const operationId = await container.getAttribute("data-export-operation-id");
+    if (!operationId) throw new Error("expected an export operation id");
+
+    await expect
+      .poll(
+        async () => {
+          const res = await page.request.get(`/api/exports/${operationId}/download`, { maxRedirects: 0 });
+          return res.status();
+        },
+        { timeout: 30_000 }
+      )
+      .toBe(307);
+
+    const redirectRes = await page.request.get(`/api/exports/${operationId}/download`, { maxRedirects: 0 });
+    const signedUrl = redirectRes.headers()["location"];
+    expect(signedUrl).toBeTruthy();
+
+    const fileRes = await page.request.get(signedUrl);
+    expect(fileRes.ok()).toBe(true);
+    expect(fileRes.headers()["content-type"]).toContain("spreadsheetml");
+
+    const buffer = await fileRes.body();
+    const ExcelJS = (await import("exceljs")).default;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const sheet = workbook.getWorksheet("Documents");
+
+    expect(sheet?.getRow(1).getCell(1).value).toBe("Title");
+    expect(sheet && sheet.rowCount).toBeGreaterThanOrEqual(4);
+  });
 });
