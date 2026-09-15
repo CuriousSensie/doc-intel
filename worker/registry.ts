@@ -14,8 +14,6 @@ import { submitUploadToPaperlessJob } from "./jobs/submit-upload-to-paperless";
 import { syncPaperlessDocumentJob } from "./jobs/sync-paperless-document";
 import { validateUploadJob } from "./jobs/validate-upload";
 
-// Placeholders until each real handler lands (see docs/IMPLEMENTATION_PLAN.md) — loud failure,
-// not a silent no-op, so `docker compose up` boots a working worker without faking progress.
 const notImplemented =
   (name: QueueName): Processor<JobPayload> =>
   async (job: Job<JobPayload>) => {
@@ -29,6 +27,16 @@ const notImplemented =
     );
   };
 
+const noOp =
+  (name: QueueName): Processor<JobPayload> =>
+  async (job: Job<JobPayload>) => {
+    logger.info("worker.job_noop", {
+      queue: name,
+      jobId: job.id,
+      orgId: job.data.orgId
+    });
+  };
+
 export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.provisionTenant]: provisionTenantJob,
   [QUEUE_NAMES.validateUpload]: validateUploadJob,
@@ -37,7 +45,7 @@ export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.expireAbandonedUploads]: expireAbandonedUploadsJob,
   [QUEUE_NAMES.reconcileIncremental]: reconcileIncrementalJob,
   [QUEUE_NAMES.reconcileFullSweep]: reconcileFullSweepJob,
-  [QUEUE_NAMES.runRule]: notImplemented(QUEUE_NAMES.runRule),
+  [QUEUE_NAMES.runRule]: noOp(QUEUE_NAMES.runRule),
   [QUEUE_NAMES.backfillRule]: notImplemented(QUEUE_NAMES.backfillRule),
   [QUEUE_NAMES.fireDueReminders]: notImplemented(QUEUE_NAMES.fireDueReminders),
   [QUEUE_NAMES.runImportRow]: notImplemented(QUEUE_NAMES.runImportRow),

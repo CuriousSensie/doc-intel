@@ -1,10 +1,13 @@
-import { Worker } from "bullmq";
-import IORedis from "ioredis";
+import { DelayedError, type Job, type Processor, Worker } from "bullmq";
 
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { getQueueRuntimeConfig } from "@/lib/queue/config";
 import { getQueue, QUEUE_NAMES } from "@/lib/queue";
+import { OrgRateLimitExceededError } from "@/lib/ratelimit/token-bucket";
+import { getRedisClient } from "@/lib/redis";
 
+import type { JobPayload } from "./context";
 import { jobRegistry } from "./registry";
 
 const EXPIRE_ABANDONED_UPLOADS_INTERVAL_MS = 5 * 60 * 1000;
@@ -38,13 +41,37 @@ async function registerSchedules() {
   );
 }
 
+function delayAwareProcessor(processor: Processor<JobPayload>): Processor<JobPayload> {
+  return async (job: Job<JobPayload>) => {
+    try {
+      return await processor(job);
+    } catch (err) {
+      if (err instanceof OrgRateLimitExceededError) {
+        await job.moveToDelayed(Date.now() + err.retryAfterMs, job.token);
+        logger.info("worker.job_delayed_for_org_rate_limit", {
+          queue: job.queueName,
+          jobId: job.id,
+          orgId: err.orgId,
+          bucket: err.bucket,
+          retryAfterMs: err.retryAfterMs
+        });
+        throw new DelayedError();
+      }
+
+      throw err;
+    }
+  };
+}
+
 // Entrypoint for the `worker` container (Dockerfile.worker). Boots one BullMQ Worker per queue.
 function main() {
   const workers = Object.values(QUEUE_NAMES).map((name) => {
-    // Own connection per Worker, per BullMQ's recommendation (unlike Queue producers, shared).
-    const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+    const config = getQueueRuntimeConfig(name);
 
-    const worker = new Worker(name, jobRegistry[name], { connection });
+    const worker = new Worker(name, delayAwareProcessor(jobRegistry[name]), {
+      connection: getRedisClient(),
+      ...config.worker
+    });
 
     worker.on("completed", (job) => {
       logger.info("worker.job_completed", { queue: name, jobId: job.id, orgId: job.data.orgId });
@@ -62,7 +89,11 @@ function main() {
     return worker;
   });
 
-  logger.info("worker.started", { queues: Object.values(QUEUE_NAMES).join(",") });
+  logger.info("worker.started", {
+    queues: Object.values(QUEUE_NAMES).join(","),
+    ingestConcurrency: env.WORKER_INGEST_CONCURRENCY,
+    paperlessIngestRatePerSecond: env.PAPERLESS_INGEST_RATE_PER_SECOND
+  });
 
   const shutdown = async (signal: string) => {
     logger.info("worker.shutting_down", { signal });

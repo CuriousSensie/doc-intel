@@ -1,38 +1,11 @@
-import { Queue, type ConnectionOptions } from "bullmq";
-import IORedis from "ioredis";
+import { Queue, type JobsOptions } from "bullmq";
 
-import { env } from "@/lib/env";
+import { getRedisClient } from "@/lib/redis";
 
-// Single source of truth for queue names — a raw-string typo is a job that never runs.
-export const QUEUE_NAMES = {
-  provisionTenant: "provision-tenant",
-  validateUpload: "validate-upload",
-  submitUploadToPaperless: "submit-upload-to-paperless",
-  syncPaperlessDocument: "sync-paperless-document",
-  expireAbandonedUploads: "expire-abandoned-uploads",
-  reconcileIncremental: "reconcile-incremental",
-  reconcileFullSweep: "reconcile-full-sweep",
-  runRule: "run-rule",
-  backfillRule: "backfill-rule",
-  fireDueReminders: "fire-due-reminders",
-  runImportRow: "run-import-row",
-  bulkAction: "bulk-action",
-  export: "export"
-} as const;
-
-export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
-
-let connection: IORedis | null = null;
-
-// Shared connection for producers only — Workers (worker/index.ts) create their own per BullMQ's
-// recommendation.
-function getConnection(): ConnectionOptions {
-  if (!connection) {
-    connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
-  }
-
-  return connection;
-}
+import { getQueueRuntimeConfig } from "./config";
+export { QUEUE_NAMES } from "./names";
+export type { QueueName } from "./names";
+import type { QueueName } from "./names";
 
 const queues = new Map<QueueName, Queue>();
 
@@ -51,10 +24,13 @@ export function getQueue(name: QueueName): Queue {
   // actually happens). 3 attempts, exponential backoff — same attempt count as
   // PaperlessClient's own idempotent-GET retry (src/lib/paperless/client.ts's MAX_RETRIES).
   const queue = new Queue(name, {
-    connection: getConnection(),
+    connection: getRedisClient(),
     defaultJobOptions: {
       attempts: 3,
-      backoff: { type: "exponential", delay: 2_000 }
+      backoff: { type: "exponential", delay: 2_000 },
+      removeOnComplete: { age: 24 * 60 * 60, count: 1_000 },
+      removeOnFail: { age: 7 * 24 * 60 * 60, count: 1_000 },
+      ...getQueueRuntimeConfig(name).defaultJobOptions
     }
   });
   queues.set(name, queue);
@@ -65,8 +41,17 @@ export function getQueue(name: QueueName): Queue {
 export async function enqueue<TPayload extends { orgId: string }>(
   name: QueueName,
   payload: TPayload,
-  options?: Parameters<Queue["add"]>[2]
+  options?: JobsOptions
 ) {
   const queue = getQueue(name);
   return queue.add(name, payload, options);
+}
+
+export async function enqueueBulk<TPayload extends { orgId: string }>(
+  name: QueueName,
+  payloads: TPayload[],
+  options?: JobsOptions
+) {
+  const queue = getQueue(name);
+  return queue.addBulk(payloads.map((payload) => ({ name, data: payload, opts: options })));
 }

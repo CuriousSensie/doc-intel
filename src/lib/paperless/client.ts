@@ -1,7 +1,10 @@
+import { Agent } from "undici";
+
 import { OrgNotProvisionedError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { requireOrgToken } from "@/lib/ratelimit/token-bucket";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireEnv } from "@/lib/env";
+import { env, requireEnv } from "@/lib/env";
 
 import { mapPaperlessError, isRetryablePaperlessError } from "./errors";
 import { decryptPaperlessToken } from "./token-crypto";
@@ -10,6 +13,7 @@ import type { PaperlessSetPermissions } from "./types";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
+const ADMIN_ORG_ID = "__admin__";
 
 type RequestOptions = {
   method?: string;
@@ -21,6 +25,20 @@ type RequestOptions = {
 };
 
 type PaperlessCredentials = { baseUrl: string; token: string };
+
+let paperlessAgent: Agent | null = null;
+
+function getPaperlessAgent(): Agent {
+  if (!paperlessAgent) {
+    paperlessAgent = new Agent({
+      connections: env.PAPERLESS_HTTP_CONNECTIONS,
+      keepAliveTimeout: 10_000,
+      keepAliveMaxTimeout: 60_000
+    });
+  }
+
+  return paperlessAgent;
+}
 
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,6 +104,14 @@ export class PaperlessClient {
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (this.orgId !== ADMIN_ORG_ID) {
+        if (form && path === "/api/documents/post_document/") {
+          await requireOrgToken(this.orgId, "paperless:upload");
+        } else if (method === "GET") {
+          await requireOrgToken(this.orgId, "paperless:read");
+        }
+      }
+
       const start = Date.now();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -98,8 +124,9 @@ export class PaperlessClient {
           method,
           headers,
           body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
-          signal: controller.signal
-        });
+          signal: controller.signal,
+          dispatcher: getPaperlessAgent()
+        } as RequestInit & { dispatcher: Agent });
 
         const durationMs = Date.now() - start;
         logger.info("paperless.request", {
@@ -192,19 +219,30 @@ export class PaperlessClient {
   // session cookie; the real Paperless token never reaches the client, unlike a redirect would.
   // No retry here (interactive request, not idempotent-safe to replay a partially-read stream).
   async getStream(path: string): Promise<Response> {
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), env.PAPERLESS_STREAM_TIMEOUT_MS);
+
+    if (this.orgId !== ADMIN_ORG_ID) {
+      await requireOrgToken(this.orgId, "paperless:read");
+    }
+
     const res = await fetch(`${this.creds.baseUrl}${path}`, {
-      headers: { Authorization: `Token ${this.creds.token}` }
-    });
+      headers: { Authorization: `Token ${this.creds.token}` },
+      signal: controller.signal,
+      dispatcher: getPaperlessAgent()
+    } as RequestInit & { dispatcher: Agent });
 
     logger.info("paperless.request", {
       orgId: this.orgId,
       method: "GET",
       path,
       status: res.status,
-      durationMs: 0
+      durationMs: Date.now() - start
     });
 
     if (!res.ok) {
+      clearTimeout(timeout);
       throw await mapPaperlessError(res, { orgId: this.orgId, path });
     }
 
@@ -320,8 +358,9 @@ async function getAdminToken(): Promise<string> {
     body: JSON.stringify({
       username: requireEnv("PAPERLESS_ADMIN_USER"),
       password: requireEnv("PAPERLESS_ADMIN_PASSWORD")
-    })
-  });
+    }),
+    dispatcher: getPaperlessAgent()
+  } as RequestInit & { dispatcher: Agent });
 
   if (!res.ok) {
     throw new Error(`Failed to obtain Paperless admin token: ${res.status} ${await res.text()}`);
@@ -337,7 +376,7 @@ async function getAdminToken(): Promise<string> {
 export async function paperlessAdminClient(): Promise<PaperlessClient> {
   const token = await getAdminToken();
   return new PaperlessClient(
-    "__admin__",
+    ADMIN_ORG_ID,
     { baseUrl: requireEnv("PAPERLESS_ADMIN_URL"), token },
     null
   );
