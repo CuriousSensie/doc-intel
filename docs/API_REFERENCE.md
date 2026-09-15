@@ -299,16 +299,89 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 ## `src/modules/documents/`
 
 ### `documents.service.ts`
-- `type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"]`, `type Document`, `type DocumentDetails = Document & {connections, paperless}`, `type DocumentHistoryEntry`, `type ListDocumentsOptions`
+- `type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"]`, `type Document`, `type DocumentDetails = Document & {connections, paperless, history}`, `type DocumentHistoryEntry`, `type ListDocumentsOptions`
 - `createUploadIntent(userId, organizationId, { filename, size, mimeType }): Promise<{ uploadId, signedUrl, token, path }>` — validates against `src/config/documents.ts`; inserts via the caller's own RLS-scoped client; deletes the row if `createSignedUploadUrl()` fails.
 - `completeUpload(userId, uploadId): Promise<DocumentUpload>` — confirms the object exists in storage (`storage.list()`) before flipping `pending` → `uploaded` and enqueueing `validateUpload`.
-- `listDocuments(organizationId, options?: ListDocumentsOptions): Promise<{items, nextCursor}>` — mixed-filter (specs/05): `documentTypeKey`/`status`/`dateFrom`/`dateTo` served from our mirror; `q`/`tag` delegated to Paperless first (capped at 2000 ids), then intersected; `entityId`/`hasNoConnections` business filters resolved entirely from our DB.
-- `getDocument(organizationId, documentId): Promise<DocumentDetails>` — mirror row + `getConnections()` + a best-effort live Paperless read (`paperless: null` on any failure, never fails the page).
-- `getDocumentHistory(organizationId, documentId): Promise<DocumentHistoryEntry[]>` — merged Paperless `/api/documents/:id/history/` + our own `audit_logs`, sorted by timestamp.
+- `listDocuments(organizationId, options?: ListDocumentsOptions): Promise<{items, nextCursor}>` — mixed-filter (specs/05): `documentTypeKey`/`status`/`dateFrom`/`dateTo` served from our mirror; `q`/`tag` delegated to Paperless first (capped at `MAX_PAPERLESS_ID_SET` = 2000 ids), then intersected; `entityId`/`hasNoConnections` business filters resolved entirely from our DB.
+- `listDocumentIds(organizationId, options?, cap?): Promise<string[]>` — Pomočnik Milestone 7. Loops `listDocuments()`'s own cursor to resolve a filter into a capped id set — backs "select all matching filter" for bulk actions and export.
+- `getDocument(documentId): Promise<DocumentDetails>` — no `organizationId` param (derived from the fetched row; RLS scopes the read). One parallel `Promise.all` fan-out: mirror row's connections (`getConnections()`), a best-effort live Paperless read (`paperless: null` on any failure, never fails the page), and history.
+- `getDocumentHistory(documentId, options?: {db?, organizationId?, paperlessDocumentId?}): Promise<DocumentHistoryEntry[]>` — merged Paperless `/api/documents/:id/history/` + our own `audit_logs`, sorted by timestamp. Options let `getDocument()` pass through what it already fetched, skipping a redundant row lookup.
 - `updateDocument(userId, organizationId, documentId, {title?, documentDate?, documentTypeId?, customFieldValues?}): Promise<Document>` — write-through to Paperless first, mirror updated via the admin client from Paperless's own response (`documents` has no update RLS policy); explicitly rejects a `read-only` member before calling Paperless at all.
 
 ### `documents.actions.ts`
 - `listDocumentsAction`, `getDocumentAction`, `getDocumentHistoryAction`, `updateDocumentAction` — typed Server Action wrappers (ADR-0009), `buildRequestContext()`-based.
+- `countDocumentsMatchingFilterAction(filter?): Promise<{count}>` — Pomočnik Milestone 7. The count-confirmation step before a filter-scoped bulk action or export fires.
+- `bulkEditDocumentsAction({paperlessDocumentIds, method, parameters?}): Promise<{operationId}>` — Pomočnik Milestone 7. Proxies Paperless's own `bulk_edit` (never reimplemented); writes a completed `background_operations` row purely for history/audit, since Paperless applies the edit atomically and synchronously server-side.
+
+## `src/modules/entities/` and `src/modules/entity-types/` — Pomočnik Level 1
+
+### `entities.service.ts`
+- `type Entity`, `type EntityIdentifier`
+- `createEntity(ctx, {entityTypeId, displayName, data?}): Promise<Entity>`, `updateEntity(ctx, entityId, {displayName?, status?, data?}): Promise<Entity>`, `getEntity(ctx, entityId): Promise<Entity>`, `deleteEntity(ctx, entityId, {force?}): Promise<void>` — soft delete, refused if connections exist unless `force`.
+- `listEntities(ctx, {entityTypeId?, q?, status?}): Promise<Entity[]>` — `q` searches `search_tsv` + identifiers.
+- `addIdentifier(ctx, entityId, {kind, value}): Promise<EntityIdentifier>`, `removeIdentifier(ctx, identifierId): Promise<void>`, `listEntityIdentifiers(ctx, entityId): Promise<EntityIdentifier[]>`
+- `countEntitiesByType(ctx): Promise<Record<string, number>>`
+
+### `entity-types.service.ts`
+- `type EntityType`, `type EntityFieldDefinition`
+- `listEntityTypes(ctx): Promise<EntityType[]>`, `getEntityType(ctx, entityTypeId): Promise<EntityType>`, `getEntityTypeByKey(ctx, key): Promise<EntityType>`, `createEntityType(ctx, {key, name, namePlural, fieldSchema?}): Promise<EntityType>`
+- `addField(ctx, entityTypeId, field): Promise<EntityType>`, `renameFieldLabel(ctx, entityTypeId, key, label): Promise<EntityType>`, `changeFieldType(ctx, entityTypeId, key, type): Promise<EntityType>` (lossless cases only), `removeField(ctx, entityTypeId, key): Promise<EntityType>` (hides, doesn't delete data)
+- `getVisibleFieldSchema(entityType)`, `getFieldSchema(entityType)` — pure helpers, not DB calls.
+
+### `identifier-normalization.ts`
+- `normalizeIdentifier(kind, value): string` — per-kind rules (`vat`, `company_reg`, `erp_id`, `email`, generic).
+
+### `entities.actions.ts` / `entity-types.actions.ts`
+- `createEntityFormAction(formData)`, `createEntityTypeFormAction(formData)`, `addFieldFormAction(formData)`, `removeFieldFormAction(formData)` — native-form Server Actions (ADR-0009); every success path redirects via `withStatus()` (a query-param-bearing URL), not the bare list path — this codebase has no `revalidatePath`, so a same-URL redirect does not refetch stale Server Component data (a real bug found via e2e testing).
+
+## `src/modules/connections/` — Pomočnik Level 1
+
+### `connections.service.ts`
+- `type Connection`, `type ConnectableKind = "document" | "entity"`, `type Relation`, `type ConnectionWithOther`
+- `getConnections(ctx, kind, id): Promise<ConnectionWithOther[]>` — the one union-query helper (both directions, hydrated with the other side's label/entity-type).
+- `createConnection(ctx, {sourceKind, sourceId, targetKind, targetId, relation?, createdVia?, ruleId?}): Promise<Connection>` — rejects self-connection; rejects a source/target id that doesn't belong to the caller's org (`assertBelongsToOrg()`, isolation test #9); maps a unique-pair violation to `ConflictError`.
+- `deleteConnection(ctx, connectionId): Promise<void>` — soft delete.
+- `bulkCreateConnections(ctx, {sourceKind, sourceIds, targetKind, targetId, relation?, createdVia?}, onProgress?): Promise<{createdIds, skippedIds, failures}>` — Pomočnik Milestone 7. Loops `createConnection()` per item.
+
+### `entity-merge.service.ts`
+- `mergeEntities(ctx, {keepId, mergeId}): Promise<void>` — thin wrapper over the `merge_entities()` Postgres function (`docs/DATABASE.md`). Requires a request-context `ctx` (the RPC checks `auth.uid()` itself).
+
+### `connections.actions.ts`
+- `createConnectionAction`, `deleteConnectionAction`, `getConnectionsAction`, `mergeEntitiesAction` — Server Action wrappers.
+- `bulkConnectDocumentsAction({documentIds?, filter?, targetKind, targetId, relation?}): Promise<{mode:"sync",operationId,created,skipped,failed} | {mode:"async",operationId,total}>` — Pomočnik Milestone 7. ≤50 items resolved runs synchronously; above that, enqueues `worker/jobs/bulk-action.ts`.
+- `undoBulkConnectAction(operationId): Promise<void>` — reverses the connections a given bulk-connect operation created.
+- `getBackgroundOperationAction(operationId)` — polling read for both bulk-connect and export progress.
+
+## `src/modules/saved-views/` — Pomočnik Level 1
+- `ensureStarterViews(ctx): Promise<SavedView[]>` — lazily seeds the five spec-required starter views on first call, no-ops if any already exist.
+- `listSavedViews(ctx): Promise<SavedView[]>`
+
+## `src/modules/background-operations/` — Pomočnik Level 1
+- `type BackgroundOperation`
+- `createBackgroundOperation(ctx, {kind, params, totalCount?}): Promise<BackgroundOperation>`, `getBackgroundOperation(ctx, id): Promise<BackgroundOperation>`
+- `updateBackgroundOperationProgress(ctx, id, {processedCount, successCount?, failureCount?}): Promise<void>`, `completeBackgroundOperation(ctx, id, {successCount, failureCount, failures?, result?}): Promise<void>`, `failBackgroundOperation(ctx, id, errorMessage): Promise<void>` — worker-only (no update RLS policy on this table; callers use the admin client from a job context).
+
+## `src/modules/exports/` — Pomočnik Level 1
+- `resolveExportData(ctx, documentIds): Promise<{rows, entityTypeColumns}>` — batched (one connections query per direction, one entities query, one entity_types query) connected-entity column resolution.
+- `buildCsv(data): string` (`file-builders.ts`) — `;` delimiter, UTF-8 BOM, `dd.mm.yyyy` dates.
+- `buildXlsx(data): Promise<Buffer>` — streams via `exceljs`.
+- `createExportAction({documentIds?, filter?, format}): Promise<{operationId, total}>` — always enqueues `worker/jobs/export.ts` (never runs synchronously, regardless of row count).
+- `getExportAction(operationId)` — polling read.
+
+## Route Handlers — Pomočnik
+
+Per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md): fetch/polling/streaming/download
+surfaces only; everything else is a Server Action (see the modules above).
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/documents/upload-intent` | Signed upload URL — `createUploadIntent()`. |
+| `POST /api/documents/upload-complete` | Confirms the storage object landed — `completeUpload()`. |
+| `GET /api/documents/[id]/preview` | Streams the file inline (sandboxed `<object>` target) — pipes `PaperlessClient#getStream()`'s body straight through, never a redirect to a raw Paperless URL carrying the tenant token. |
+| `GET /api/documents/[id]/download` | Same shape as preview; Paperless itself sets `Content-Disposition: attachment`. |
+| `POST /api/internal/paperless/document-consumed` | HMAC-verified post-consume webhook — see `docs/SECURITY.md`. |
+| `GET /api/search?q=` | Pomočnik Level 1. Entity name/identifier match, scoped to the active org — backs the two-interaction connection picker. Entities only today; documents aren't searchable from this endpoint. |
+| `GET /api/exports/[id]/download` | Pomočnik Level 1 (Milestone 7). Loads the `background_operations` row (RLS-scoped), issues a 5-minute signed URL against the private `exports` bucket, 307-redirects. |
 
 ## `src/lib/api-response.ts`
 
