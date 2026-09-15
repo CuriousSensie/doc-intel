@@ -18,8 +18,10 @@ export const QUEUE_PRIORITY = {
 
 export const queueRuntimeConfig: Record<QueueName, QueueRuntimeConfig> = {
   [QUEUE_NAMES.provisionTenant]: { worker: { concurrency: 1 } },
-  [QUEUE_NAMES.validateUpload]: { worker: { concurrency: env.WORKER_INGEST_CONCURRENCY } },
-  [QUEUE_NAMES.submitUploadToPaperless]: {
+  // No blocking Paperless wait inside this job anymore (poll-paperless-tasks.ts owns that) —
+  // its own limiter still caps submissions/sec so a burst of ingest jobs can't flood
+  // post_document/ faster than Paperless (and the per-org token bucket) can take it.
+  [QUEUE_NAMES.ingestDocument]: {
     worker: {
       concurrency: env.WORKER_INGEST_CONCURRENCY,
       limiter: {
@@ -29,6 +31,9 @@ export const queueRuntimeConfig: Record<QueueName, QueueRuntimeConfig> = {
     },
     defaultJobOptions: { priority: QUEUE_PRIORITY.interactiveUpload }
   },
+  // One scheduler tick per interval (worker/index.ts), not per-document — concurrency 1 is
+  // correct here, not a throughput cap (see poll-paperless-tasks.ts for why).
+  [QUEUE_NAMES.pollPaperlessTasks]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.syncPaperlessDocument]: { worker: { concurrency: env.WORKER_INGEST_CONCURRENCY } },
   [QUEUE_NAMES.expireAbandonedUploads]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.reconcileIncremental]: { worker: { concurrency: 1 } },

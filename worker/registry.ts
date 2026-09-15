@@ -7,12 +7,12 @@ import type { JobPayload } from "./context";
 import { bulkActionJob } from "./jobs/bulk-action";
 import { expireAbandonedUploadsJob } from "./jobs/expire-abandoned-uploads";
 import { exportJob } from "./jobs/export";
+import { ingestDocumentJob } from "./jobs/ingest-document";
+import { pollPaperlessTasksJob } from "./jobs/poll-paperless-tasks";
 import { provisionTenantJob } from "./jobs/provision-tenant";
 import { reconcileFullSweepJob } from "./jobs/reconcile-full-sweep";
 import { reconcileIncrementalJob } from "./jobs/reconcile-incremental";
-import { submitUploadToPaperlessJob } from "./jobs/submit-upload-to-paperless";
 import { syncPaperlessDocumentJob } from "./jobs/sync-paperless-document";
-import { validateUploadJob } from "./jobs/validate-upload";
 
 const notImplemented =
   (name: QueueName): Processor<JobPayload> =>
@@ -39,8 +39,8 @@ const noOp =
 
 export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.provisionTenant]: provisionTenantJob,
-  [QUEUE_NAMES.validateUpload]: validateUploadJob,
-  [QUEUE_NAMES.submitUploadToPaperless]: submitUploadToPaperlessJob,
+  [QUEUE_NAMES.ingestDocument]: ingestDocumentJob,
+  [QUEUE_NAMES.pollPaperlessTasks]: pollPaperlessTasksJob,
   [QUEUE_NAMES.syncPaperlessDocument]: syncPaperlessDocumentJob,
   [QUEUE_NAMES.expireAbandonedUploads]: expireAbandonedUploadsJob,
   [QUEUE_NAMES.reconcileIncremental]: reconcileIncrementalJob,

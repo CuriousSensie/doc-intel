@@ -9,17 +9,26 @@ export type PaperlessListEnvelope<T> = {
 };
 
 // results (paginated), lowercase status, related_document_ids as a list — all confirmed live.
+// Phase 3 M3 re-verified this shape live: the field is `result_data` (an object, e.g.
+// `{ document_id: N }` on success — never confirmed for a real failure, so treated as
+// `unknown`), not `result` as this type previously claimed — that was a real, latent bug
+// (submit-upload-to-paperless.ts's failure message read `task.result`, always undefined).
+// `status` also passes through an intermediate `"started"` value before success/failure.
+// `owner` is the Paperless user id that submitted the task (the tenant service user for
+// post_document/) — see docs/adr/0014-paperless-task-poller-isolation.md for why this matters:
+// GET /api/tasks/ unfiltered returns every tenant's tasks (confirmed live, a real isolation
+// gap), but GET /api/tasks/?task_id=<id> is correctly scoped to the caller's own tasks.
 export type PaperlessTask = {
   id: number;
   task_id: string;
   task_type: string;
-  status: "success" | "failure" | "pending" | string;
+  status: "success" | "failure" | "started" | "pending" | string;
   date_created: string;
   date_started: string | null;
   date_done: string | null;
   duration_seconds: number | null;
   related_document_ids: number[] | null;
-  result?: string;
+  result_data?: unknown;
   owner: number | null;
 };
 

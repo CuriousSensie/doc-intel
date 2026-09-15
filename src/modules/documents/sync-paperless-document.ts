@@ -1,9 +1,5 @@
-import {
-  getPaperlessCorrespondentName,
-  getPaperlessDocument,
-  getPaperlessDocumentTypeName,
-  toDocumentTypeKey
-} from "@/lib/paperless/documents";
+import { getPaperlessDocument, toDocumentTypeKey } from "@/lib/paperless/documents";
+import { getCachedCorrespondentName, getCachedDocumentTypeName } from "@/lib/paperless/metadata-cache";
 import { logEvent } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { paperlessFor } from "@/lib/paperless/client";
@@ -40,10 +36,10 @@ export async function syncPaperlessDocument(
 
     const [documentTypeKey, correspondentName] = await Promise.all([
       doc.document_type != null
-        ? getPaperlessDocumentTypeName(paperless, doc.document_type).then(toDocumentTypeKey)
+        ? getCachedDocumentTypeName(paperless, orgId, doc.document_type).then(toDocumentTypeKey)
         : Promise.resolve(null),
       doc.correspondent != null
-        ? getPaperlessCorrespondentName(paperless, doc.correspondent)
+        ? getCachedCorrespondentName(paperless, orgId, doc.correspondent)
         : Promise.resolve(null)
     ]);
 
@@ -56,17 +52,22 @@ export async function syncPaperlessDocument(
 
     let byteSize: number | null = null;
     let createdBy: string | null = null;
+    // Import-sourced uploads (document_uploads.import_row_id set) don't get a per-document
+    // notification — a 10,000-document import would otherwise spam 10,000 of them. The import
+    // job's own completion notification (Phase 3 M6) summarizes instead.
+    let isFromImport = false;
 
     if (uploadId) {
       const { data: upload, error: uploadError } = await db
         .from("document_uploads")
-        .select("size_bytes, created_by")
+        .select("size_bytes, created_by, import_row_id")
         .eq("id", uploadId)
         .eq("organization_id", orgId)
         .single();
       if (uploadError) throw uploadError;
       byteSize = upload.size_bytes;
       createdBy = upload.created_by;
+      isFromImport = upload.import_row_id !== null;
     }
 
     const { data: documentRow, error: upsertError } = await db
@@ -122,7 +123,7 @@ export async function syncPaperlessDocument(
       metadata: { paperlessDocumentId }
     });
 
-    if (createdBy) {
+    if (createdBy && !isFromImport) {
       await createNotification(createdBy, {
         type: "document.ingested",
         title: "Document ready",

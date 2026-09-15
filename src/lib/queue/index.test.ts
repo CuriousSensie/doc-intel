@@ -16,10 +16,10 @@ describe("queue helpers", () => {
 
     const { getQueue, QUEUE_NAMES } = await import("@/lib/queue");
 
-    getQueue(QUEUE_NAMES.submitUploadToPaperless);
+    getQueue(QUEUE_NAMES.ingestDocument);
 
     expect(queueCtor).toHaveBeenCalledWith(
-      "submit-upload-to-paperless",
+      "ingest-document",
       expect.objectContaining({
         defaultJobOptions: expect.objectContaining({
           attempts: 3,

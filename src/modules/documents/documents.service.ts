@@ -130,7 +130,7 @@ export async function completeUpload(userId: string, uploadId: string): Promise<
 
   if (updateError) throw updateError;
 
-  await enqueue(QUEUE_NAMES.validateUpload, {
+  await enqueue(QUEUE_NAMES.ingestDocument, {
     orgId: upload.organization_id,
     uploadId: upload.id
   });

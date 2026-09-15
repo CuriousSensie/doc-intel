@@ -216,7 +216,7 @@ describe("completeUpload", () => {
     const enqueue = vi.fn().mockResolvedValue(undefined);
     vi.doMock("@/lib/queue", () => ({
       enqueue,
-      QUEUE_NAMES: { validateUpload: "validate-upload" }
+      QUEUE_NAMES: { ingestDocument: "ingest-document" }
     }));
 
     const { completeUpload } = await import("@/modules/documents/documents.service");
@@ -224,7 +224,7 @@ describe("completeUpload", () => {
 
     expect(result.status).toBe("uploaded");
     expect(update).toHaveBeenCalledWith({ status: "uploaded" });
-    expect(enqueue).toHaveBeenCalledWith("validate-upload", {
+    expect(enqueue).toHaveBeenCalledWith("ingest-document", {
       orgId: "org-1",
       uploadId: "upload-1"
     });

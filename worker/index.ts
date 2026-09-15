@@ -15,6 +15,9 @@ const EXPIRE_ABANDONED_UPLOADS_INTERVAL_MS = 5 * 60 * 1000;
 const RECONCILE_INCREMENTAL_INTERVAL_MS = 5 * 60 * 1000;
 // docs/IMPLEMENTATION_PLAN.md: the full sweep (deletion detection) runs daily.
 const RECONCILE_FULL_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Phase 3 M3: replaces the old blocking in-job poll — same 2s cadence pollPaperlessTask() used
+// to sleep for between attempts, just moved out to its own schedule (docs/adr/0014).
+const POLL_PAPERLESS_TASKS_INTERVAL_MS = 2 * 1000;
 
 // Registers this worker's recurring (non-tenant-triggered) jobs via BullMQ v6's JobScheduler —
 // upsertJobScheduler() is keyed by jobSchedulerId, so calling this on every boot (including a
@@ -37,6 +40,12 @@ async function registerSchedules() {
   await getQueue(QUEUE_NAMES.reconcileFullSweep).upsertJobScheduler(
     QUEUE_NAMES.reconcileFullSweep,
     { every: RECONCILE_FULL_SWEEP_INTERVAL_MS },
+    { data: { orgId: "system" } }
+  );
+
+  await getQueue(QUEUE_NAMES.pollPaperlessTasks).upsertJobScheduler(
+    QUEUE_NAMES.pollPaperlessTasks,
+    { every: POLL_PAPERLESS_TASKS_INTERVAL_MS },
     { data: { orgId: "system" } }
   );
 }
