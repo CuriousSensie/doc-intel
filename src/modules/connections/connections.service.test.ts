@@ -58,6 +58,7 @@ describe("createConnection", () => {
   it("maps a unique-violation to ConflictError regardless of which side was passed first", async () => {
     vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
     const db = makeDb({
+      entities: [{ data: { id: "e2" }, error: null }, { data: { id: "e1" }, error: null }],
       connections: [{ data: null, error: { code: "23505", message: "duplicate key" } }]
     });
     const { createConnection } = await import("@/modules/connections/connections.service");
@@ -77,6 +78,8 @@ describe("createConnection", () => {
     vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
     const db = {
       from: (table: string) => {
+        if (table === "documents") return makeChain({ data: { id: "d1" }, error: null });
+        if (table === "entities") return makeChain({ data: { id: "e1" }, error: null });
         if (table !== "connections") return makeChain({ data: null, error: null });
         return {
           insert: (payload: unknown) => {
@@ -104,6 +107,22 @@ describe("createConnection", () => {
     });
 
     expect(insertedPayloads[0]).toMatchObject({ relation: "related", created_via: "manual" });
+  });
+
+  it("rejects a target id that does not belong to the caller's org (isolation test #9)", async () => {
+    const db = makeDb({
+      entities: [{ data: { id: "e1" }, error: null }, { data: null, error: null }]
+    });
+    const { createConnection } = await import("@/modules/connections/connections.service");
+
+    await expect(
+      createConnection(makeCtx(db), {
+        sourceKind: "entity",
+        sourceId: "e1",
+        targetKind: "entity",
+        targetId: "other-orgs-entity"
+      })
+    ).rejects.toThrow(/entity not found/);
   });
 });
 
@@ -239,6 +258,8 @@ describe("bulkCreateConnections", () => {
 
     const db = {
       from: (table: string) => {
+        if (table === "documents") return makeChain({ data: { id: "found" }, error: null });
+        if (table === "entities") return makeChain({ data: { id: "found" }, error: null });
         if (table !== "connections") return makeChain({ data: null, error: null });
         return {
           insert: (payload: { source_id: string }) => {

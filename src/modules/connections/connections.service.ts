@@ -148,6 +148,29 @@ export async function getConnections(
   });
 }
 
+// specs/10-nonfunctional.md isolation test #9: "A creates a connection targeting B's entity
+// id" must 404/422, not silently succeed. `connections` has no FK on source_id/target_id
+// (polymorphic by design, specs/02's own "do not fix this" note) — without this check, nothing
+// stopped an insert with organization_id: A's org but a target_id belonging to another
+// tenant's entity/document, since the row itself carries no per-side ownership constraint.
+async function assertBelongsToOrg(
+  ctx: ServiceContext,
+  kind: ConnectableKind,
+  id: string
+): Promise<void> {
+  const table = kind === "entity" ? "entities" : "documents";
+  const { data, error } = await ctx.db
+    .from(table)
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new NotFoundError(`${kind} not found`);
+}
+
 export async function createConnection(
   ctx: ServiceContext,
   input: {
@@ -163,6 +186,11 @@ export async function createConnection(
   if (input.sourceKind === input.targetKind && input.sourceId === input.targetId) {
     throw new ValidationError("Cannot connect a record to itself");
   }
+
+  await Promise.all([
+    assertBelongsToOrg(ctx, input.sourceKind, input.sourceId),
+    assertBelongsToOrg(ctx, input.targetKind, input.targetId)
+  ]);
 
   const { data, error } = await ctx.db
     .from("connections")
