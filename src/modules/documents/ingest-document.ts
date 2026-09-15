@@ -1,8 +1,8 @@
 import { createReadStream, openAsBlob } from "node:fs";
-import { open } from "node:fs/promises";
 
 import { documentsConfig } from "@/config/documents";
 import { ValidationError } from "@/lib/errors";
+import { readFileHead } from "@/lib/files/read-head";
 import { scanStream } from "@/lib/files/scan";
 import { validateFileAgainstConfig } from "@/lib/files/validate";
 import { logger } from "@/lib/logger";
@@ -32,17 +32,6 @@ const TERMINAL_STATUSES = new Set(["completed", "failed"]);
 // of reclaiming the validation step, same set submit-upload-to-paperless.ts used as
 // ACTIVE_STATUSES before the merge.
 const RESUMABLE_AFTER_VALIDATION = new Set(["validated", "submitting", "processing"]);
-
-async function readFileHead(path: string, maxBytes: number): Promise<Buffer> {
-  const handle = await open(path, "r");
-  try {
-    const buffer = Buffer.alloc(maxBytes);
-    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
-    return buffer.subarray(0, bytesRead);
-  } finally {
-    await handle.close();
-  }
-}
 
 /**
  * Phase 3 M3: merges the former validate-upload.ts + submit-upload-to-paperless.ts into one
