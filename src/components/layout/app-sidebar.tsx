@@ -20,10 +20,10 @@ import {
   User,
   Users
 } from "lucide-react";
-import Link from "next/link";
-import type { Route } from "next";
-import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+
+import { Link, usePathname } from "@/i18n/navigation";
 
 import { useSidebar } from "@/components/layout/sidebar-provider";
 import { Button } from "@/components/ui/button";
@@ -90,7 +90,7 @@ function SidebarBrand({ collapsed }: { collapsed: boolean }) {
     <Link
       aria-label={appConfig.name}
       className="flex h-11 shrink-0 items-center gap-2.5 overflow-hidden px-3"
-      href={"/dashboard" as Route}
+      href="/dashboard"
     >
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-foreground text-xs font-black text-background">
         {appConfig.logo.label.slice(0, 2).toUpperCase()}
@@ -104,12 +104,15 @@ function SidebarBrand({ collapsed }: { collapsed: boolean }) {
 
 function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: NavigationItem[] }) {
   const pathname = usePathname();
+  const t = useTranslations("common.sidebar");
+  const tNav = useTranslations("common");
 
   return (
-    <nav aria-label="Primary" className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+    <nav aria-label={t("primaryNav")} className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
       {items.map((item) => {
         const active = isItemActive(pathname, item.href);
         const Icon = item.icon ? iconMap[item.icon] : undefined;
+        const label = tNav(item.labelKey);
 
         const link = (
           <Link
@@ -121,11 +124,11 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
                 ? "bg-accent/12 text-accent"
                 : "text-muted hover:bg-panel-strong hover:text-foreground"
             )}
-            href={item.href as Route}
+            href={item.href}
             key={item.href}
           >
             {Icon ? <Icon aria-hidden className="size-4.5 shrink-0" /> : null}
-            <CollapsibleLabel collapsed={collapsed}>{item.label}</CollapsibleLabel>
+            <CollapsibleLabel collapsed={collapsed}>{label}</CollapsibleLabel>
           </Link>
         );
 
@@ -136,7 +139,7 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
         return (
           <Tooltip delayDuration={200} key={item.href}>
             <TooltipTrigger asChild>{link}</TooltipTrigger>
-            <TooltipContent side="right">{item.label}</TooltipContent>
+            <TooltipContent side="right">{label}</TooltipContent>
           </Tooltip>
         );
       })}
@@ -146,6 +149,7 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
 
 export function AppSidebar({ items }: { items: NavigationItem[] }) {
   const { collapsed, toggleCollapsed } = useSidebar();
+  const t = useTranslations("common.sidebar");
 
   return (
     <TooltipProvider>
@@ -158,7 +162,7 @@ export function AppSidebar({ items }: { items: NavigationItem[] }) {
         <div className="flex h-(--topbar-height) shrink-0 items-center justify-between border-b border-border pl-1 pr-2">
           <SidebarBrand collapsed={collapsed} />
           <Button
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t("expandSidebar") : t("collapseSidebar")}
             className={cn(collapsed && "hidden")}
             onClick={toggleCollapsed}
             size="icon"
@@ -171,7 +175,7 @@ export function AppSidebar({ items }: { items: NavigationItem[] }) {
         {collapsed ? (
           <div className="flex shrink-0 justify-center border-t border-border p-2">
             <Button
-              aria-label="Expand sidebar"
+              aria-label={t("expandSidebar")}
               onClick={toggleCollapsed}
               size="icon"
               variant="ghost"
@@ -187,11 +191,12 @@ export function AppSidebar({ items }: { items: NavigationItem[] }) {
 
 export function MobileSidebar({ items }: { items: NavigationItem[] }) {
   const { mobileOpen, setMobileOpen } = useSidebar();
+  const t = useTranslations("common.sidebar");
 
   return (
     <Sheet onOpenChange={setMobileOpen} open={mobileOpen}>
       <SheetContent className="flex w-72 flex-col gap-0 p-0" side="left">
-        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <SheetTitle className="sr-only">{t("navigation")}</SheetTitle>
         <div className="flex h-(--topbar-height) shrink-0 items-center border-b border-border pl-1">
           <SidebarBrand collapsed={false} />
         </div>

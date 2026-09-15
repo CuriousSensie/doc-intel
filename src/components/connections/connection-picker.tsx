@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export function ConnectionPicker({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const t = useTranslations("connections.picker");
 
   async function handleQueryChange(value: string) {
     setQuery(value);
@@ -46,10 +48,10 @@ export function ConnectionPicker({
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(value)}`);
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error?.message ?? "Search failed");
+      if (!res.ok) throw new Error(body.error?.message ?? t("searchFailed"));
       setResults(body.data as SearchResult[]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Search failed");
+      setError(err instanceof Error ? err.message : t("searchFailed"));
     }
   }
 
@@ -68,7 +70,7 @@ export function ConnectionPicker({
         setResults([]);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not create connection");
+        setError(err instanceof Error ? err.message : t("couldNotCreate"));
       }
     });
   }
@@ -76,7 +78,7 @@ export function ConnectionPicker({
   if (!open) {
     return (
       <Button onClick={() => setOpen(true)} size="sm" variant="outline">
-        + Connect
+        {t("connect")}
       </Button>
     );
   }
@@ -86,7 +88,7 @@ export function ConnectionPicker({
       <Input
         autoFocus
         onChange={(e) => handleQueryChange(e.target.value)}
-        placeholder="Search customers, projects, contracts..."
+        placeholder={t("searchPlaceholder")}
         value={query}
       />
       {error ? <p className="text-xs text-danger">{error}</p> : null}
@@ -118,7 +120,7 @@ export function ConnectionPicker({
         type="button"
         variant="outline"
       >
-        Cancel
+        {t("cancel")}
       </Button>
     </div>
   );

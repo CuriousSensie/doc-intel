@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Dokumenti",
+    "maxSizePerFile": "Do {size} na datoteko. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
+    "notInOrganization": "Niste še del nobene organizacije.",
+    "createOrganization": "Ustvari organizacijo",
+    "processing": "V obdelavi",
+    "filteredView": "Prikazan je filtriran pogled — {count} dokument(ov)",
+    "clearFilters": "Počisti filtre",
+    "emptyFiltered": "Noben dokument ne ustreza temu pogledu.",
+    "emptyUnfiltered": "Nimate še nobenega dokumenta.",
+    "uncategorized": "Nekategorizirano",
+    "pagesCount": "{count} strani"
+  },
+  "upload": {
+    "uploading": "Nalaganje…",
+    "upload": "Naloži",
+    "receivedProcessing": "Nalaganje prejeto — obdelava.",
+    "couldNotStart": "Nalaganja ni bilo mogoče začeti",
+    "didNotComplete": "Nalaganje ni bilo dokončano",
+    "failed": "Nalaganje ni uspelo"
+  },
+  "bulk": {
+    "selectPage": "Izberi stran",
+    "selectAllMatching": "Izberi vse ustrezne filtru",
+    "selected": "Izbranih: {count}",
+    "connectToEntity": "Poveži z entiteto",
+    "exportCsv": "Izvozi CSV",
+    "exportXlsx": "Izvozi XLSX",
+    "exportViewCsv": "Izvozi pogled (CSV)",
+    "exportViewXlsx": "Izvozi pogled (XLSX)",
+    "clear": "Počisti",
+    "undo": "Razveljavi",
+    "undone": "Razveljavljeno.",
+    "connecting": "Povezovanje {count} dokumentov v ozadju…",
+    "connected": "Povezanih {count} dokument(ov).",
+    "connectedWithFailures": "Povezanih {count} dokument(ov), {failed} neuspešnih.",
+    "connectedWithSkipped": "Povezanih {count} dokument(ov), {skipped} že povezanih.",
+    "connectedWithSkippedAndFailures": "Povezanih {count} dokument(ov), {skipped} že povezanih, {failed} neuspešnih.",
+    "bulkConnectFailed": "Množično povezovanje ni uspelo: {error}",
+    "unknownError": "neznana napaka",
+    "preparingExport": "Priprava izvoza…",
+    "exportFailed": "Izvoz ni uspel: {error}"
+  },
+  "detail": {
+    "metadata": "Metapodatki",
+    "type": "Tip",
+    "correspondent": "Korespondent",
+    "date": "Datum",
+    "pages": "Strani",
+    "liveDataUnavailable": "Živi podatki o dokumentu trenutno niso na voljo — prikazani so samo nazadnje sinhronizirani metapodatki.",
+    "customFields": "Dodatna polja",
+    "fieldNumber": "Polje #{id}",
+    "connections": "Povezave",
+    "history": "Zgodovina",
+    "noHistory": "Ni še zgodovine.",
+    "cannotPreview": "Te datoteke ni mogoče predogledati neposredno v vašem brskalniku.",
+    "download": "Prenesi {title}",
+    "previewAlt": "Predogled {title}"
+  }
+}

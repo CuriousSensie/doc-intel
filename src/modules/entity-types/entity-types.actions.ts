@@ -1,6 +1,9 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+
+import { redirect } from "@/i18n/navigation";
+import type { Locale } from "@/i18n/routing";
 
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
@@ -25,9 +28,11 @@ import {
   updateEntityTypeMetaSchema
 } from "@/modules/entity-types/entity-types.schemas";
 
-function redirectWithError(path: string, error: unknown): never {
-  const message = error instanceof Error ? error.message : "Something went wrong";
-  redirect(withStatus(path, "error", message));
+type Translator = Awaited<ReturnType<typeof getTranslations>>;
+
+function redirectWithError(path: string, error: unknown, t: Translator, locale: Locale): never {
+  const message = error instanceof Error ? error.message : t("actions.somethingWentWrong");
+  return redirect({ href: withStatus(path, "error", message), locale });
 }
 
 export async function listEntityTypesAction() {
@@ -97,6 +102,7 @@ export async function removeFieldAction(entityTypeId: string, input: unknown) {
 export async function createEntityTypeFormAction(formData: FormData) {
   requireFeature("entities");
   const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("entityTypes"), getLocale()]);
 
   try {
     const parsed = createEntityTypeSchema.parse({
@@ -106,17 +112,18 @@ export async function createEntityTypeFormAction(formData: FormData) {
     });
     await createEntityType(ctx, parsed);
   } catch (error) {
-    redirectWithError("/dashboard/entity-types", error);
+    redirectWithError("/dashboard/entity-types", error, t, locale);
   }
 
   // See createEntityFormAction's comment (src/modules/entities/entities.actions.ts) — a bare
   // redirect back to the same page doesn't change the URL, so Next.js won't refetch stale data.
-  redirect(withStatus("/dashboard/entity-types", "message", "Created"));
+  return redirect({ href: withStatus("/dashboard/entity-types", "message", t("actions.created")), locale });
 }
 
 export async function addFieldFormAction(formData: FormData) {
   requireFeature("entities");
   const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("entityTypes"), getLocale()]);
   const entityTypeId = String(formData.get("entityTypeId"));
 
   try {
@@ -128,23 +135,30 @@ export async function addFieldFormAction(formData: FormData) {
     });
     await addField(ctx, entityTypeId, parsed);
   } catch (error) {
-    redirectWithError(`/dashboard/entity-types/${entityTypeId}`, error);
+    redirectWithError(`/dashboard/entity-types/${entityTypeId}`, error, t, locale);
   }
 
-  redirect(withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", "Field added"));
+  return redirect({
+    href: withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", t("actions.fieldAdded")),
+    locale
+  });
 }
 
 export async function removeFieldFormAction(formData: FormData) {
   requireFeature("entities");
   const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("entityTypes"), getLocale()]);
   const entityTypeId = String(formData.get("entityTypeId"));
 
   try {
     const parsed = removeFieldSchema.parse({ fieldKey: formData.get("fieldKey") });
     await removeField(ctx, entityTypeId, parsed.fieldKey);
   } catch (error) {
-    redirectWithError(`/dashboard/entity-types/${entityTypeId}`, error);
+    redirectWithError(`/dashboard/entity-types/${entityTypeId}`, error, t, locale);
   }
 
-  redirect(withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", "Field hidden"));
+  return redirect({
+    href: withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", t("actions.fieldHidden")),
+    locale
+  });
 }

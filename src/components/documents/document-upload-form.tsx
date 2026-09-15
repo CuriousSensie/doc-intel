@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ export function DocumentUploadForm() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const t = useTranslations("documents.upload");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,7 +42,7 @@ export function DocumentUploadForm() {
       });
       const intentBody = (await intentRes.json()) as UploadIntentResponse;
       if (!intentRes.ok || !intentBody.data) {
-        throw new Error(intentBody.error?.message ?? "Could not start upload");
+        throw new Error(intentBody.error?.message ?? t("couldNotStart"));
       }
       const { upload_id: uploadId, token, path } = intentBody.data;
 
@@ -57,14 +59,14 @@ export function DocumentUploadForm() {
       });
       const completeBody = (await completeRes.json()) as UploadCompleteResponse;
       if (!completeRes.ok) {
-        throw new Error(completeBody.error?.message ?? "Upload did not complete");
+        throw new Error(completeBody.error?.message ?? t("didNotComplete"));
       }
 
-      toast.success("Upload received — processing.");
+      toast.success(t("receivedProcessing"));
       if (inputRef.current) inputRef.current.value = "";
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed");
+      toast.error(error instanceof Error ? error.message : t("failed"));
     } finally {
       setUploading(false);
     }
@@ -81,7 +83,7 @@ export function DocumentUploadForm() {
         type="file"
       />
       <Button className="justify-self-start" disabled={uploading} type="submit">
-        {uploading ? "Uploading…" : "Upload"}
+        {uploading ? t("uploading") : t("upload")}
       </Button>
     </form>
   );

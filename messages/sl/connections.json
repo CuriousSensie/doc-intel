@@ -1,0 +1,24 @@
+{
+  "picker": {
+    "connect": "+ Poveži",
+    "searchPlaceholder": "Iščite stranke, projekte, pogodbe...",
+    "cancel": "Prekliči",
+    "searchFailed": "Iskanje ni uspelo",
+    "couldNotCreate": "Povezave ni bilo mogoče ustvariti"
+  },
+  "panel": {
+    "empty": "Ni še povezav.",
+    "documentsGroup": "Dokumenti",
+    "otherGroup": "Drugo",
+    "unknown": "Neznano",
+    "deleted": "izbrisano",
+    "via": "preko {source}",
+    "relations": {
+      "belongs_to": "Pripada",
+      "issued_to": "Izdano za",
+      "assigned_to": "Dodeljeno",
+      "part_of": "Del",
+      "related": "Povezano"
+    }
+  }
+}

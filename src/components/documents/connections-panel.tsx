@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+
+import { Link } from "@/i18n/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import type { ConnectionWithOther } from "@/modules/connections/connections.service";
@@ -7,9 +9,9 @@ import type { ConnectionWithOther } from "@/modules/connections/connections.serv
 // product. It gets design attention before anything else." Grouped by entity type (falling
 // back to a "Documents" group for document-to-document connections) rather than a flat list —
 // this is what makes "everything about customer X" a two-second scan.
-function groupLabel(connection: ConnectionWithOther): string {
-  if (connection.other.kind === "document") return "Documents";
-  return connection.other.entityTypeName ?? "Other";
+function groupLabel(connection: ConnectionWithOther, t: Awaited<ReturnType<typeof getTranslations>>): string {
+  if (connection.other.kind === "document") return t("panel.documentsGroup");
+  return connection.other.entityTypeName ?? t("panel.otherGroup");
 }
 
 function hrefFor(connection: ConnectionWithOther): string {
@@ -20,26 +22,28 @@ function hrefFor(connection: ConnectionWithOther): string {
   return "#";
 }
 
-const RELATION_LABELS: Record<ConnectionWithOther["relation"], string> = {
-  belongs_to: "Belongs to",
-  issued_to: "Issued to",
-  assigned_to: "Assigned to",
-  part_of: "Part of",
-  related: "Related"
-};
+export async function ConnectionsPanel({ connections }: { connections: ConnectionWithOther[] }) {
+  const t = await getTranslations("connections");
 
-export function ConnectionsPanel({ connections }: { connections: ConnectionWithOther[] }) {
   if (connections.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted">
-        No connections yet.
+        {t("panel.empty")}
       </div>
     );
   }
 
+  const relationLabels: Record<ConnectionWithOther["relation"], string> = {
+    belongs_to: t("panel.relations.belongs_to"),
+    issued_to: t("panel.relations.issued_to"),
+    assigned_to: t("panel.relations.assigned_to"),
+    part_of: t("panel.relations.part_of"),
+    related: t("panel.relations.related")
+  };
+
   const groups = new Map<string, ConnectionWithOther[]>();
   for (const connection of connections) {
-    const label = groupLabel(connection);
+    const label = groupLabel(connection, t);
     const group = groups.get(label) ?? [];
     group.push(connection);
     groups.set(label, group);
@@ -58,21 +62,21 @@ export function ConnectionsPanel({ connections }: { connections: ConnectionWithO
               >
                 {connection.other.isDeleted ? (
                   <span className="truncate text-sm font-semibold text-muted line-through">
-                    {connection.other.label ?? "Unknown"}
+                    {connection.other.label ?? t("panel.unknown")}
                   </span>
                 ) : (
                   <Link
                     className="truncate text-sm font-semibold hover:underline"
                     href={hrefFor(connection)}
                   >
-                    {connection.other.label ?? "Unknown"}
+                    {connection.other.label ?? t("panel.unknown")}
                   </Link>
                 )}
                 <div className="flex shrink-0 items-center gap-2">
-                  {connection.other.isDeleted ? <Badge variant="danger">deleted</Badge> : null}
-                  <Badge variant="outline">{RELATION_LABELS[connection.relation]}</Badge>
+                  {connection.other.isDeleted ? <Badge variant="danger">{t("panel.deleted")}</Badge> : null}
+                  <Badge variant="outline">{relationLabels[connection.relation]}</Badge>
                   {connection.createdVia !== "manual" ? (
-                    <Badge variant="muted">via {connection.createdVia}</Badge>
+                    <Badge variant="muted">{t("panel.via", { source: connection.createdVia })}</Badge>
                   ) : null}
                 </div>
               </li>

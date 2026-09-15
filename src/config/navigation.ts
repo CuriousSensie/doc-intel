@@ -17,79 +17,107 @@ export type NavigationIcon =
   | "User"
   | "Users";
 
+export type NavigationLabelKey =
+  | "nav.admin"
+  | "nav.auditLog"
+  | "nav.backToDashboard"
+  | "nav.billing"
+  | "nav.dashboard"
+  | "nav.documents"
+  | "nav.entities"
+  | "nav.imports"
+  | "nav.login"
+  | "nav.notifications"
+  | "nav.organizations"
+  | "nav.pricing"
+  | "nav.profile"
+  | "nav.rules"
+  | "nav.security"
+  | "nav.team"
+  | "nav.users"
+  | "nav.views";
+
 export type NavigationItem = {
-  label: string;
+  // Dotted key into the "common" message namespace's "nav" object (e.g. "nav.dashboard") —
+  // this file is plain data, not a component, so it can't call useTranslations() itself; the
+  // consuming sidebar/topbar components resolve this via t(item.labelKey).
+  labelKey: NavigationLabelKey;
   href: string;
   feature?: FeatureKey;
   icon?: NavigationIcon;
 };
 
 export const marketingNavigation: NavigationItem[] = [
-  { label: "Pricing", href: "/pricing", feature: "billing" },
-  { label: "Login", href: "/login" }
+  { labelKey: "nav.pricing", href: "/pricing", feature: "billing" },
+  { labelKey: "nav.login", href: "/login" }
 ];
 
 export const dashboardNavigation: NavigationItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: "LayoutDashboard" },
   {
-    label: "Notifications",
+    labelKey: "nav.notifications",
     href: "/dashboard/notifications",
     feature: "notifications",
     icon: "Bell"
   },
   {
-    label: "Documents",
+    labelKey: "nav.documents",
     href: "/dashboard/documents",
     feature: "documents",
     icon: "FileText"
   },
   {
-    label: "Entities",
+    labelKey: "nav.entities",
     href: "/dashboard/entities",
     feature: "entities",
     icon: "FolderKanban"
   },
   {
-    label: "Views",
+    labelKey: "nav.views",
     href: "/dashboard/views",
     feature: "entities",
     icon: "ListFilter"
   },
   {
-    label: "Imports",
+    labelKey: "nav.imports",
     href: "/dashboard/imports",
     feature: "imports",
     icon: "Upload"
   },
   {
-    label: "Rules",
+    labelKey: "nav.rules",
     href: "/dashboard/rules",
     feature: "rules",
     icon: "Sparkles"
   },
-  { label: "Billing", href: "/settings/billing", feature: "billing", icon: "CreditCard" },
-  { label: "Organizations", href: "/organizations", feature: "organizations", icon: "Building2" },
-  { label: "Team", href: "/settings/team", feature: "organizations", icon: "Users" },
-  { label: "Admin", href: "/admin", feature: "admin", icon: "ShieldCheck" }
+  { labelKey: "nav.billing", href: "/settings/billing", feature: "billing", icon: "CreditCard" },
+  {
+    labelKey: "nav.organizations",
+    href: "/organizations",
+    feature: "organizations",
+    icon: "Building2"
+  },
+  { labelKey: "nav.team", href: "/settings/team", feature: "organizations", icon: "Users" },
+  { labelKey: "nav.admin", href: "/admin", feature: "admin", icon: "ShieldCheck" }
 ];
 
 export const adminNavigation: NavigationItem[] = [
-  { label: "Dashboard", href: "/admin", icon: "LayoutDashboard" },
-  { label: "Users", href: "/admin/users", icon: "Users" },
-  { label: "Organizations", href: "/admin/organizations", icon: "Building2" },
-  { label: "Audit Log", href: "/admin/audit-log", icon: "History" },
-  { label: "Back to dashboard", href: "/dashboard", icon: "ArrowLeft" }
+  { labelKey: "nav.dashboard", href: "/admin", icon: "LayoutDashboard" },
+  { labelKey: "nav.users", href: "/admin/users", icon: "Users" },
+  { labelKey: "nav.organizations", href: "/admin/organizations", icon: "Building2" },
+  { labelKey: "nav.auditLog", href: "/admin/audit-log", icon: "History" },
+  { labelKey: "nav.backToDashboard", href: "/dashboard", icon: "ArrowLeft" }
 ];
 
 export const settingsNavigation: NavigationItem[] = [
-  { label: "Profile", href: "/settings/profile", icon: "User" },
-  { label: "Security", href: "/settings/security", icon: "Lock" },
-  { label: "Billing", href: "/settings/billing", feature: "billing", icon: "CreditCard" },
+  { labelKey: "nav.profile", href: "/settings/profile", icon: "User" },
+  { labelKey: "nav.security", href: "/settings/security", icon: "Lock" },
+  { labelKey: "nav.billing", href: "/settings/billing", feature: "billing", icon: "CreditCard" },
   {
-    label: "Notifications",
+    labelKey: "nav.notifications",
     href: "/settings/notifications",
     feature: "notifications",
     icon: "Bell"
   },
-  { label: "Team", href: "/settings/team", feature: "organizations", icon: "Users" }
+  { labelKey: "nav.team", href: "/settings/team", feature: "organizations", icon: "Users" }
 ];

@@ -1,0 +1,45 @@
+{
+  "index": {
+    "title": "Entities",
+    "description": "Customers, projects, contracts, and anything else your business tracks.",
+    "manageTypes": "Manage types",
+    "emptyTitle": "No entity types yet",
+    "emptyDescription": "Entity types are seeded automatically when your organization is provisioned.",
+    "newEntityType": "New entity type",
+    "keyLabel": "Key",
+    "keyHint": "lowercase, no spaces",
+    "nameLabel": "Name",
+    "pluralNameLabel": "Plural name",
+    "createEntityType": "Create entity type"
+  },
+  "list": {
+    "total": "{count} total",
+    "allEntities": "All entities",
+    "searchLabel": "Search",
+    "searchPlaceholder": "Search {typePlural}...",
+    "search": "Search",
+    "emptyTitle": "No {typePlural} yet",
+    "emptyDescription": "Nothing here yet — add your first {typeSingular} below.",
+    "nameColumn": "Name",
+    "statusColumn": "Status",
+    "createdColumn": "Created",
+    "newEntity": "New {typeSingular}",
+    "create": "Create"
+  },
+  "detail": {
+    "atAGlance": "At a glance",
+    "details": "Details",
+    "noFields": "No fields defined for this entity type.",
+    "connections": "Connections",
+    "activity": "Activity",
+    "overview": "Overview",
+    "noActivity": "No activity recorded yet.",
+    "backToList": "Back to {typePlural}",
+    "documents": "Documents",
+    "other": "Other"
+  },
+  "actions": {
+    "somethingWentWrong": "Something went wrong",
+    "created": "Created"
+  }
+}

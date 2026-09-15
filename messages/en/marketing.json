@@ -1,0 +1,65 @@
+{
+  "home": {
+    "nav": {
+      "login": "Login",
+      "start": "Start"
+    },
+    "hero": {
+      "eyebrow": "Production SaaS foundation",
+      "title": "Build the product, not the same plumbing again.",
+      "description": "A serious full-stack SaaS starter for authentication, billing, organizations, emails, files, admin tooling, and the operational paths every product needs.",
+      "openDashboard": "Open dashboard",
+      "viewPricing": "View pricing shell"
+    },
+    "stats": {
+      "defaultBilling": "Default billing",
+      "modules": "Modules",
+      "stack": "Stack",
+      "stackValue": "Next.js + Supabase"
+    },
+    "pillars": {
+      "auth": {
+        "title": "Auth and account security",
+        "body": "Supabase Auth, SSR sessions, route protection, profile settings, MFA-ready flows, and safe account deletion."
+      },
+      "organizations": {
+        "title": "Organizations when needed",
+        "body": "User-first by default, with optional workspaces, RBAC, invitations, and organization billing for B2B products."
+      },
+      "billing": {
+        "title": "Billing and entitlements",
+        "body": "Stripe Checkout, Customer Portal, subscriptions, one-time credits, usage limits, and idempotent webhooks."
+      },
+      "messaging": {
+        "title": "Transactional messaging",
+        "body": "Pluggable SMTP/console email provider abstraction, React Email templates, notification preferences, and safe development email mode."
+      },
+      "guardrails": {
+        "title": "Production guardrails",
+        "body": "RLS, typed config, structured errors, audit logs, file ownership, testing, and documentation from day one."
+      }
+    }
+  },
+  "pricing": {
+    "eyebrow": "Pricing",
+    "title": "Pricing",
+    "description": "Plans are configuration-driven.",
+    "home": "Home",
+    "perMonth": "/ month",
+    "features": {
+      "projects": "Projects",
+      "teamMembers": "Team members",
+      "storage": "Storage",
+      "credits": "Credits"
+    },
+    "actions": {
+      "currentPlan": "Current plan",
+      "getStarted": "Get started",
+      "signUpToSubscribe": "Sign up to subscribe",
+      "manageBilling": "Manage billing",
+      "createOrganization": "Create an organization",
+      "subscribe": "Subscribe",
+      "contactUs": "Contact us"
+    }
+  }
+}

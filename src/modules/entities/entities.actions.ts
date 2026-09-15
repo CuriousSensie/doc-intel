@@ -1,6 +1,9 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+
+import { redirect } from "@/i18n/navigation";
+import type { Locale } from "@/i18n/routing";
 
 import { requireFeature } from "@/modules/auth/authorization";
 import { withStatus } from "@/modules/auth/redirects";
@@ -23,9 +26,11 @@ import {
 } from "@/modules/entities/entities.service";
 import { getEntityType, getVisibleFieldSchema } from "@/modules/entity-types/entity-types.service";
 
-function redirectWithError(path: string, error: unknown): never {
-  const message = error instanceof Error ? error.message : "Something went wrong";
-  redirect(withStatus(path, "error", message));
+type Translator = Awaited<ReturnType<typeof getTranslations>>;
+
+function redirectWithError(path: string, error: unknown, t: Translator, locale: Locale): never {
+  const message = error instanceof Error ? error.message : t("actions.somethingWentWrong");
+  return redirect({ href: withStatus(path, "error", message), locale });
 }
 
 const FIELD_PREFIX = "field_";
@@ -103,6 +108,7 @@ export async function countEntitiesByTypeAction() {
 export async function createEntityFormAction(formData: FormData) {
   requireFeature("entities");
   const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("entities"), getLocale()]);
   const entityTypeId = String(formData.get("entityTypeId"));
   const entityTypeKey = String(formData.get("entityTypeKey"));
   const listPath = `/dashboard/entities/${entityTypeKey}`;
@@ -125,7 +131,7 @@ export async function createEntityFormAction(formData: FormData) {
     });
     await createEntity(ctx, parsed);
   } catch (error) {
-    redirectWithError(listPath, error);
+    redirectWithError(listPath, error, t, locale);
   }
 
   // A bare redirect() back to the page the form was already on doesn't change the URL, so
@@ -133,5 +139,5 @@ export async function createEntityFormAction(formData: FormData) {
   // pre-submission render (found live: the new entity silently missing until a manual reload).
   // Appending a query param, same as the error path already does via withStatus(), is what
   // actually forces a fresh fetch.
-  redirect(withStatus(listPath, "message", "Created"));
+  return redirect({ href: withStatus(listPath, "message", t("actions.created")), locale });
 }

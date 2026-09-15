@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,8 @@ export function DocumentsBulkList({
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const t = useTranslations("documents");
+  const tConnections = useTranslations("connections");
 
   const selectionCount = selectAllMatching ? (matchingCount ?? 0) : selectedIds.size;
   const hasSelection = selectionCount > 0;
@@ -108,8 +110,10 @@ export function DocumentsBulkList({
         setPollingOperationId(null);
         setStatus(
           op.status === "completed"
-            ? `Connected ${op.success_count} document(s)${op.failure_count > 0 ? `, ${op.failure_count} failed` : ""}.`
-            : `Bulk connect failed: ${op.error_message ?? "unknown error"}`
+            ? op.failure_count > 0
+              ? t("bulk.connectedWithFailures", { count: op.success_count, failed: op.failure_count })
+              : t("bulk.connected", { count: op.success_count })
+            : t("bulk.bulkConnectFailed", { error: op.error_message ?? t("bulk.unknownError") })
         );
         if (op.status === "completed" && op.kind === "bulk_connect") setLastOperationId(operationId);
         router.refresh();
@@ -143,12 +147,22 @@ export function DocumentsBulkList({
 
       if (summary.mode === "sync") {
         setStatus(
-          `Connected ${summary.created} document(s)${summary.skipped > 0 ? `, ${summary.skipped} already connected` : ""}${summary.failed > 0 ? `, ${summary.failed} failed` : ""}.`
+          summary.skipped > 0 && summary.failed > 0
+            ? t("bulk.connectedWithSkippedAndFailures", {
+                count: summary.created,
+                skipped: summary.skipped,
+                failed: summary.failed
+              })
+            : summary.skipped > 0
+              ? t("bulk.connectedWithSkipped", { count: summary.created, skipped: summary.skipped })
+              : summary.failed > 0
+                ? t("bulk.connectedWithFailures", { count: summary.created, failed: summary.failed })
+                : t("bulk.connected", { count: summary.created })
         );
         setLastOperationId(summary.operationId);
         router.refresh();
       } else {
-        setStatus(`Connecting ${summary.total} documents in the background…`);
+        setStatus(t("bulk.connecting", { count: summary.total }));
         pollOperation(summary.operationId);
       }
     });
@@ -159,7 +173,7 @@ export function DocumentsBulkList({
     startTransition(async () => {
       await undoBulkConnectAction(lastOperationId);
       setLastOperationId(null);
-      setStatus("Undone.");
+      setStatus(t("bulk.undone"));
       router.refresh();
     });
   }
@@ -172,7 +186,7 @@ export function DocumentsBulkList({
         format
       });
       setExportOperationId(operationId);
-      setStatus("Preparing export…");
+      setStatus(t("bulk.preparingExport"));
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(async () => {
         const op = await getBackgroundOperationAction(operationId);
@@ -185,7 +199,7 @@ export function DocumentsBulkList({
           window.location.href = `/api/exports/${operationId}/download`;
         } else if (op.status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
-          setStatus(`Export failed: ${op.error_message ?? "unknown error"}`);
+          setStatus(t("bulk.exportFailed", { error: op.error_message ?? t("bulk.unknownError") }));
         }
       }, POLL_INTERVAL_MS);
     });
@@ -200,37 +214,37 @@ export function DocumentsBulkList({
           onChange={toggleAllOnPage}
           type="checkbox"
         />
-        <span className="text-muted">Select page</span>
+        <span className="text-muted">{t("bulk.selectPage")}</span>
         {matchingCount === null ? (
           <button className="underline underline-offset-4" onClick={handleSelectAllMatching} type="button">
-            Select all matching filter
+            {t("bulk.selectAllMatching")}
           </button>
         ) : null}
 
         {hasSelection ? (
           <>
-            <span className="font-semibold">{selectionCount} selected</span>
+            <span className="font-semibold">{t("bulk.selected", { count: selectionCount })}</span>
             <Button disabled={isPending} onClick={() => setPickerOpen((v) => !v)} size="sm" variant="outline">
-              Connect to entity
+              {t("bulk.connectToEntity")}
             </Button>
             <Button disabled={isPending} onClick={() => handleExport("csv")} size="sm" variant="outline">
-              Export CSV
+              {t("bulk.exportCsv")}
             </Button>
             <Button disabled={isPending} onClick={() => handleExport("xlsx")} size="sm" variant="outline">
-              Export XLSX
+              {t("bulk.exportXlsx")}
             </Button>
             <Button onClick={clearSelection} size="sm" variant="ghost">
-              Clear
+              {t("bulk.clear")}
             </Button>
           </>
         ) : (
           <>
             <span className="ml-auto" />
             <Button disabled={isPending} onClick={() => handleExport("csv")} size="sm" variant="outline">
-              Export view (CSV)
+              {t("bulk.exportViewCsv")}
             </Button>
             <Button disabled={isPending} onClick={() => handleExport("xlsx")} size="sm" variant="outline">
-              Export view (XLSX)
+              {t("bulk.exportViewXlsx")}
             </Button>
           </>
         )}
@@ -241,7 +255,7 @@ export function DocumentsBulkList({
           <Input
             autoFocus
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search customers, projects, contracts..."
+            placeholder={tConnections("picker.searchPlaceholder")}
             value={query}
           />
           {results.length > 0 ? (
@@ -269,7 +283,7 @@ export function DocumentsBulkList({
           <span>{status}</span>
           {lastOperationId ? (
             <button className="underline underline-offset-4" onClick={handleUndo} type="button">
-              Undo
+              {t("bulk.undo")}
             </button>
           ) : null}
         </div>
@@ -293,9 +307,9 @@ export function DocumentsBulkList({
                 <div>
                   <p className="font-semibold">{document.title}</p>
                   <p className="mt-1 text-xs text-muted">
-                    {document.document_type_key ?? "Uncategorized"}
+                    {document.document_type_key ?? t("list.uncategorized")}
                     {document.correspondent_name ? ` · ${document.correspondent_name}` : ""}
-                    {document.page_count ? ` · ${document.page_count} pages` : ""}
+                    {document.page_count ? ` · ${t("list.pagesCount", { count: document.page_count })}` : ""}
                     {" · "}
                     {new Date(document.created_at).toLocaleString()}
                   </p>

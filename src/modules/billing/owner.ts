@@ -1,4 +1,6 @@
-import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
+
+import { redirect } from "@/i18n/navigation";
 
 import { billingOwnerType } from "@/config/billing";
 import type { AuthContext } from "@/modules/auth/session";
@@ -29,7 +31,8 @@ export async function requireBillingOwner(context: AuthContext): Promise<Billing
   const owner = await resolveBillingOwner(context);
 
   if (!owner) {
-    redirect("/organizations/new");
+    const locale = await getLocale();
+    return redirect({ href: "/organizations/new", locale });
   }
 
   return owner;

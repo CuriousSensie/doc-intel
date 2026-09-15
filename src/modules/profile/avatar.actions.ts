@@ -1,22 +1,20 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+
+import { redirect } from "@/i18n/navigation";
 
 import { withStatus } from "@/modules/auth/redirects";
 import { requireUser } from "@/modules/auth/session";
 import { uploadAvatar } from "@/modules/profile/avatar.service";
 
-function redirectWithError(path: string, error: unknown): never {
-  const message = error instanceof Error ? error.message : "Something went wrong";
-  redirect(withStatus(path, "error", message));
-}
-
 export async function uploadAvatarAction(formData: FormData) {
   const context = await requireUser("/settings/profile");
+  const [t, locale] = await Promise.all([getTranslations("settings"), getLocale()]);
   const file = formData.get("file");
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(withStatus("/settings/profile", "error", "Choose an image to upload"));
+    return redirect({ href: withStatus("/settings/profile", "error", t("actions.chooseImage")), locale });
   }
 
   try {
@@ -26,8 +24,9 @@ export async function uploadAvatarAction(formData: FormData) {
       size: file.size
     });
   } catch (error) {
-    redirectWithError("/settings/profile", error);
+    const message = error instanceof Error ? error.message : t("actions.somethingWentWrong");
+    return redirect({ href: withStatus("/settings/profile", "error", message), locale });
   }
 
-  redirect("/settings/profile");
+  return redirect({ href: "/settings/profile", locale });
 }

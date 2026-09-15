@@ -1,7 +1,8 @@
-import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 
+import { redirect } from "@/i18n/navigation";
 import { AuthorizationError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
@@ -63,11 +64,16 @@ export async function requireUser(next?: string): Promise<AuthContext> {
   const context = await getAuthContext();
 
   if (!context) {
-    redirect(`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`);
+    const locale = await getLocale();
+    return redirect({ href: `/login${next ? `?next=${encodeURIComponent(next)}` : ""}`, locale });
   }
 
   if (context.profile?.suspended_at) {
-    redirect("/login?error=Your account has been suspended");
+    const [t, locale] = await Promise.all([getTranslations("auth"), getLocale()]);
+    return redirect({
+      href: `/login?error=${encodeURIComponent(t("status.accountSuspended"))}`,
+      locale
+    });
   }
 
   return context;
@@ -77,7 +83,8 @@ export async function requireGuest() {
   const user = await getCurrentUser();
 
   if (user) {
-    redirect("/dashboard");
+    const locale = await getLocale();
+    return redirect({ href: "/dashboard", locale });
   }
 }
 
@@ -100,7 +107,8 @@ export async function requireMfaAssurance(next = "/dashboard") {
   }
 
   if (data.nextLevel === "aal2" && data.currentLevel !== "aal2") {
-    redirect(`/mfa/challenge?next=${encodeURIComponent(next)}`);
+    const locale = await getLocale();
+    return redirect({ href: `/mfa/challenge?next=${encodeURIComponent(next)}`, locale });
   }
 
   return data;

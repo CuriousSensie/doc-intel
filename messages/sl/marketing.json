@@ -1,0 +1,65 @@
+{
+  "home": {
+    "nav": {
+      "login": "Prijava",
+      "start": "Začni"
+    },
+    "hero": {
+      "eyebrow": "Temelj za produkcijski SaaS",
+      "title": "Zgradite izdelek, ne iste infrastrukture znova.",
+      "description": "Resen celovit SaaS okvir za avtentikacijo, obračunavanje, organizacije, e-pošto, datoteke, administratorska orodja in vse operativne poti, ki jih potrebuje vsak izdelek.",
+      "openDashboard": "Odpri nadzorno ploščo",
+      "viewPricing": "Poglej primer cenika"
+    },
+    "stats": {
+      "defaultBilling": "Privzeto obračunavanje",
+      "modules": "Moduli",
+      "stack": "Tehnologija",
+      "stackValue": "Next.js + Supabase"
+    },
+    "pillars": {
+      "auth": {
+        "title": "Avtentikacija in varnost računa",
+        "body": "Supabase Auth, SSR seje, zaščita poti, nastavitve profila, procesi, pripravljeni na MFA, in varno brisanje računa."
+      },
+      "organizations": {
+        "title": "Organizacije, ko jih potrebujete",
+        "body": "Privzeto usmerjeno k uporabniku, z izbirnimi delovnimi prostori, RBAC, povabili in obračunavanjem organizacij za B2B izdelke."
+      },
+      "billing": {
+        "title": "Obračunavanje in upravičenja",
+        "body": "Stripe Checkout, Customer Portal, naročnine, enkratni dobropisi, omejitve uporabe in idempotentni webhooki."
+      },
+      "messaging": {
+        "title": "Transakcijska sporočila",
+        "body": "Zamenljiva abstrakcija ponudnika e-pošte SMTP/konzola, predloge React Email, nastavitve obvestil in varen razvojni način e-pošte."
+      },
+      "guardrails": {
+        "title": "Produkcijske varovalke",
+        "body": "RLS, tipizirana konfiguracija, strukturirane napake, revizijski dnevniki, lastništvo datotek, testiranje in dokumentacija od prvega dne."
+      }
+    }
+  },
+  "pricing": {
+    "eyebrow": "Cenik",
+    "title": "Cenik",
+    "description": "Paketi so določeni s konfiguracijo.",
+    "home": "Domov",
+    "perMonth": "/ mesec",
+    "features": {
+      "projects": "Projekti",
+      "teamMembers": "Člani ekipe",
+      "storage": "Prostor za shranjevanje",
+      "credits": "Dobropisi"
+    },
+    "actions": {
+      "currentPlan": "Trenutni paket",
+      "getStarted": "Začni",
+      "signUpToSubscribe": "Registrirajte se za naročnino",
+      "manageBilling": "Upravljaj obračunavanje",
+      "createOrganization": "Ustvari organizacijo",
+      "subscribe": "Naroči se",
+      "contactUs": "Kontaktirajte nas"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "skipToContent": "Skip to content",
+  "topbar": {
+    "openNavigation": "Open navigation",
+    "notifications": "Notifications",
+    "unreadNotifications": "{count} unread notifications"
+  },
+  "navUserMenu": {
+    "openAccountMenu": "Open account menu",
+    "settings": "Settings",
+    "admin": "Admin",
+    "logOut": "Log out"
+  },
+  "sidebar": {
+    "primaryNav": "Primary",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "navigation": "Navigation"
+  },
+  "localeSwitcher": {
+    "label": "Language"
+  },
+  "themeToggle": {
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode",
+    "toggleTheme": "Toggle theme"
+  },
+  "settingsTabs": {
+    "ariaLabel": "Settings sections"
+  },
+  "nav": {
+    "pricing": "Pricing",
+    "login": "Login",
+    "dashboard": "Dashboard",
+    "notifications": "Notifications",
+    "documents": "Documents",
+    "entities": "Entities",
+    "views": "Views",
+    "imports": "Imports",
+    "rules": "Rules",
+    "billing": "Billing",
+    "organizations": "Organizations",
+    "team": "Team",
+    "admin": "Admin",
+    "users": "Users",
+    "auditLog": "Audit Log",
+    "backToDashboard": "Back to dashboard",
+    "profile": "Profile",
+    "security": "Security"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "picker": {
+    "connect": "+ Connect",
+    "searchPlaceholder": "Search customers, projects, contracts...",
+    "cancel": "Cancel",
+    "searchFailed": "Search failed",
+    "couldNotCreate": "Could not create connection"
+  },
+  "panel": {
+    "empty": "No connections yet.",
+    "documentsGroup": "Documents",
+    "otherGroup": "Other",
+    "unknown": "Unknown",
+    "deleted": "deleted",
+    "via": "via {source}",
+    "relations": {
+      "belongs_to": "Belongs to",
+      "issued_to": "Issued to",
+      "assigned_to": "Assigned to",
+      "part_of": "Part of",
+      "related": "Related"
+    }
+  }
+}

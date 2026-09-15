@@ -1,0 +1,83 @@
+{
+  "layout": {
+    "title": "Admin",
+    "fallbackName": "Admin"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "stats": {
+      "users": "Users",
+      "organizations": "Organizations",
+      "activeSubscriptions": "Active subscriptions"
+    },
+    "actions": {
+      "manageUsers": "Manage users",
+      "manageOrganizations": "Manage organizations",
+      "viewAuditLog": "View audit log"
+    },
+    "recentSignups": {
+      "title": "Recent signups",
+      "empty": "No signups yet."
+    }
+  },
+  "auditLog": {
+    "title": "Audit Log",
+    "description": "Security and state-changing events across the app. Rows older than 30 days are purged.",
+    "empty": "No events recorded yet.",
+    "actorLabel": "actor",
+    "system": "system",
+    "nextPage": "Next page"
+  },
+  "organizationsPage": {
+    "title": "Organizations",
+    "searchLabel": "Search by name",
+    "search": "Search",
+    "empty": "No organizations found.",
+    "suspended": "Suspended",
+    "suspend": "Suspend",
+    "unsuspend": "Unsuspend",
+    "delete": "Delete",
+    "creditAdjustmentLabel": "Credit adjustment",
+    "creditAdjustmentPlaceholder": "e.g. 100 or -50",
+    "adjustCredits": "Adjust credits",
+    "disableSubscription": "Disable subscription",
+    "enableSubscription": "Enable subscription",
+    "reprovision": "Reprovision",
+    "nextPage": "Next page"
+  },
+  "usersPage": {
+    "title": "Users",
+    "searchLabel": "Search by email",
+    "search": "Search",
+    "empty": "No users found.",
+    "admin": "Admin",
+    "suspended": "Suspended",
+    "suspend": "Suspend",
+    "unsuspend": "Unsuspend",
+    "makeAdmin": "Make admin",
+    "revokeAdmin": "Revoke admin",
+    "delete": "Delete",
+    "creditAdjustmentLabel": "Credit adjustment",
+    "creditAdjustmentPlaceholder": "e.g. 100 or -50",
+    "adjustCredits": "Adjust credits",
+    "disableSubscription": "Disable subscription",
+    "enableSubscription": "Enable subscription",
+    "nextPage": "Next page"
+  },
+  "actions": {
+    "genericError": "Something went wrong",
+    "userSuspended": "User suspended.",
+    "userUnsuspended": "User unsuspended.",
+    "adminGranted": "Admin access granted.",
+    "adminRevoked": "Admin access revoked.",
+    "userDeleted": "User deleted.",
+    "organizationSuspended": "Organization suspended.",
+    "organizationUnsuspended": "Organization unsuspended.",
+    "organizationDeleted": "Organization deleted.",
+    "creditAmountRequired": "Enter a non-zero credit amount",
+    "creditsAdjusted": "Credits adjusted.",
+    "reprovisioningQueued": "Reprovisioning queued.",
+    "subscriptionDisabled": "Subscription disabled at the platform level.",
+    "subscriptionEnabled": "Subscription re-enabled."
+  }
+}

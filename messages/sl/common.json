@@ -1,0 +1,51 @@
+{
+  "skipToContent": "Preskoči na vsebino",
+  "topbar": {
+    "openNavigation": "Odpri navigacijo",
+    "notifications": "Obvestila",
+    "unreadNotifications": "{count} neprebranih obvestil"
+  },
+  "navUserMenu": {
+    "openAccountMenu": "Odpri meni računa",
+    "settings": "Nastavitve",
+    "admin": "Skrbništvo",
+    "logOut": "Odjava"
+  },
+  "sidebar": {
+    "primaryNav": "Glavna navigacija",
+    "expandSidebar": "Razširi stransko vrstico",
+    "collapseSidebar": "Strni stransko vrstico",
+    "navigation": "Navigacija"
+  },
+  "localeSwitcher": {
+    "label": "Jezik"
+  },
+  "themeToggle": {
+    "switchToLight": "Preklopi na svetli način",
+    "switchToDark": "Preklopi na temni način",
+    "toggleTheme": "Preklopi temo"
+  },
+  "settingsTabs": {
+    "ariaLabel": "Razdelki nastavitev"
+  },
+  "nav": {
+    "pricing": "Cenik",
+    "login": "Prijava",
+    "dashboard": "Nadzorna plošča",
+    "notifications": "Obvestila",
+    "documents": "Dokumenti",
+    "entities": "Entitete",
+    "views": "Pogledi",
+    "imports": "Uvozi",
+    "rules": "Pravila",
+    "billing": "Obračunavanje",
+    "organizations": "Organizacije",
+    "team": "Ekipa",
+    "admin": "Skrbništvo",
+    "users": "Uporabniki",
+    "auditLog": "Dnevnik revizije",
+    "backToDashboard": "Nazaj na nadzorno ploščo",
+    "profile": "Profil",
+    "security": "Varnost"
+  }
+}

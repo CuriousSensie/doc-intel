@@ -2,9 +2,11 @@ import { createElement, type ReactElement } from "react";
 import { render } from "@react-email/render";
 
 import { OrganizationInvitationEmail } from "@/emails/organization-invitation";
+import { getEmailTranslator } from "@/emails/layout";
 import { sendRenderedEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { routing, type Locale } from "@/i18n/routing";
 
 export type EmailTemplateMap = {
   "organization-invitation": {
@@ -12,6 +14,7 @@ export type EmailTemplateMap = {
     inviterName: string;
     role: string;
     acceptUrl: string;
+    locale?: Locale;
   };
 };
 
@@ -22,7 +25,11 @@ type TemplateDefinition<T> = {
 
 const templates: { [K in keyof EmailTemplateMap]: TemplateDefinition<EmailTemplateMap[K]> } = {
   "organization-invitation": {
-    subject: (variables) => `You're invited to join ${variables.organizationName}`,
+    subject: (variables) =>
+      getEmailTranslator(variables.locale ?? routing.defaultLocale)(
+        "emails.organizationInvitation.subject",
+        { organizationName: variables.organizationName }
+      ),
     component: OrganizationInvitationEmail
   }
 };

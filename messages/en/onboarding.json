@@ -1,0 +1,9 @@
+{
+  "eyebrow": "Onboarding",
+  "title": "Set up your profile",
+  "description": "Products can extend this flow with product-specific onboarding steps later.",
+  "nameLabel": "Name",
+  "timezoneLabel": "Timezone",
+  "localeLabel": "Locale",
+  "submit": "Finish onboarding"
+}
