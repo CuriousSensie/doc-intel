@@ -1,11 +1,16 @@
+import { randomUUID } from "node:crypto";
+
 import { getPaperlessDocument, toDocumentTypeKey } from "@/lib/paperless/documents";
 import { getCachedCorrespondentName, getCachedDocumentTypeName } from "@/lib/paperless/metadata-cache";
 import { logEvent } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { paperlessFor } from "@/lib/paperless/client";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
+import type { ServiceContext } from "@/lib/service-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/modules/notifications/notifications.service";
+import { applyEntityLinks, applyFieldWrites, buildCustomFieldIdByKey } from "@/modules/imports/imports.apply";
+import type { ResolvedEntityLink, ResolvedFieldWrite } from "@/modules/imports/imports.matching";
 
 /**
  * specs/01-architecture.md §Upload steps 7-9, and the shared landing point for all three
@@ -54,8 +59,11 @@ export async function syncPaperlessDocument(
     let createdBy: string | null = null;
     // Import-sourced uploads (document_uploads.import_row_id set) don't get a per-document
     // notification — a 10,000-document import would otherwise spam 10,000 of them. The import
-    // job's own completion notification (Phase 3 M6) summarizes instead.
+    // job's own completion notification summarizes instead.
     let isFromImport = false;
+    let importJobId: string | null = null;
+    let pendingEntityLinks: ResolvedEntityLink[] = [];
+    let pendingFieldWrites: ResolvedFieldWrite[] = [];
 
     if (uploadId) {
       const { data: upload, error: uploadError } = await db
@@ -68,6 +76,28 @@ export async function syncPaperlessDocument(
       byteSize = upload.size_bytes;
       createdBy = upload.created_by;
       isFromImport = upload.import_row_id !== null;
+
+      // A "documents" kind row (worker/modules/imports/run-import-chunk.ts's create_document
+      // action) can't apply its entity links/field writes at chunk-processing time — the
+      // document doesn't exist in our mirror until right now. Its plan was persisted onto the
+      // row's own result for exactly this moment.
+      if (upload.import_row_id !== null) {
+        const { data: importRow, error: importRowError } = await db
+          .from("import_rows")
+          .select("import_job_id, result")
+          .eq("id", upload.import_row_id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (importRowError) throw importRowError;
+        if (importRow) {
+          importJobId = importRow.import_job_id;
+          const result = importRow.result as
+            | { pendingEntityLinks?: ResolvedEntityLink[]; pendingFieldWrites?: ResolvedFieldWrite[] }
+            | null;
+          pendingEntityLinks = result?.pendingEntityLinks ?? [];
+          pendingFieldWrites = result?.pendingFieldWrites ?? [];
+        }
+      }
     }
 
     const { data: documentRow, error: upsertError } = await db
@@ -85,6 +115,8 @@ export async function syncPaperlessDocument(
           mime_type: doc.mime_type,
           checksum,
           status: "ready",
+          source: isFromImport ? "import" : "upload",
+          import_job_id: importJobId,
           created_by: createdBy,
           synced_at: new Date().toISOString()
         },
@@ -103,6 +135,36 @@ export async function syncPaperlessDocument(
         .eq("id", uploadId)
         .eq("organization_id", orgId);
       if (completeError) throw completeError;
+    }
+
+    if (pendingEntityLinks.length > 0 || pendingFieldWrites.length > 0) {
+      // Best-effort, deliberately outside the main try/catch's retry semantics: the document
+      // itself already synced successfully (documents.upsert above committed), so a failure
+      // applying its import row's connections/field writes must never make this whole job
+      // retry — a retry would just redundantly re-upsert an already-synced document. Logged
+      // loudly instead; docs/PHASE3_HANDOFF.md documents this as the one known gap (no
+      // automatic re-attempt for a deferred apply that fails, since retry-failed only
+      // re-queues rows already at status='failed', and this row is already 'ok').
+      try {
+        const importCtx: ServiceContext = { db, orgId, actorId: null, correlationId: randomUUID() };
+        const links =
+          pendingEntityLinks.length > 0 ? await applyEntityLinks(importCtx, documentRow.id, pendingEntityLinks) : [];
+        if (pendingFieldWrites.length > 0) {
+          const customFieldIdByKey = await buildCustomFieldIdByKey(importCtx);
+          await applyFieldWrites(importCtx, paperlessDocumentId, pendingFieldWrites, customFieldIdByKey);
+        }
+        logger.info("documents.sync.deferred_import_apply_completed", {
+          orgId,
+          documentId: documentRow.id,
+          linkCount: links.length
+        });
+      } catch (err) {
+        logger.error("documents.sync.deferred_import_apply_failed", {
+          orgId,
+          documentId: documentRow.id,
+          errorMessage: err instanceof Error ? err.message : String(err)
+        });
+      }
     }
 
     // Rule engine evaluation isn't built yet (worker/registry.ts's runRule is still a

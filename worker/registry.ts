@@ -12,6 +12,7 @@ import { pollPaperlessTasksJob } from "./jobs/poll-paperless-tasks";
 import { provisionTenantJob } from "./jobs/provision-tenant";
 import { reconcileFullSweepJob } from "./jobs/reconcile-full-sweep";
 import { reconcileIncrementalJob } from "./jobs/reconcile-incremental";
+import { runImportChunkJob } from "./jobs/run-import-chunk";
 import { syncPaperlessDocumentJob } from "./jobs/sync-paperless-document";
 
 const notImplemented =
@@ -48,7 +49,7 @@ export const jobRegistry: Record<QueueName, Processor<JobPayload>> = {
   [QUEUE_NAMES.runRule]: noOp(QUEUE_NAMES.runRule),
   [QUEUE_NAMES.backfillRule]: notImplemented(QUEUE_NAMES.backfillRule),
   [QUEUE_NAMES.fireDueReminders]: notImplemented(QUEUE_NAMES.fireDueReminders),
-  [QUEUE_NAMES.runImportChunk]: notImplemented(QUEUE_NAMES.runImportChunk),
+  [QUEUE_NAMES.runImportChunk]: runImportChunkJob,
   [QUEUE_NAMES.bulkAction]: bulkActionJob,
   [QUEUE_NAMES.export]: exportJob
 };

@@ -77,7 +77,10 @@ describe("resolveEntityRowPlans", () => {
       action: "create",
       entityTypeId: "entity-type-customer",
       displayName: "Acme d.o.o.",
-      data: { amount: 1234.56 }
+      // "vat" is the identifier column's own value, written into data (regression: an entity
+      // created without it comes out with no entity_identifiers row at all — unfindable on
+      // the next reusable-mapping re-import).
+      data: { vat: "SI12345678", amount: 1234.56 }
     });
   });
 
@@ -259,6 +262,29 @@ describe("resolveDocumentRowPlans (kind: documents)", () => {
     const plan = plans.get(1) as { entityLinks: Array<{ outcome: string }> };
     expect(plan.entityLinks.map((l) => l.outcome)).toEqual(["create", "skipped", "fail_row"]);
   });
+
+  it("carries the identifier kind+value through a create outcome (regression: entities auto-created via a link came out with no identifier)", async () => {
+    const mapping: DocumentImportMapping = {
+      documentBy: { strategy: "filename", column: 0 },
+      entityLinks: [CUSTOMER_LINK({ column: 1, onMissing: "create" })],
+      fields: [],
+      duplicateStrategy: "skip"
+    };
+    const db = makeDb({ entity_identifiers: [{ data: [], error: null }] });
+
+    const plans = await resolveDocumentRowPlans(makeCtx(db), "documents", {
+      mapping,
+      rows: [{ rowNumber: 1, raw: ["invoice.pdf", "SI111"] }],
+      archiveEntries: [{ fileName: "invoice.pdf", uncompressedSize: 1 }]
+    });
+
+    const plan = plans.get(1) as { entityLinks: Array<Record<string, unknown>> };
+    expect(plan.entityLinks[0]).toMatchObject({
+      outcome: "create",
+      identifierKind: "vat",
+      identifierValue: "SI111"
+    });
+  });
 });
 
 describe("resolveDocumentRowPlans (kind: metadata_only)", () => {
@@ -269,7 +295,7 @@ describe("resolveDocumentRowPlans (kind: metadata_only)", () => {
       fields: []
     };
     const db = makeDb({
-      documents: [{ data: [{ id: "doc-1", checksum: "abc123" }], error: null }]
+      documents: [{ data: [{ id: "doc-1", checksum: "abc123", paperless_document_id: 42 }], error: null }]
     });
 
     const plans = await resolveDocumentRowPlans(makeCtx(db), "metadata_only", {
@@ -277,7 +303,11 @@ describe("resolveDocumentRowPlans (kind: metadata_only)", () => {
       rows: [{ rowNumber: 1, raw: ["abc123"] }]
     });
 
-    expect(plans.get(1)).toMatchObject({ action: "connect_existing", documentId: "doc-1" });
+    expect(plans.get(1)).toMatchObject({
+      action: "connect_existing",
+      documentId: "doc-1",
+      paperlessDocumentId: 42
+    });
   });
 
   it("flags DOCUMENT_NOT_FOUND when nothing matches", async () => {

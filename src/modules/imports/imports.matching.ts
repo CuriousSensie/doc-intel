@@ -174,6 +174,21 @@ function resolveEntityFieldData(
 ): Record<string, unknown> {
   const data: Record<string, unknown> = {};
 
+  // Identifier columns are used for matching (has this VAT been seen before?), but the value
+  // must also land in the entity's own `data` under whichever field_schema key carries that
+  // identifier_kind — otherwise createEntity()'s syncIdentifiersFromData() (which reads
+  // data[field.key], not the mapping) has nothing to promote, and the entity comes out of the
+  // import with no entity_identifiers row at all: unfindable on the next monthly re-import,
+  // which is the entire point of "mappings are saved per tenant and reusable" (specs/06). Found
+  // live during Phase 3 M6 verification — a unit test with a mocked identifier lookup can't
+  // catch a missing row that was never expected to exist in the first place.
+  for (const idCol of mapping.identifierColumns) {
+    const rawValue = raw[idCol.column]?.trim();
+    if (!rawValue) continue;
+    const field = fieldSchema.find((f) => f.identifier_kind === idCol.kind);
+    if (field) data[field.key] = rawValue;
+  }
+
   for (const field of mapping.fields) {
     const rawValue = raw[field.column];
     if (rawValue === undefined || rawValue.trim() === "") continue;
@@ -212,7 +227,20 @@ function toErrorPlan(err: unknown): { action: "error"; code: ImportErrorCode; me
 
 export type ResolvedEntityLink =
   | { outcome: "linked"; entityId: string; relation: Relation }
-  | { outcome: "create"; entityTypeKey: string; displayName: string; relation: Relation }
+  | {
+      outcome: "create";
+      entityTypeKey: string;
+      displayName: string;
+      relation: Relation;
+      // Set only when matchBy was "identifier" — lets applyEntityLinks() write the same value
+      // into the new entity's own data (keyed by whichever field_schema entry declares this
+      // identifier_kind), so the entity it just created is actually findable by that
+      // identifier on a future import instead of coming out with an empty `data` (found live
+      // during Phase 3 M6 verification — the same class of gap the main entities-import path
+      // had before its own fix).
+      identifierKind?: string;
+      identifierValue?: string;
+    }
   | { outcome: "skipped"; relation: Relation }
   | { outcome: "fail_row"; message: string };
 
@@ -230,6 +258,7 @@ export type DocumentRowPlan =
   | {
       action: "connect_existing";
       documentId: string;
+      paperlessDocumentId: number;
       fieldWrites: ResolvedFieldWrite[];
       entityLinks: ResolvedEntityLink[];
     }
@@ -269,7 +298,7 @@ export async function resolveDocumentRowPlans(
       const match = documentMatches.get(row.rowNumber);
 
       if (kind === "metadata_only") {
-        if (!match?.documentId) {
+        if (!match?.documentId || match.paperlessDocumentId === undefined) {
           plans.set(row.rowNumber, {
             action: "error",
             code: "DOCUMENT_NOT_FOUND",
@@ -280,6 +309,7 @@ export async function resolveDocumentRowPlans(
         plans.set(row.rowNumber, {
           action: "connect_existing",
           documentId: match.documentId,
+          paperlessDocumentId: match.paperlessDocumentId,
           fieldWrites,
           entityLinks
         });
@@ -334,7 +364,11 @@ export async function resolveDocumentRowPlans(
   return plans;
 }
 
-type DocumentMatch = { documentId?: string; archiveFileName?: string; checksum?: string };
+type DocumentMatch = {
+  documentId?: string;
+  paperlessDocumentId?: number;
+  archiveFileName?: string;
+};
 
 async function batchMatchDocuments(
   ctx: ServiceContext,
@@ -375,17 +409,21 @@ async function batchMatchDocuments(
   if (values.size === 0) return matches;
 
   const distinct = [...new Set(values.values())];
-  const byLookup = new Map<string, string>();
+  const byLookup = new Map<string, { documentId: string; paperlessDocumentId: number }>();
 
   if (strategy === "checksum") {
     const { data, error } = await ctx.db
       .from("documents")
-      .select("id, checksum")
+      .select("id, checksum, paperless_document_id")
       .eq("organization_id", ctx.orgId)
       .is("deleted_at", null)
       .in("checksum", distinct);
     if (error) throw error;
-    for (const doc of data ?? []) if (doc.checksum) byLookup.set(doc.checksum, doc.id);
+    for (const doc of data ?? []) {
+      if (doc.checksum) {
+        byLookup.set(doc.checksum, { documentId: doc.id, paperlessDocumentId: doc.paperless_document_id });
+      }
+    }
   } else if (strategy === "paperless_id") {
     const numeric = distinct.map(Number).filter((n) => Number.isInteger(n));
     const { data, error } = await ctx.db
@@ -395,22 +433,31 @@ async function batchMatchDocuments(
       .is("deleted_at", null)
       .in("paperless_document_id", numeric);
     if (error) throw error;
-    for (const doc of data ?? []) byLookup.set(String(doc.paperless_document_id), doc.id);
+    for (const doc of data ?? []) {
+      byLookup.set(String(doc.paperless_document_id), {
+        documentId: doc.id,
+        paperlessDocumentId: doc.paperless_document_id
+      });
+    }
   } else {
     // strategy === "filename" && kind === "metadata_only" — match against our mirror's title.
     const { data, error } = await ctx.db
       .from("documents")
-      .select("id, title")
+      .select("id, title, paperless_document_id")
       .eq("organization_id", ctx.orgId)
       .is("deleted_at", null)
       .in("title", distinct);
     if (error) throw error;
-    for (const doc of data ?? []) byLookup.set(doc.title, doc.id);
+    for (const doc of data ?? []) {
+      byLookup.set(doc.title, { documentId: doc.id, paperlessDocumentId: doc.paperless_document_id });
+    }
   }
 
   for (const [rowNumber, raw] of values) {
-    const documentId = byLookup.get(raw);
-    if (documentId) matches.set(rowNumber, { documentId });
+    const match = byLookup.get(raw);
+    if (match) {
+      matches.set(rowNumber, { documentId: match.documentId, paperlessDocumentId: match.paperlessDocumentId });
+    }
   }
 
   return matches;
@@ -527,7 +574,15 @@ function resolveEntityLinksForRow(
     }
 
     if (link.onMissing === "create") {
-      resolved.push({ outcome: "create", entityTypeKey: link.entityTypeKey, displayName, relation: link.relation });
+      resolved.push({
+        outcome: "create",
+        entityTypeKey: link.entityTypeKey,
+        displayName,
+        relation: link.relation,
+        ...(link.matchBy === "identifier" && link.identifierKind
+          ? { identifierKind: link.identifierKind, identifierValue: raw }
+          : {})
+      });
     } else if (link.onMissing === "fail_row") {
       resolved.push({ outcome: "fail_row", message: `No match for "${raw}" and on_missing is fail_row` });
     } else {

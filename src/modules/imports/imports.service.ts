@@ -32,6 +32,7 @@ import {
   type MetadataOnlyImportMapping
 } from "./imports.schemas";
 import { resolveDocumentRowPlans, resolveEntityRowPlans, type RawImportRow } from "./imports.matching";
+import { openJobArchive } from "./imports.archive";
 
 export type ImportJob = Database["public"]["Tables"]["import_jobs"]["Row"];
 export type ImportRow = Database["public"]["Tables"]["import_rows"]["Row"];
@@ -455,7 +456,7 @@ export async function validateImportJob(ctx: ServiceContext, id: string): Promis
     .eq("organization_id", ctx.orgId);
   if (statusError) throw statusError;
 
-  const archiveEntries = await loadArchiveEntriesIfNeeded(admin, job);
+  const archiveEntries = await loadArchiveEntriesIfNeeded(job);
   const summary: ValidateImportSummary = { ok: 0, skippedDuplicate: 0, needsReview: 0, failed: 0 };
 
   let lastId = 0;
@@ -538,6 +539,20 @@ type RowVerdict = {
   summaryKey: keyof ValidateImportSummary;
 };
 
+// specs/06-importer.md: "VALIDATE: dry run over ALL rows; writes nothing [to business data];
+// produces per-row verdicts." Critical distinction this function encodes: `status` here is
+// what gets WRITTEN to import_rows.status, which is also the exact column
+// claim_import_chunk() reads to find work for the real run — so only a plan that is
+// *permanently* bad (an "error" action; the same outcome would recur unchanged at run time)
+// gets a terminal status here. Every executable plan (create/update/skip_duplicate/
+// connect_existing/create_document) is written back as "pending", never "ok" or
+// "skipped_duplicate" — those verdicts describe what running the plan *would* do, not that it
+// has been done. Getting this wrong silently starves the real run: an early version of this
+// function wrote the *real* terminal status during validate(), which left nothing in `pending`
+// for claim_import_chunk() to ever find — caught live during Phase 3 M6 verification, not by
+// a unit test (the mocked-DB tests never exercise the actual claim query). `summaryKey` is
+// unaffected by this — the review screen's "N ok / N duplicates / N needs review / N failed"
+// counts still reflect what each row's plan actually resolves to.
 function planToVerdict(plan: unknown): RowVerdict {
   const p = plan as { action?: string; code?: ImportErrorCode; message?: string } | undefined;
 
@@ -564,29 +579,17 @@ function planToVerdict(plan: unknown): RowVerdict {
   }
 
   if (p.action === "skip_duplicate") {
-    return { status: "skipped_duplicate", result: p as Record<string, unknown>, summaryKey: "skippedDuplicate" };
+    return { status: "pending", result: p as Record<string, unknown>, summaryKey: "skippedDuplicate" };
   }
 
-  return { status: "ok", result: p as Record<string, unknown>, summaryKey: "ok" };
+  return { status: "pending", result: p as Record<string, unknown>, summaryKey: "ok" };
 }
 
-async function loadArchiveEntriesIfNeeded(
-  admin: AdminDb,
-  job: ImportJob
-): Promise<ZipEntryInfo[] | undefined> {
-  if (job.kind !== "documents" || !job.storage_key || !job.source_filename) return undefined;
-  if (detectImportFileFormat(job.source_filename) !== "zip") return undefined;
-
-  const temp = await downloadStorageObjectToTempFile(importsConfig.bucket, job.storage_key);
-  try {
-    const entries = await listZipEntries(temp.path);
-    const manifestEntry = entries.find(
-      (entry) => !entry.fileName.includes("/") && /\.(csv|tsv|xlsx)$/i.test(entry.fileName)
-    );
-    return manifestEntry ? entries.filter((e) => e.fileName !== manifestEntry.fileName) : entries;
-  } finally {
-    await temp.cleanup();
-  }
+async function loadArchiveEntriesIfNeeded(job: ImportJob): Promise<ZipEntryInfo[] | undefined> {
+  const opened = await openJobArchive(job);
+  if (!opened) return undefined;
+  await opened.tempFile.cleanup();
+  return opened.entries;
 }
 
 // -------------------------------------------------------------------------------------------
