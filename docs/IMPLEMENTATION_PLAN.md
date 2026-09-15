@@ -491,18 +491,71 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       correctly 404s via `notFound()`, and the preview route streams the real file content
       authenticated only by the session cookie. Full `e2e/isolation.spec.ts` (11 tests)
       re-verified green after these changes.
-- [ ] Dashboard nav entries + feature flags for `entities` UI (the `entities` flag itself already
-      added in the entities-module commit; nav wiring is the Entities/Views UI shell milestone)
-- [ ] Routes: `entities/[typeKey]/`, `entities/[typeKey]/[id]/`, `entity-types/`
-- [ ] `src/modules/saved-views/`
-- [ ] `data-table.tsx` (Paperless-delegated vs. our-DB-filter split)
-- [ ] Bulk connect/disconnect (audited transactionally) + bulk edit proxy +
-      `worker/jobs/bulk-action.ts`
-- [ ] `src/modules/exports/` + `worker/jobs/export.ts` (CSV `;`/`,`, streaming XLSX, batched
-      connection resolution)
-- [ ] `e2e/isolation.spec.ts` — tests 9, 14, 15, 16 added
-- [ ] Docs updated
-- [ ] **Phase 2 exit criteria met**
+- [x] Dashboard nav entries + feature flags for `entities`/`views` (on) and `imports`/`rules`
+      (off placeholders, invisible until Phase 3/4 flip them) — `src/config/features.ts`,
+      `src/config/navigation.ts`. Role-gated dashboard home (`dashboard/page.tsx`): owner/admin
+      see an org-health summary, member/read-only see a task-focused view
+      (`src/modules/dashboard/dashboard.service.ts`).
+- [x] Routes: `entities/`, `entities/[typeKey]/`, `entities/[typeKey]/[id]/` (Overview/
+      Connections/Activity tabs, reusing `ConnectionsPanel`), `entity-types/`,
+      `entity-types/[id]/` (admin-only field-schema editor: add field / hide field, respecting
+      Milestone 2's evolution rules). Dynamic per-field-type native inputs
+      (`entity-field-input.tsx`). Verified end-to-end (`e2e/entities-ui.spec.ts`, 7 tests) against
+      the real live stack.
+- [x] `src/modules/saved-views/` — `ensureStarterViews()` lazily seeds the five spec-required
+      views (All documents, Documents with no connections, Invoices this year, Open contracts,
+      Recently added) on first visit to `dashboard/views/page.tsx`, matching
+      `complete_provisioning()`'s own seeding-on-demand pattern rather than a migration-time seed.
+- [x] Searchable cross-entity-type connection picker (`connection-picker.tsx`) — two interactions
+      (type, click), a new `GET /api/search` Route Handler (ADR-0009's designated fetch surface)
+      doing entity name/identifier match, wired into both the document detail page and the
+      entities list. Documents list gained filter query-param support
+      (`documentTypeKey`/`status`/`dateFrom`/`dateTo`/`q`/`hasNoConnections`) so saved views
+      actually filter the list they link to.
+      **Real bug found and fixed via live e2e testing**: this codebase has no `revalidatePath`
+      anywhere, and `redirect()` to the same URL a form was submitted from does not force Next.js
+      to refetch stale Server Component data — every new form action (create entity, create
+      entity type, add field) now appends a status query param (`withStatus()`) to its success
+      redirect to force a real refetch, matching how error-path redirects already did this by
+      coincidence.
+- [x] Bulk connect (`bulkConnectDocumentsAction` — selection-across-pages or "select all matching
+      filter" via `listDocumentIds()`, ≤50 items runs synchronously, >50 enqueues
+      `worker/jobs/bulk-action.ts` with live progress via a `background_operations` tracking
+      table), per-item failure reporting, session-scoped undo (`undoBulkConnectAction`, reverses
+      the connections a bulk operation created). Paperless-side bulk edit
+      (type/tag/correspondent/custom-field/reprocess/delete) proxied via `bulk_edit`
+      (`bulkEditPaperlessDocuments`), never reimplemented. Verified end-to-end
+      (`e2e/bulk-and-export.spec.ts`) — bulk-connecting 3 real documents, undo, and (live,
+      unscripted) a real cross-tenant `bulk_edit` call returning 403 from Paperless's own ACL.
+- [x] `src/modules/exports/` (`resolveExportData()` — batched connected-entity column resolution,
+      never N+1) + `file-builders.ts` (CSV: `;` delimiter + BOM for Slovenian-locale Excel;
+      streaming XLSX via `exceljs`) + `worker/jobs/export.ts` (always async, uploads to a private
+      `exports` storage bucket) + `GET /api/exports/[id]/download` (short-lived signed URL
+      redirect, same private-bucket pattern as `document-uploads`). Original-files ZIP export
+      (spec's explicitly optional add-on) **not built** — CSV/XLSX row export only. Verified
+      end-to-end: exported CSV downloaded and its bytes checked, including a real connected-entity
+      column resolved from a live bulk-connect.
+- [x] **Real isolation gap found and fixed**: `createConnection()` had no check that
+      `source_id`/`target_id` actually belonged to the caller's org before inserting (`connections`
+      has no FK on either side — polymorphic by design) — a request could create a connection row
+      naming another tenant's entity/document id and it would silently succeed. Added
+      `assertBelongsToOrg()` (checks the target table, scoped by `organization_id`, before every
+      insert) — this is isolation test #9's exact scenario, and the fix now makes it 404
+      (`NotFoundError`) instead of a silent cross-tenant reference.
+- [x] `e2e/isolation-phase2.spec.ts` — tests 9 (connection targeting another org's entity, 404),
+      14 (bulk edit with another org's document id — confirmed live: Paperless's own ACL returns
+      403), 15 (export with another org's document id passed explicitly — silently excluded, only
+      the caller's rows come back). Test 16 (export ZIP contains only A's files) **not
+      implemented** — no code to test, since ZIP-of-originals export wasn't built (see above);
+      documented as a deferral, not faked.
+- [x] `e2e/entity-merge.spec.ts` — Level 1 definition-of-done item 9 ("merge two duplicate
+      customers without losing connections") verified live through a real authenticated session
+      (`merge_entities()` checks `auth.uid()` itself) — a connection that existed only on the
+      duplicate is re-pointed to the kept entity, and its VAT identifier moves too.
+- [x] Docs updated — this file, `docs/SPEC_TRACEABILITY.md`, `docs/ARCHITECTURE.md`,
+      `docs/DATABASE.md`, `docs/MODULES.md`, `docs/API_REFERENCE.md`.
+- [x] **Phase 2 exit criteria met** — see `PHASE2_HANDOFF.md` (local only, not tracked) for the
+      full walkthrough against `specs/05-level-1-structure.md`'s definition-of-done items 1–10.
 
 ## Phase 3 — Importer
 

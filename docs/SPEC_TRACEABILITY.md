@@ -34,17 +34,19 @@ for a superseding decision).
 |---|---|---|
 | `orgs` extension columns | `supabase/migrations/<ts>_pomocnik_orgs_extension.sql` | planned |
 | `tenant_paperless_config`, `paperless_object_map` | `supabase/migrations/<ts>_paperless_linkage.sql` | planned |
-| `entity_types`, `entities`, `entity_identifiers` | `supabase/migrations/<ts>_entities_and_connections.sql`, `src/modules/entities/` | planned |
+| `entity_types` | `supabase/migrations/20260826000000_tenant_provisioning.sql`, `src/modules/entity-types/` | done |
+| `entities`, `entity_identifiers` | `supabase/migrations/20260914000000_entities_connections_fields_views.sql`, `src/modules/entities/` | done |
 | `documents` mirror | `20260828000000_document_uploads.sql` | done |
-| `connections` | Same migration as entities; `src/modules/connections/connections.service.ts#getConnections()` | planned |
-| `custom_field_defs` | Same migration; decision-rule enforced as runtime assertion in `src/modules/entities/` | planned |
+| `connections` | Same migration as entities; `src/modules/connections/connections.service.ts#getConnections()`. Isolation gap found+fixed: `assertBelongsToOrg()` rejects a source/target id from another org (isolation test #9) | done |
+| `custom_field_defs` | Same migration; decision-rule enforced as runtime assertion in `src/modules/custom-fields/custom-field-defs.service.ts` | done |
+| `background_operations` (not in spec) | `20260914120000_background_operations.sql` — progress tracking for bulk actions + export, mirroring `document_uploads`' RLS pattern | done |
 | `rules`, `rule_runs` | Phase 4 migration; `src/modules/rules/` | planned |
 | `rule_backfills` (not in spec) | [ADR-0010](adr/0010-per-backfill-undo-scope.md) | planned |
 | `import_jobs`, `import_rows`, `import_mappings` | Phase 3 migration; `src/modules/imports/` | planned |
 | `ai_runs`, `ai_corrections`, `ai_budgets` | Level 2 — out of scope for this plan | deferred (Level 2, `specs/08-level-2-ai.md`) |
-| `saved_views` | `src/modules/saved-views/` | planned |
-| `audit_events` | Mapped to `audit_logs` — see [ADR-0005](adr/0005-extend-audit-logs-over-audit-events.md) | planned |
-| Sync/reconciliation drift table | `worker/jobs/reconcile-*.ts` | planned |
+| `saved_views` | `src/modules/saved-views/` — five starter views lazily seeded on first visit | done |
+| `audit_events` | Mapped to `audit_logs` — see [ADR-0005](adr/0005-extend-audit-logs-over-audit-events.md) | done |
+| Sync/reconciliation drift table | `worker/jobs/reconcile-*.ts` | done (Phase 1) |
 
 ## specs/03-api.md — REST contract
 
@@ -66,19 +68,20 @@ for a superseding decision).
 | Upload pipeline | `src/modules/documents/`, `worker/jobs/*upload*` | in progress — see Data model section above |
 | Event bridge + reconciliation | See specs/01 rows above | planned |
 | Search passthrough | `documents.service.ts` search wrapper | planned |
-| Isolation suite | `e2e/isolation.spec.ts` (tests 1–8, 17–20 in Phase 1; 9, 14–16 in Phase 2) | planned |
+| Isolation suite | `e2e/isolation.spec.ts` (tests 1–8, 17–20, Phase 1); `e2e/isolation-phase2.spec.ts` (tests 9, 14, 15, Phase 2). Test 16 (export ZIP) deferred — no ZIP-of-originals export was built | done (tests 1–9, 14–15, 17–20); deferred (test 16) |
 
 ## specs/05-level-1-structure.md
 
 | Item | Implementation | Status |
 |---|---|---|
-| Entity types / entities | `src/modules/entities/` | planned |
-| Connections | `src/modules/connections/` | planned |
-| Entity/document pages | `src/app/(dashboard)/{documents,entities,entity-types}/` | planned |
-| Tables / saved views | `src/components/tables/data-table.tsx`, `src/modules/saved-views/` | planned |
-| Bulk actions | `documents.actions.ts` + `worker/jobs/bulk-action.ts` | planned |
-| Export | `src/modules/exports/`, `worker/jobs/export.ts` | planned |
-| Entity merge | `merge_entities()` Postgres function | planned |
+| Entity types / entities | `src/modules/entities/`, `src/modules/entity-types/` | done |
+| Connections | `src/modules/connections/` | done |
+| Entity/document pages | `src/app/(dashboard)/dashboard/{documents,entities,entity-types}/` | done |
+| Tables / saved views | Filter query params on the documents list + `src/modules/saved-views/` (no separate reusable `data-table.tsx` component was built — each list page renders its own table; revisit if a third list type appears) | done |
+| Bulk actions | `connections.actions.ts#bulkConnectDocumentsAction` + `documents.actions.ts#bulkEditDocumentsAction` + `worker/jobs/bulk-action.ts` | done |
+| Export | `src/modules/exports/`, `worker/jobs/export.ts` — CSV/XLSX row export; ZIP-of-original-files export (spec's explicitly optional add-on) not built | done (row export); deferred (ZIP export) |
+| Entity merge | `merge_entities()` Postgres function, `entity-merge.service.ts`, verified live in `e2e/entity-merge.spec.ts` | done |
+| Dashboard information architecture (nav, role-gated home) | `src/config/navigation.ts`, `src/modules/dashboard/dashboard.service.ts` | done |
 
 ## specs/06-importer.md
 
@@ -109,7 +112,7 @@ Consequences section.
 
 | Item | Implementation | Status |
 |---|---|---|
-| Isolation test suite (20 tests) | Split: 1–8, 17–20 in Phase 1; 9, 14–16 in Phase 2 | planned |
+| Isolation test suite (20 tests) | Split: 1–8, 17–20 in Phase 1 (done); 9, 14, 15 in Phase 2 (done); 16 deferred (no ZIP export built); 10–13 deferred (Phase 3/4 features — rules, import, AI, not yet built) | in progress |
 | Security table | Threaded through Phase 1 (AV scan, HMAC, encrypted tokens) and Phase 5 (headers, CSP) | planned |
 | Performance targets | Phase 5 load test | planned |
 | Backups/restore | Phase 5 restore drill (DB + media) | planned |
