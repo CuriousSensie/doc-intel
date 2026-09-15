@@ -48,7 +48,11 @@ test.describe("bulk actions and export (needs a live Paperless instance)", () =>
     for (let i = 0; i < 3; i++) {
       const title = `bulk_e2e_${runId}_${i}`;
       const form = new FormData();
-      form.append("document", new Blob([`Bulk e2e test doc ${i}.\n`], { type: "text/plain" }), `${title}.txt`);
+      // Content must be unique per run, not just the filename/title — Paperless dedupes by
+      // checksum, and a byte-identical body across repeated runs eventually makes post_document/
+      // resolve to a stale, already-mirrored document id from a previous run (confirmed live: a
+      // (organization_id, paperless_document_id) unique-constraint violation after enough reruns).
+      form.append("document", new Blob([`Bulk e2e test doc ${i}. ${title}\n`], { type: "text/plain" }), `${title}.txt`);
       form.append("title", title);
       const rawTaskId = await paperless.postForm<string>("/api/documents/post_document/", form);
       const task = await pollPaperlessTask(paperless, parsePostDocumentTaskId(rawTaskId));
