@@ -223,78 +223,56 @@ export function DocumentsBulkList({
   }
 
   return (
-    <div className="grid gap-3" data-export-operation-id={exportOperationId ?? ""}>
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-sm">
-        <input
-          checked={documents.length > 0 && selectedIds.size === documents.length}
-          className="size-4"
-          onChange={toggleAllOnPage}
-          type="checkbox"
-        />
-        <span className="text-muted">{t("bulk.selectPage")}</span>
-        {matchingCount === null ? (
-          <button
-            className="underline underline-offset-4"
-            onClick={handleSelectAllMatching}
-            type="button"
-          >
-            {t("bulk.selectAllMatching")}
-          </button>
-        ) : null}
+    <div className="grid min-w-0 gap-3" data-export-operation-id={exportOperationId ?? ""}>
+      {hasSelection ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-sm">
+          <input
+            checked={documents.length > 0 && selectedIds.size === documents.length}
+            className="size-4"
+            onChange={toggleAllOnPage}
+            type="checkbox"
+          />
+          <span className="text-muted">{t("bulk.selectPage")}</span>
+          {matchingCount === null ? (
+            <button
+              className="underline underline-offset-4"
+              onClick={handleSelectAllMatching}
+              type="button"
+            >
+              {t("bulk.selectAllMatching")}
+            </button>
+          ) : null}
 
-        {hasSelection ? (
-          <>
-            <span className="font-semibold">{t("bulk.selected", { count: selectionCount })}</span>
-            <Button
-              disabled={isPending}
-              onClick={() => setPickerOpen((v) => !v)}
-              size="sm"
-              variant="outline"
-            >
-              {t("bulk.connectToEntity")}
-            </Button>
-            <Button
-              disabled={isPending}
-              onClick={() => handleExport("csv")}
-              size="sm"
-              variant="outline"
-            >
-              {t("bulk.exportCsv")}
-            </Button>
-            <Button
-              disabled={isPending}
-              onClick={() => handleExport("xlsx")}
-              size="sm"
-              variant="outline"
-            >
-              {t("bulk.exportXlsx")}
-            </Button>
-            <Button onClick={clearSelection} size="sm" variant="ghost">
-              {t("bulk.clear")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <span className="ml-auto" />
-            <Button
-              disabled={isPending}
-              onClick={() => handleExport("csv")}
-              size="sm"
-              variant="outline"
-            >
-              {t("bulk.exportViewCsv")}
-            </Button>
-            <Button
-              disabled={isPending}
-              onClick={() => handleExport("xlsx")}
-              size="sm"
-              variant="outline"
-            >
-              {t("bulk.exportViewXlsx")}
-            </Button>
-          </>
-        )}
-      </div>
+          <span className="font-semibold">{t("bulk.selected", { count: selectionCount })}</span>
+          <Button
+            disabled={isPending}
+            onClick={() => setPickerOpen((v) => !v)}
+            size="sm"
+            variant="outline"
+          >
+            {t("bulk.connectToEntity")}
+          </Button>
+          <Button
+            disabled={isPending}
+            onClick={() => handleExport("csv")}
+            size="sm"
+            variant="outline"
+          >
+            {t("bulk.exportCsv")}
+          </Button>
+          <Button
+            disabled={isPending}
+            onClick={() => handleExport("xlsx")}
+            size="sm"
+            variant="outline"
+          >
+            {t("bulk.exportXlsx")}
+          </Button>
+          <Button onClick={clearSelection} size="sm" variant="ghost">
+            {t("bulk.clear")}
+          </Button>
+        </div>
+      ) : null}
 
       {pickerOpen ? (
         <div className="grid gap-2 rounded-md border border-border bg-panel p-3">

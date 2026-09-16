@@ -73,6 +73,23 @@ async function cachedList<T>(
   return value;
 }
 
+async function updateCachedList<T extends { id: number }>(
+  orgId: string,
+  kind: "tags" | "correspondents" | "document_types",
+  item: T
+): Promise<void> {
+  const redis = getRedisClient();
+  const key = `paperless:meta:list:${kind}:${orgId}`;
+  const hit = await redis.get(key);
+  if (hit === null) return;
+
+  const list = JSON.parse(hit) as T[];
+  const next = [...list.filter((existing) => existing.id !== item.id), item].sort((a, b) =>
+    "name" in a && "name" in b ? String(a.name).localeCompare(String(b.name)) : a.id - b.id
+  );
+  await redis.set(key, JSON.stringify(next), "EX", TTL_SECONDS);
+}
+
 export function getCachedTags(client: PaperlessClient, orgId: string): Promise<PaperlessTag[]> {
   return cachedList(orgId, "tags", () => listPaperlessTags(client));
 }
@@ -89,4 +106,22 @@ export function getCachedDocumentTypes(
   orgId: string
 ): Promise<PaperlessDocumentType[]> {
   return cachedList(orgId, "document_types", () => listPaperlessDocumentTypes(client));
+}
+
+export function addCachedTag(orgId: string, tag: PaperlessTag): Promise<void> {
+  return updateCachedList(orgId, "tags", tag);
+}
+
+export function addCachedCorrespondent(
+  orgId: string,
+  correspondent: PaperlessCorrespondent
+): Promise<void> {
+  return updateCachedList(orgId, "correspondents", correspondent);
+}
+
+export function addCachedDocumentType(
+  orgId: string,
+  documentType: PaperlessDocumentType
+): Promise<void> {
+  return updateCachedList(orgId, "document_types", documentType);
 }

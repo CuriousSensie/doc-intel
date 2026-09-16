@@ -2,9 +2,10 @@
 
 import { FileText } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
-import { useState } from "react";
+import { useRouter } from "@/i18n/navigation";
+import { useRef, useState } from "react";
 
+import { DocumentRowActions } from "@/components/documents/document-row-actions";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentTagChips } from "@/components/documents/document-tag-chips";
 import type { PaperlessTag } from "@/lib/paperless/documents";
@@ -15,7 +16,7 @@ function Thumbnail({ documentId, title }: { documentId: string; title: string })
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
-      <div className="flex h-56 w-40 shrink-0 items-center justify-center rounded-md bg-panel-strong">
+      <div className="flex aspect-[3/4] w-full shrink-0 items-center justify-center rounded-md bg-panel-strong md:h-56 md:w-40">
         <FileText aria-hidden="true" className="size-8 text-muted" />
       </div>
     );
@@ -24,7 +25,7 @@ function Thumbnail({ documentId, title }: { documentId: string; title: string })
     // eslint-disable-next-line @next/next/no-img-element -- authenticated proxy route, not a static asset.
     <img
       alt={title}
-      className="h-56 w-40 shrink-0 rounded-md border border-border object-cover"
+      className="aspect-[3/4] w-full shrink-0 rounded-md border border-border object-cover md:h-56 md:w-40"
       loading="lazy"
       onError={() => setFailed(true)}
       src={`/api/documents/${documentId}/thumbnail`}
@@ -56,10 +57,30 @@ export function DocumentLargeCardsView({
 }) {
   const t = useTranslations("documents");
   const tFilters = useTranslations("documents.filters");
+  const router = useRouter();
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visible = new Set(visibleFields);
 
+  function detailHref(documentId: string) {
+    return `/dashboard/documents/${documentId}${ctxQuery}`;
+  }
+
+  function handleClick(documentId: string) {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      onToggle(documentId);
+      clickTimer.current = null;
+    }, 180);
+  }
+
+  function handleDoubleClick(documentId: string) {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = null;
+    router.push(detailHref(documentId));
+  }
+
   return (
-    <section className="grid gap-3">
+    <section className="grid min-w-0 gap-3">
       {documents.map((document) => {
         const content = contentByPaperlessId[document.paperless_document_id];
         const snippet = content
@@ -72,17 +93,17 @@ export function DocumentLargeCardsView({
 
         return (
           <div
-            className="flex flex-col gap-3 rounded-lg border border-border bg-panel p-3 shadow-sm transition-colors hover:bg-panel-strong/40 md:flex-row"
+            className="flex min-w-0 cursor-pointer flex-col gap-3 overflow-hidden rounded-lg border border-border bg-panel p-3 shadow-sm transition-colors hover:bg-panel-strong/40 data-[selected=true]:bg-panel-strong md:flex-row"
             data-document-row={document.id}
+            data-selected={selectedIds.has(document.id)}
             key={document.id}
+            onClick={() => handleClick(document.id)}
+            onDoubleClick={() => handleDoubleClick(document.id)}
           >
-            <input
-              checked={selectedIds.has(document.id)}
-              className="mt-1 size-4 shrink-0"
-              onChange={() => onToggle(document.id)}
-              type="checkbox"
-            />
-            <div className="relative w-full shrink-0 md:w-40">
+            {selectedIds.has(document.id) ? (
+              <input checked className="mt-1 size-4 shrink-0" readOnly type="checkbox" />
+            ) : null}
+            <div className="relative min-w-0 shrink-0 md:w-40">
               <Thumbnail documentId={document.id} title={document.title} />
               {visible.has("tags") ? (
                 <div className="absolute left-2 top-2 max-w-[calc(100%-1rem)]">
@@ -90,13 +111,12 @@ export function DocumentLargeCardsView({
                 </div>
               ) : null}
             </div>
-            <Link
-              className="flex flex-1 flex-col gap-1 overflow-hidden"
-              href={`/dashboard/documents/${document.id}${ctxQuery}`}
-            >
+            <div className="flex min-w-0 flex-1 flex-col gap-1 overflow-hidden">
               <div className="flex items-start justify-between gap-3">
                 {visible.has("title") ? (
-                  <p className="text-lg font-semibold">{document.title}</p>
+                  <p className="min-w-0 truncate text-lg font-semibold" title={document.title}>
+                    {document.title}
+                  </p>
                 ) : (
                   <span />
                 )}
@@ -108,7 +128,7 @@ export function DocumentLargeCardsView({
                     <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {tFilters("field_documentType")}
                     </dt>
-                    <dd className="mt-0.5">
+                    <dd className="mt-0.5 min-w-0 truncate">
                       {document.document_type_key ?? t("list.uncategorized")}
                     </dd>
                   </div>
@@ -118,7 +138,9 @@ export function DocumentLargeCardsView({
                     <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {tFilters("field_correspondent")}
                     </dt>
-                    <dd className="mt-0.5">{document.correspondent_name ?? "—"}</dd>
+                    <dd className="mt-0.5 min-w-0 truncate">
+                      {document.correspondent_name ?? "—"}
+                    </dd>
                   </div>
                 ) : null}
                 {visible.has("connections") ? (
@@ -147,7 +169,10 @@ export function DocumentLargeCardsView({
                 ) : null}
               </dl>
               {snippet ? <p className="mt-1 line-clamp-3 text-sm text-muted">{snippet}</p> : null}
-            </Link>
+              <div className="mt-auto pt-2">
+                <DocumentRowActions documentId={document.id} detailHref={detailHref(document.id)} />
+              </div>
+            </div>
           </div>
         );
       })}

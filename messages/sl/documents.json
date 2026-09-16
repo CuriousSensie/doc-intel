@@ -16,8 +16,12 @@
   },
   "filters": {
     "searchPlaceholder": "Iskanje dokumentov…",
+    "searchOptions": "Možnosti iskanja",
     "searchModeAll": "Naslov in vsebina",
     "searchModeTitle": "Samo naslov",
+    "filters": "Filtri",
+    "options": "Možnosti",
+    "listingOptions": "Možnosti seznama",
     "documentType": "Vrsta dokumenta",
     "allDocumentTypes": "Vse vrste",
     "tags": "Oznake",
@@ -126,6 +130,7 @@
     "actions": {
       "previous": "Prejšnji dokument",
       "next": "Naslednji dokument",
+      "open": "Odpri",
       "download": "Prenesi",
       "delete": "Izbriši",
       "share": "Deli",

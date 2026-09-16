@@ -141,7 +141,7 @@ export default async function DocumentsPage({
   );
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 gap-5">
       <DocumentsFilterBar
         current={{ ...filter, fields: visibleFields, view }}
         filterOptions={{
@@ -159,7 +159,7 @@ export default async function DocumentsPage({
       />
 
       {isFiltered ? (
-        <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
+        <div className="flex min-w-0 items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
           <span>{t("list.filteredView", { count: documents.length })}</span>
           <Link className="underline underline-offset-4" href="/dashboard/documents">
             {t("list.clearFilters")}

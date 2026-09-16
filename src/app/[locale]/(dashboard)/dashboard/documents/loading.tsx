@@ -27,34 +27,21 @@ function DocumentsFilterBarSkeleton() {
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-64 flex-1 items-center gap-2 xl:max-w-3xl">
-          <Skeleton className="size-4 shrink-0 rounded-full" />
+          <ControlSkeleton className="w-10 shrink-0" />
           <Skeleton className="h-10 flex-1 rounded-md" />
-          <ControlSkeleton className="w-44 shrink-0" />
+          <Skeleton className="size-4 shrink-0 rounded-full" />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden flex-wrap items-center gap-2 xl:flex">
           <ControlSkeleton className="w-24" />
           <ControlSkeleton className="w-48" />
-          <ControlSkeleton className="w-40" />
           <ControlSkeleton className="w-48" />
           <ControlSkeleton className="w-36" />
           <ControlSkeleton className="w-40" />
         </div>
+        <ControlSkeleton className="w-28 xl:hidden" />
       </div>
     </section>
-  );
-}
-
-function BulkBarSkeleton() {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-sm">
-      <Skeleton className="size-4 rounded-sm" />
-      <Skeleton className="h-4 w-20" />
-      <Skeleton className="h-4 w-40" />
-      <span className="ml-auto" />
-      <ControlSkeleton className="w-32" />
-      <ControlSkeleton className="w-32" />
-    </div>
   );
 }
 
@@ -66,8 +53,9 @@ function TableSkeleton() {
     "min-w-44",
     "min-w-36",
     "w-24",
-    "w-20",
-    "min-w-44"
+    "w-24",
+    "min-w-44",
+    "w-36"
   ];
 
   return (
@@ -116,6 +104,13 @@ function TableSkeleton() {
               <td className="min-w-44 px-4 py-3 align-middle">
                 <Skeleton className="h-4 w-36" />
               </td>
+              <td className="px-4 py-3 align-middle">
+                <div className="flex justify-end gap-1">
+                  <Skeleton className="size-10 rounded-md" />
+                  <Skeleton className="size-10 rounded-md" />
+                  <Skeleton className="size-10 rounded-md" />
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -128,10 +123,7 @@ export default function Loading() {
   return (
     <div className="grid gap-5">
       <DocumentsFilterBarSkeleton />
-      <div className="grid gap-3">
-        <BulkBarSkeleton />
-        <TableSkeleton />
-      </div>
+      <TableSkeleton />
       <div className="flex items-center justify-between">
         <ControlSkeleton className="w-24" />
         <ControlSkeleton className="w-24" />

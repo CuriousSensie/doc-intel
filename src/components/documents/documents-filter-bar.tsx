@@ -8,6 +8,8 @@ import {
   LayoutGrid,
   Rows3,
   Search,
+  Settings2,
+  SlidersHorizontal,
   Table2,
   X
 } from "lucide-react";
@@ -22,17 +24,13 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { PaperlessCorrespondent, PaperlessTag } from "@/lib/paperless/documents";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import type { DocumentSort, DocumentSortDirection } from "@/modules/documents/documents.service";
@@ -67,7 +65,6 @@ type Props = {
   };
 };
 
-const STATUS_VALUES = ["pending", "processing", "ready", "failed", "orphaned"] as const;
 const FIELD_VALUES: DocumentListField[] = [
   "title",
   "tags",
@@ -130,166 +127,164 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
   }, [searchValue, current.q]);
 
   const activeTagCount = current.tagIds?.length ?? 0;
+  const selectedCorrespondent = filterOptions.correspondents.find(
+    (c) => c.id === current.correspondentId
+  );
+  const selectedDocumentType = filterOptions.documentTypes.find(
+    (dt) => dt.key === current.documentTypeKey
+  );
   const hasAnyFilter = Boolean(
     current.q ||
     activeTagCount ||
     current.correspondentId ||
     current.documentTypeKey ||
-    current.status ||
     current.dateFrom ||
     current.dateTo ||
     current.hasNoConnections ||
     selectedEntity
   );
 
-  return (
-    <section
-      className="grid gap-4 rounded-lg border border-border bg-panel p-4 shadow-sm"
-      data-pending={isPending}
-    >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <h1 className="text-3xl font-black">{tList("title")}</h1>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
+  const listControls = (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="justify-between" variant="outline">
+            {current.sort === "title"
+              ? t("sortTitle")
+              : current.sort === "mimeType"
+                ? t("sortMimeType")
+                : current.sort === "size"
+                  ? t("sortSize")
+                  : current.sort === "pages"
+                    ? t("sortPages")
+                    : t("sortCreated")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuRadioGroup
             onValueChange={(value) => navigate((params) => setOrDelete(params, "sort", value))}
             value={current.sort ?? "created"}
           >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="title">{t("sortTitle")}</SelectItem>
-              <SelectItem value="created">{t("sortCreated")}</SelectItem>
-              <SelectItem value="mimeType">{t("sortMimeType")}</SelectItem>
-              <SelectItem value="size">{t("sortSize")}</SelectItem>
-              <SelectItem value="pages">{t("sortPages")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            aria-label={t("sortDirection")}
+            <DropdownMenuRadioItem value="title">{t("sortTitle")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="created">{t("sortCreated")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="mimeType">{t("sortMimeType")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="size">{t("sortSize")}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="pages">{t("sortPages")}</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Button
+        aria-label={t("sortDirection")}
+        onClick={() =>
+          navigate((params) =>
+            setOrDelete(params, "sortDirection", current.sortDirection === "asc" ? null : "asc")
+          )
+        }
+        size="icon"
+        variant="outline"
+      >
+        {current.sortDirection === "asc" ? (
+          <ArrowUpAZ className="size-4" />
+        ) : (
+          <ArrowDownAZ className="size-4" />
+        )}
+      </Button>
+
+      <div className="flex items-center overflow-hidden rounded-md border border-border">
+        {(
+          [
+            { mode: "list", icon: Table2, label: t("viewTable") },
+            { mode: "smallCards", icon: LayoutGrid, label: t("viewSmallCards") },
+            { mode: "largeCards", icon: Rows3, label: t("viewLargeCards") }
+          ] as const
+        ).map(({ mode, icon: Icon, label }) => (
+          <button
+            aria-label={label}
+            aria-pressed={(current.view ?? "list") === mode}
+            className="flex size-10 items-center justify-center border-r border-border text-muted last:border-r-0 hover:bg-panel-strong data-[active=true]:bg-panel-strong data-[active=true]:text-foreground"
+            data-active={(current.view ?? "list") === mode}
+            key={mode}
             onClick={() =>
-              navigate((params) =>
-                setOrDelete(params, "sortDirection", current.sortDirection === "asc" ? null : "asc")
+              navigate(
+                (params) => setOrDelete(params, "view", mode === "list" ? null : mode),
+                false
               )
             }
-            size="icon"
-            variant="outline"
+            type="button"
           >
-            {current.sortDirection === "asc" ? (
-              <ArrowUpAZ className="size-4" />
-            ) : (
-              <ArrowDownAZ className="size-4" />
-            )}
-          </Button>
-
-          <div className="flex items-center overflow-hidden rounded-md border border-border">
-            {(
-              [
-                { mode: "list", icon: Table2, label: t("viewTable") },
-                { mode: "smallCards", icon: LayoutGrid, label: t("viewSmallCards") },
-                { mode: "largeCards", icon: Rows3, label: t("viewLargeCards") }
-              ] as const
-            ).map(({ mode, icon: Icon, label }) => (
-              <button
-                aria-label={label}
-                aria-pressed={(current.view ?? "list") === mode}
-                className="flex size-10 items-center justify-center border-r border-border text-muted last:border-r-0 hover:bg-panel-strong data-[active=true]:bg-panel-strong data-[active=true]:text-foreground"
-                data-active={(current.view ?? "list") === mode}
-                key={mode}
-                onClick={() =>
-                  navigate(
-                    (params) => setOrDelete(params, "view", mode === "list" ? null : mode),
-                    false
-                  )
-                }
-                type="button"
-              >
-                <Icon className="size-4" />
-              </button>
-            ))}
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button aria-label={t("fields")} size="icon" variant="outline">
-                <Columns3 className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{t("fields")}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {FIELD_VALUES.map((field) => (
-                <DropdownMenuCheckboxItem
-                  checked={(current.fields ?? FIELD_VALUES).includes(field)}
-                  key={field}
-                  onCheckedChange={() => toggleField(field)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {t(`field_${field}`)}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            <Icon className="size-4" />
+          </button>
+        ))}
       </div>
 
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-64 flex-1 items-center gap-2 xl:max-w-3xl">
-          <Search className="size-4 shrink-0 text-muted" />
-          <Input
-            className="flex-1"
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder={t("searchPlaceholder")}
-            value={searchValue}
-          />
-          <Select
-            onValueChange={(value) =>
-              navigate((params) =>
-                setOrDelete(params, "titleOnly", value === "title" ? "true" : null)
-              )
-            }
-            value={current.titleOnly ? "title" : "all"}
-          >
-            <SelectTrigger className="w-44 shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("searchModeAll")}</SelectItem>
-              <SelectItem value="title">{t("searchModeTitle")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button aria-label={t("fields")} size="icon" variant="outline">
+            <Columns3 className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>{t("fields")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {FIELD_VALUES.map((field) => (
+            <DropdownMenuCheckboxItem
+              checked={(current.fields ?? FIELD_VALUES).includes(field)}
+              key={field}
+              onCheckedChange={() => toggleField(field)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              {t(`field_${field}`)}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
 
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                {t("tags")}
-                {activeTagCount > 0 ? ` (${activeTagCount})` : ""}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="max-h-72 overflow-auto">
-              <DropdownMenuLabel>{t("tags")}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {filterOptions.tags.length === 0 ? (
-                <p className="px-2 py-1.5 text-sm text-muted">{t("noTags")}</p>
-              ) : (
-                filterOptions.tags.map((tag) => (
-                  <DropdownMenuCheckboxItem
-                    checked={current.tagIds?.includes(tag.id) ?? false}
-                    key={tag.id}
-                    onSelect={(e) => e.preventDefault()}
-                    onCheckedChange={() => toggleTag(tag.id)}
-                  >
-                    {tag.name}
-                  </DropdownMenuCheckboxItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+  const filterControls = (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="justify-between" variant="outline">
+            {t("tags")}
+            {activeTagCount > 0 ? ` (${activeTagCount})` : ""}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="max-h-72 overflow-auto">
+          <DropdownMenuLabel>{t("tags")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {filterOptions.tags.length === 0 ? (
+            <p className="px-2 py-1.5 text-sm text-muted">{t("noTags")}</p>
+          ) : (
+            filterOptions.tags.map((tag) => (
+              <DropdownMenuCheckboxItem
+                checked={current.tagIds?.includes(tag.id) ?? false}
+                key={tag.id}
+                onCheckedChange={() => toggleTag(tag.id)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                <span
+                  className="mr-2 size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: tag.color }}
+                />
+                {tag.name}
+              </DropdownMenuCheckboxItem>
+            ))
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-          <Select
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="justify-between" variant="outline">
+            {selectedCorrespondent?.name ?? t("allCorrespondents")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="max-h-72 overflow-auto">
+          <DropdownMenuLabel>{t("correspondent")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup
             onValueChange={(value) =>
               navigate((params) =>
                 setOrDelete(params, "correspondentId", value === "all" ? null : value)
@@ -297,39 +292,26 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
             }
             value={current.correspondentId ? String(current.correspondentId) : "all"}
           >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder={t("correspondent")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("allCorrespondents")}</SelectItem>
-              {filterOptions.correspondents.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <DropdownMenuRadioItem value="all">{t("allCorrespondents")}</DropdownMenuRadioItem>
+            {filterOptions.correspondents.map((c) => (
+              <DropdownMenuRadioItem key={c.id} value={String(c.id)}>
+                {c.name}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-          <Select
-            onValueChange={(value) =>
-              navigate((params) => setOrDelete(params, "status", value === "all" ? null : value))
-            }
-            value={current.status ?? "all"}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder={t("status")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("allStatuses")}</SelectItem>
-              {STATUS_VALUES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="justify-between" variant="outline">
+            {selectedDocumentType?.name ?? t("allDocumentTypes")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="max-h-72 overflow-auto">
+          <DropdownMenuLabel>{t("documentType")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup
             onValueChange={(value) =>
               navigate((params) =>
                 setOrDelete(params, "documentTypeKey", value === "all" ? null : value)
@@ -337,83 +319,155 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
             }
             value={current.documentTypeKey ?? "all"}
           >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder={t("documentType")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("allDocumentTypes")}</SelectItem>
-              {filterOptions.documentTypes.map((dt) => (
-                <SelectItem key={dt.key} value={dt.key}>
-                  {dt.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <DropdownMenuRadioItem value="all">{t("allDocumentTypes")}</DropdownMenuRadioItem>
+            {filterOptions.documentTypes.map((dt) => (
+              <DropdownMenuRadioItem key={dt.key} value={dt.key}>
+                {dt.name}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline">
+            <CalendarDays className="size-4" />
+            {t("createdAt")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-72 p-3">
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-xs font-semibold text-muted">
+              {t("dateFrom")}
+              <Input
+                defaultValue={current.dateFrom ?? ""}
+                onChange={(e) =>
+                  navigate((params) => setOrDelete(params, "dateFrom", e.target.value || null))
+                }
+                type="date"
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-semibold text-muted">
+              {t("dateTo")}
+              <Input
+                defaultValue={current.dateTo ?? ""}
+                onChange={(e) =>
+                  navigate((params) => setOrDelete(params, "dateTo", e.target.value || null))
+                }
+                type="date"
+              />
+            </label>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Button
+        onClick={() =>
+          navigate((params) =>
+            setOrDelete(params, "hasNoConnections", current.hasNoConnections ? null : "true")
+          )
+        }
+        variant={current.hasNoConnections ? "default" : "outline"}
+      >
+        {t("hasNoConnections")}
+      </Button>
+
+      {selectedEntity ? (
+        <Button
+          onClick={() =>
+            navigate((params) => {
+              params.delete("entityId");
+            })
+          }
+          variant="default"
+        >
+          {selectedEntity.label}
+          <X className="size-3.5" />
+        </Button>
+      ) : null}
+
+      {hasAnyFilter ? (
+        <Button onClick={() => startTransition(() => router.push(pathname))} variant="ghost">
+          {t("clearAll")}
+        </Button>
+      ) : null}
+    </>
+  );
+
+  return (
+    <section
+      className="grid min-w-0 gap-4 rounded-lg border border-border bg-panel p-4 shadow-sm"
+      data-pending={isPending}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <h1 className="text-3xl font-black">{tList("title")}</h1>
+
+        <div className="hidden flex-wrap items-center gap-2 xl:flex">{listControls}</div>
+      </div>
+
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-2 xl:max-w-3xl">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <CalendarDays className="size-4" />
-                {t("createdAt")}
+              <Button aria-label={t("searchOptions")} size="icon" variant="ghost">
+                <Settings2 className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 p-3">
-              <div className="grid gap-3">
-                <label className="grid gap-1 text-xs font-semibold text-muted">
-                  {t("dateFrom")}
-                  <Input
-                    defaultValue={current.dateFrom ?? ""}
-                    onChange={(e) =>
-                      navigate((params) => setOrDelete(params, "dateFrom", e.target.value || null))
-                    }
-                    type="date"
-                  />
-                </label>
-                <label className="grid gap-1 text-xs font-semibold text-muted">
-                  {t("dateTo")}
-                  <Input
-                    defaultValue={current.dateTo ?? ""}
-                    onChange={(e) =>
-                      navigate((params) => setOrDelete(params, "dateTo", e.target.value || null))
-                    }
-                    type="date"
-                  />
-                </label>
-              </div>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>{t("searchOptions")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup
+                onValueChange={(value) =>
+                  navigate((params) =>
+                    setOrDelete(params, "titleOnly", value === "title" ? "true" : null)
+                  )
+                }
+                value={current.titleOnly ? "title" : "all"}
+              >
+                <DropdownMenuRadioItem value="all">{t("searchModeAll")}</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="title">{t("searchModeTitle")}</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <Button
-            onClick={() =>
-              navigate((params) =>
-                setOrDelete(params, "hasNoConnections", current.hasNoConnections ? null : "true")
-              )
-            }
-            variant={current.hasNoConnections ? "default" : "outline"}
-          >
-            {t("hasNoConnections")}
-          </Button>
-
-          {selectedEntity ? (
-            <Button
-              onClick={() =>
-                navigate((params) => {
-                  params.delete("entityId");
-                })
-              }
-              variant="default"
-            >
-              {selectedEntity.label}
-              <X className="size-3.5" />
-            </Button>
-          ) : null}
-
-          {hasAnyFilter ? (
-            <Button onClick={() => startTransition(() => router.push(pathname))} variant="ghost">
-              {t("clearAll")}
-            </Button>
-          ) : null}
+          <Input
+            className="flex-1"
+            onChange={(e) => setSearchValue(e.target.value)}
+            placeholder={t("searchPlaceholder")}
+            value={searchValue}
+          />
+          <Search className="size-4 shrink-0 text-muted" />
         </div>
+
+        <div className="hidden flex-wrap items-center gap-2 xl:flex">{filterControls}</div>
+
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button className="xl:hidden" variant="outline">
+              <SlidersHorizontal className="size-4" />
+              {t("options")}
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="w-full overflow-y-auto sm:max-w-md" side="right">
+            <SheetHeader>
+              <SheetTitle>{t("options")}</SheetTitle>
+            </SheetHeader>
+            <div className="grid gap-4 [&_button.justify-between]:w-full">
+              <div className="grid gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {t("listingOptions")}
+                </p>
+                <div className="grid gap-2">{listControls}</div>
+              </div>
+              <div className="grid gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {t("filters")}
+                </p>
+                {filterControls}
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </section>
   );

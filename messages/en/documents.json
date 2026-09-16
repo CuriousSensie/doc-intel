@@ -16,8 +16,12 @@
   },
   "filters": {
     "searchPlaceholder": "Search documents…",
+    "searchOptions": "Search options",
     "searchModeAll": "Title & content",
     "searchModeTitle": "Title only",
+    "filters": "Filters",
+    "options": "Options",
+    "listingOptions": "Listing options",
     "documentType": "Document type",
     "allDocumentTypes": "All types",
     "tags": "Tags",
@@ -126,6 +130,7 @@
     "actions": {
       "previous": "Previous document",
       "next": "Next document",
+      "open": "Open",
       "download": "Download",
       "delete": "Delete",
       "share": "Share",

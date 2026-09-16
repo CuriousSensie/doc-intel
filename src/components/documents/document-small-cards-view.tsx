@@ -2,9 +2,10 @@
 
 import { FileText } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
-import { useState } from "react";
+import { useRouter } from "@/i18n/navigation";
+import { useRef, useState } from "react";
 
+import { DocumentRowActions } from "@/components/documents/document-row-actions";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentTagChips } from "@/components/documents/document-tag-chips";
 import type { PaperlessTag } from "@/lib/paperless/documents";
@@ -53,26 +54,43 @@ export function DocumentSmallCardsView({
 }) {
   const t = useTranslations("documents");
   const tFilters = useTranslations("documents.filters");
+  const router = useRouter();
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visible = new Set(visibleFields);
+
+  function detailHref(documentId: string) {
+    return `/dashboard/documents/${documentId}${ctxQuery}`;
+  }
+
+  function handleClick(documentId: string) {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => {
+      onToggle(documentId);
+      clickTimer.current = null;
+    }, 180);
+  }
+
+  function handleDoubleClick(documentId: string) {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    clickTimer.current = null;
+    router.push(detailHref(documentId));
+  }
 
   return (
     <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {documents.map((document) => (
         <div
-          className="relative flex flex-col gap-2 rounded-lg border border-border bg-panel p-2 shadow-sm transition-colors hover:bg-panel-strong/40"
+          className="relative flex cursor-pointer flex-col gap-2 rounded-lg border border-border bg-panel p-2 shadow-sm transition-colors hover:bg-panel-strong/40 data-[selected=true]:bg-panel-strong"
           data-document-row={document.id}
+          data-selected={selectedIds.has(document.id)}
           key={document.id}
+          onClick={() => handleClick(document.id)}
+          onDoubleClick={() => handleDoubleClick(document.id)}
         >
-          <input
-            checked={selectedIds.has(document.id)}
-            className="absolute left-3 top-3 z-10 size-4"
-            onChange={() => onToggle(document.id)}
-            type="checkbox"
-          />
-          <Link
-            className="flex flex-col gap-2"
-            href={`/dashboard/documents/${document.id}${ctxQuery}`}
-          >
+          {selectedIds.has(document.id) ? (
+            <input checked className="absolute left-3 top-3 z-10 size-4" readOnly type="checkbox" />
+          ) : null}
+          <div className="flex flex-col gap-2">
             <div className="relative">
               <Thumbnail documentId={document.id} title={document.title} />
               {visible.has("tags") ? (
@@ -125,7 +143,8 @@ export function DocumentSmallCardsView({
                 <DocumentStatusBadge status={document.status} />
               </div>
             </div>
-          </Link>
+          </div>
+          <DocumentRowActions documentId={document.id} detailHref={detailHref(document.id)} />
         </div>
       ))}
     </section>
