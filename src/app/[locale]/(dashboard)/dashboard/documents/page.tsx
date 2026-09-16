@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 
 import { Link } from "@/i18n/navigation";
 
+import { DocumentProcessingRefresh } from "@/components/documents/document-processing-refresh";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form";
 import { DocumentsBulkList } from "@/components/documents/documents-bulk-list";
 import { Badge } from "@/components/ui/badge";
@@ -113,6 +114,7 @@ export default async function DocumentsPage({
 
       {inFlightUploads.length > 0 ? (
         <section className="grid gap-3">
+          <DocumentProcessingRefresh active />
           <h2 className="text-sm font-semibold text-muted">{t("list.processing")}</h2>
           {inFlightUploads.map((upload) => (
             <div

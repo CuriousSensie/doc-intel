@@ -13,12 +13,26 @@
     "pagesCount": "{count} pages"
   },
   "upload": {
+    "dropTitle": "Choose documents or drop them here",
+    "dropHint": "Multiple files are fine. Each document is ingested separately.",
     "uploading": "Uploading…",
     "upload": "Upload",
+    "uploadCount": "Upload {count} documents",
     "receivedProcessing": "Upload received — processing.",
+    "receivedProcessingCount": "{count} upload(s) received — processing.",
     "couldNotStart": "Could not start upload",
     "didNotComplete": "Upload did not complete",
-    "failed": "Upload failed"
+    "failed": "Upload failed",
+    "failedCount": "{count} upload(s) failed.",
+    "invalidSize": "File size is outside the allowed range.",
+    "invalidType": "File type is not allowed.",
+    "removeFile": "Remove {name}",
+    "status": {
+      "queued": "Waiting",
+      "uploading": "Uploading",
+      "processing": "Processing",
+      "failed": "Failed"
+    }
   },
   "bulk": {
     "selectPage": "Select page",

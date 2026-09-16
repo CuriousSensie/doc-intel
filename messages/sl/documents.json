@@ -13,12 +13,26 @@
     "pagesCount": "{count} strani"
   },
   "upload": {
+    "dropTitle": "Izberite dokumente ali jih spustite sem",
+    "dropHint": "Izberete lahko več datotek. Vsak dokument se obdela ločeno.",
     "uploading": "Nalaganje…",
     "upload": "Naloži",
+    "uploadCount": "Naloži {count} dokumentov",
     "receivedProcessing": "Nalaganje prejeto — obdelava.",
+    "receivedProcessingCount": "Prejetih nalaganj: {count} — obdelava.",
     "couldNotStart": "Nalaganja ni bilo mogoče začeti",
     "didNotComplete": "Nalaganje ni bilo dokončano",
-    "failed": "Nalaganje ni uspelo"
+    "failed": "Nalaganje ni uspelo",
+    "failedCount": "Neuspelih nalaganj: {count}.",
+    "invalidSize": "Velikost datoteke ni v dovoljenem obsegu.",
+    "invalidType": "Vrsta datoteke ni dovoljena.",
+    "removeFile": "Odstrani {name}",
+    "status": {
+      "queued": "Čaka",
+      "uploading": "Nalaganje",
+      "processing": "Obdelava",
+      "failed": "Neuspešno"
+    }
   },
   "bulk": {
     "selectPage": "Izberi stran",
