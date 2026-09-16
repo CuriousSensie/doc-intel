@@ -1,46 +1,32 @@
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
 
 import { ConnectionPicker } from "@/components/connections/connection-picker";
 import { ConnectionsPanel } from "@/components/documents/connections-panel";
-import { PdfViewer } from "@/components/documents/pdf-viewer";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DocumentContentTab } from "@/components/documents/document-content-tab";
+import { DocumentDetailShell } from "@/components/documents/document-detail-shell";
+import { DocumentHistoryTab } from "@/components/documents/document-history-tab";
 import { NotFoundError } from "@/lib/errors";
+import { paperlessFor } from "@/lib/paperless/client";
+import { getCachedCorrespondents, getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
-import { getDocument } from "@/modules/documents/documents.service";
+import { listDocumentsFilterSchema } from "@/modules/documents/documents.schemas";
+import { getAdjacentDocumentId, getDocument } from "@/modules/documents/documents.service";
 
 export const dynamic = "force-dynamic";
 
-const FAILED_STATUSES = new Set(["failed", "orphaned", "expired"]);
-const DONE_STATUSES = new Set(["ready", "completed"]);
-
-function StatusBadge({ status }: { status: string }) {
-  if (FAILED_STATUSES.has(status)) return <Badge variant="danger">{status}</Badge>;
-  if (DONE_STATUSES.has(status)) return <Badge variant="accent">{status}</Badge>;
-  return <Badge variant="muted">{status}</Badge>;
-}
-
-// specs/12-agent-rules.md rule 9: dd.mm.yyyy for Slovenian locale.
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString("sl-SI") : "—";
-}
-
 export default async function DocumentDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ ctx?: string }>;
 }) {
   requireFeature("documents");
   // Only `params` and auth are needed up front — getDocument() no longer needs a pre-resolved
   // active org (see its own doc comment): one fewer sequential round trip before the document
   // itself even starts loading.
-  const [{ id }, t] = await Promise.all([
-    params,
-    getTranslations("documents.detail"),
-    requireUser("/dashboard/documents")
-  ]);
+  const [{ id }, search] = await Promise.all([params, searchParams, requireUser("/dashboard/documents")]);
 
   // specs/03-api.md: cross-tenant access is 404, never 403 — getDocument()'s own RLS-scoped
   // query already returns this as "not found" rather than a distinguishable denial.
@@ -52,105 +38,50 @@ export default async function DocumentDetailPage({
     throw error;
   }
 
-  const { history } = document;
+  // The list page appends its current filter+sort as `ctx` on every row link (see
+  // documents-bulk-list.tsx) so next/prev navigation here stays scoped to that exact view.
+  // Missing/malformed ctx just falls back to the unfiltered default (created desc).
+  let filter: ReturnType<typeof listDocumentsFilterSchema.parse> = {};
+  if (search.ctx) {
+    try {
+      const candidate = JSON.parse(decodeURIComponent(search.ctx));
+      const parsed = listDocumentsFilterSchema.safeParse(candidate);
+      if (parsed.success) filter = parsed.data;
+    } catch {
+      // malformed ctx — ignore, fall back to the default filter
+    }
+  }
+  const ctxQuery = search.ctx ? `?ctx=${encodeURIComponent(search.ctx)}` : "";
+
+  const client = await paperlessFor(document.organization_id);
+
+  const [tags, correspondents, documentTypes, previousId, nextId] = await Promise.all([
+    getCachedTags(client, document.organization_id),
+    getCachedCorrespondents(client, document.organization_id),
+    getCachedDocumentTypes(client, document.organization_id),
+    getAdjacentDocumentId(document.organization_id, document, filter, "previous"),
+    getAdjacentDocumentId(document.organization_id, document, filter, "next")
+  ]);
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="grid gap-4">
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="text-2xl font-black break-words">{document.title}</h1>
-          <StatusBadge status={document.status} />
-        </div>
-        <PdfViewer documentId={document.id} title={document.title} />
-      </div>
-
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("metadata")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 text-sm">
-            <div className="flex justify-between gap-3">
-              <span className="text-muted">{t("type")}</span>
-              <span className="text-right">{document.document_type_key ?? "—"}</span>
+    <div className="mx-auto grid w-full max-w-[1800px] gap-4 px-1">
+      <DocumentDetailShell
+        connectionsTab={
+          <div className="grid gap-4">
+            <div className="flex items-center justify-end">
+              <ConnectionPicker sourceId={document.id} sourceKind="document" />
             </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted">{t("correspondent")}</span>
-              <span className="text-right">{document.correspondent_name ?? "—"}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted">{t("date")}</span>
-              <span className="text-right">{formatDate(document.document_date)}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted">{t("pages")}</span>
-              <span className="text-right">{document.page_count ?? "—"}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {document.paperless === null ? (
-          <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted">
-            {t("liveDataUnavailable")}
-          </p>
-        ) : null}
-
-        {document.paperless && document.paperless.customFields.length > 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("customFields")}</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              {document.paperless.customFields.map((field) => (
-                <div className="flex justify-between gap-3" key={field.field}>
-                  <span className="text-muted">{t("fieldNumber", { id: field.field })}</span>
-                  <span className="text-right">{String(field.value)}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-            <CardTitle>{t("connections")}</CardTitle>
-            <ConnectionPicker sourceId={document.id} sourceKind="document" />
-          </CardHeader>
-          <CardContent>
             <ConnectionsPanel connections={document.connections} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("history")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {history.length === 0 ? (
-              <p className="text-sm text-muted">{t("noHistory")}</p>
-            ) : (
-              <ul className="grid gap-3 text-sm">
-                {history.map((entry) => (
-                  <li
-                    className="border-b border-border pb-3 last:border-0 last:pb-0"
-                    key={`${entry.source}-${entry.id}`}
-                  >
-                    <p className="font-semibold">
-                      {entry.action}
-                      {entry.source === "paperless" && entry.actorUsername
-                        ? ` — ${entry.actorUsername}`
-                        : null}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {new Date(entry.timestamp).toLocaleString("sl-SI")}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        }
+        contentTab={<DocumentContentTab document={document} />}
+        ctxQuery={ctxQuery}
+        filterOptions={{ tags, correspondents, documentTypes }}
+        historyTab={<DocumentHistoryTab history={document.history} />}
+        initialDocument={document}
+        nextId={nextId}
+        previousId={previousId}
+      />
     </div>
   );
 }

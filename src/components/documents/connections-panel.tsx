@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 
 import { Link } from "@/i18n/navigation";
 
+import { DisconnectConnectionButton } from "@/components/connections/disconnect-connection-button";
 import { Badge } from "@/components/ui/badge";
 import type { ConnectionWithOther } from "@/modules/connections/connections.service";
 
@@ -78,6 +79,7 @@ export async function ConnectionsPanel({ connections }: { connections: Connectio
                   {connection.createdVia !== "manual" ? (
                     <Badge variant="muted">{t("panel.via", { source: connection.createdVia })}</Badge>
                   ) : null}
+                  <DisconnectConnectionButton connectionId={connection.id} />
                 </div>
               </li>
             ))}
