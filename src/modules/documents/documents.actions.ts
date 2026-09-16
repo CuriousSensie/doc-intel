@@ -7,6 +7,7 @@ import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { createBackgroundOperation, completeBackgroundOperation } from "@/modules/background-operations/background-operations.service";
+import { listDocumentsFilterSchema } from "@/modules/documents/documents.schemas";
 import {
   getDocument,
   getDocumentHistory,
@@ -21,14 +22,16 @@ import {
 export async function countDocumentsMatchingFilterAction(filter: ListDocumentsOptions = {}) {
   requireFeature("documents");
   const ctx = await buildRequestContext();
-  const ids = await listDocumentIds(ctx.orgId, filter);
+  const parsed = listDocumentsFilterSchema.parse(filter);
+  const ids = await listDocumentIds(ctx.orgId, parsed);
   return { count: ids.length };
 }
 
 export async function listDocumentsAction(options: ListDocumentsOptions = {}) {
   requireFeature("documents");
   const ctx = await buildRequestContext();
-  return listDocuments(ctx.orgId, options);
+  const parsed = listDocumentsFilterSchema.parse(options);
+  return listDocuments(ctx.orgId, parsed);
 }
 
 // No buildRequestContext() here on purpose — that resolves an active org first (a real, measured

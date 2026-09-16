@@ -108,6 +108,63 @@ export async function listAllPaperlessDocumentIds(
   return ids;
 }
 
+// Full option lists for the documents filter bar (tags/correspondents/document types) — always
+// small (tens to low hundreds of rows for a real tenant), so one page is enough; still follows
+// the `next`-pagination pattern in case a tenant genuinely has more than page_size.
+async function listAllPaginated<T>(client: PaperlessClient, path: string): Promise<T[]> {
+  const items: T[] = [];
+  let next: string | null = path;
+  while (next) {
+    const envelope: PaperlessListEnvelope<T> = await client.get(next);
+    items.push(...envelope.results);
+    next = envelope.next ? toRequestPath(envelope.next) : null;
+  }
+  return items;
+}
+
+export type PaperlessTag = { id: number; name: string; color: string };
+export type PaperlessCorrespondent = { id: number; name: string };
+export type PaperlessDocumentType = { id: number; name: string };
+
+export function listPaperlessTags(client: PaperlessClient): Promise<PaperlessTag[]> {
+  return listAllPaginated<PaperlessTag>(client, "/api/tags/?page_size=200");
+}
+
+export function listPaperlessCorrespondents(
+  client: PaperlessClient
+): Promise<PaperlessCorrespondent[]> {
+  return listAllPaginated<PaperlessCorrespondent>(client, "/api/correspondents/?page_size=200");
+}
+
+export function listPaperlessDocumentTypes(
+  client: PaperlessClient
+): Promise<PaperlessDocumentType[]> {
+  return listAllPaginated<PaperlessDocumentType>(client, "/api/document_types/?page_size=200");
+}
+
+// Large-cards view mode only: a page-scoped read of `content` for the ~25 documents currently
+// on screen. Confirmed live against the pinned instance (2026-09-16) that the list endpoint
+// already returns full `content` per row (not a detail-only field) and that `id__in=` filters
+// correctly — no sparse-fieldset support exists on this version, so the full document body
+// comes back regardless, but capped to one page's worth of ids this is still cheap. Never
+// cached, never written anywhere — specs/02-data-model.md's "we do not mirror OCR text" applies
+// exactly as much to an in-memory cache as to a database column.
+export async function getPaperlessContentSnippets(
+  client: PaperlessClient,
+  paperlessDocumentIds: number[]
+): Promise<Map<number, string>> {
+  if (paperlessDocumentIds.length === 0) return new Map();
+
+  const params = new URLSearchParams({
+    id__in: paperlessDocumentIds.join(","),
+    page_size: String(paperlessDocumentIds.length)
+  });
+  const envelope = await client.get<PaperlessListEnvelope<{ id: number; content: string }>>(
+    `/api/documents/?${params.toString()}`
+  );
+  return new Map(envelope.results.map((r) => [r.id, r.content]));
+}
+
 // documents.document_type_key has no canonical source (specs/02-data-model.md gives it as a
 // bare `text` column, no FK, no established slug convention) — lowercase + underscore the
 // Paperless document_type's own name as a defensible, documented choice rather than leaving it

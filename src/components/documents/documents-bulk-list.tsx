@@ -1,10 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Link, useRouter } from "@/i18n/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { DocumentLargeCardsView } from "@/components/documents/document-large-cards-view";
+import { DocumentListView } from "@/components/documents/document-list-view";
+import { DocumentSmallCardsView } from "@/components/documents/document-small-cards-view";
+import type { DocumentsViewMode } from "@/components/documents/documents-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,23 +27,18 @@ type SearchResult = {
   entityTypeName: string | null;
 };
 
-const FAILED_STATUSES = new Set(["failed", "orphaned", "expired"]);
-const DONE_STATUSES = new Set(["ready", "completed"]);
-
-function StatusBadge({ status }: { status: string }) {
-  if (FAILED_STATUSES.has(status)) return <Badge variant="danger">{status}</Badge>;
-  if (DONE_STATUSES.has(status)) return <Badge variant="accent">{status}</Badge>;
-  return <Badge variant="muted">{status}</Badge>;
-}
-
 const POLL_INTERVAL_MS = 1500;
 
 export function DocumentsBulkList({
   documents,
-  filter
+  filter,
+  viewMode = "list",
+  contentByPaperlessId = {}
 }: {
   documents: Document[];
   filter: ListDocumentsOptions;
+  viewMode?: DocumentsViewMode;
+  contentByPaperlessId?: Record<number, string>;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllMatching, setSelectAllMatching] = useState(false);
@@ -289,37 +287,18 @@ export function DocumentsBulkList({
         </div>
       ) : null}
 
-      <section className="grid gap-3">
-        {documents.length === 0 ? null : (
-          documents.map((document) => (
-            <div
-              className="flex items-center gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm transition-colors hover:bg-panel-strong/40"
-              data-document-row={document.id}
-              key={document.id}
-            >
-              <input
-                checked={selectedIds.has(document.id)}
-                className="size-4 shrink-0"
-                onChange={() => toggle(document.id)}
-                type="checkbox"
-              />
-              <Link className="flex flex-1 flex-col justify-between gap-3 sm:flex-row sm:items-center" href={`/dashboard/documents/${document.id}`}>
-                <div>
-                  <p className="font-semibold">{document.title}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {document.document_type_key ?? t("list.uncategorized")}
-                    {document.correspondent_name ? ` · ${document.correspondent_name}` : ""}
-                    {document.page_count ? ` · ${t("list.pagesCount", { count: document.page_count })}` : ""}
-                    {" · "}
-                    {new Date(document.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <StatusBadge status={document.status} />
-              </Link>
-            </div>
-          ))
-        )}
-      </section>
+      {documents.length === 0 ? null : viewMode === "smallCards" ? (
+        <DocumentSmallCardsView documents={documents} onToggle={toggle} selectedIds={selectedIds} />
+      ) : viewMode === "largeCards" ? (
+        <DocumentLargeCardsView
+          contentByPaperlessId={contentByPaperlessId}
+          documents={documents}
+          onToggle={toggle}
+          selectedIds={selectedIds}
+        />
+      ) : (
+        <DocumentListView documents={documents} onToggle={toggle} selectedIds={selectedIds} />
+      )}
     </div>
   );
 }

@@ -1,16 +1,33 @@
+import { randomUUID } from "node:crypto";
+
 import { getTranslations } from "next-intl/server";
 
 import { Link } from "@/i18n/navigation";
 
 import { DocumentProcessingRefresh } from "@/components/documents/document-processing-refresh";
+import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form";
 import { DocumentsBulkList } from "@/components/documents/documents-bulk-list";
-import { Badge } from "@/components/ui/badge";
+import { DocumentsFilterBar } from "@/components/documents/documents-filter-bar";
+import { DocumentsPagination } from "@/components/documents/documents-pagination";
 import { Button } from "@/components/ui/button";
 import { documentsConfig } from "@/config/documents";
+import { getPaperlessContentSnippets, toDocumentTypeKey } from "@/lib/paperless/documents";
+import { paperlessFor } from "@/lib/paperless/client";
+import {
+  getCachedCorrespondents,
+  getCachedDocumentTypes,
+  getCachedTags
+} from "@/lib/paperless/metadata-cache";
+import { createClient } from "@/lib/supabase/server";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
-import { listDocuments, listRecentUploads, type Document } from "@/modules/documents/documents.service";
+import {
+  documentsViewSearchParamSchema,
+  parseDocumentsSearchParams
+} from "@/modules/documents/documents.schemas";
+import { listDocuments, listRecentUploads } from "@/modules/documents/documents.service";
+import { getEntity } from "@/modules/entities/entities.service";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 
 export const dynamic = "force-dynamic";
@@ -19,28 +36,6 @@ function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const FAILED_STATUSES = new Set(["failed", "orphaned", "expired"]);
-const DONE_STATUSES = new Set(["ready", "completed"]);
-const VALID_DOCUMENT_STATUSES = new Set<Document["status"]>([
-  "pending",
-  "processing",
-  "ready",
-  "failed",
-  "orphaned"
-]);
-
-function asDocumentStatus(value: string | undefined): Document["status"] | undefined {
-  return VALID_DOCUMENT_STATUSES.has(value as Document["status"])
-    ? (value as Document["status"])
-    : undefined;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  if (FAILED_STATUSES.has(status)) return <Badge variant="danger">{status}</Badge>;
-  if (DONE_STATUSES.has(status)) return <Badge variant="accent">{status}</Badge>;
-  return <Badge variant="muted">{status}</Badge>;
 }
 
 function EmptyDocumentsState({ t }: { t: Awaited<ReturnType<typeof getTranslations>> }) {
@@ -60,17 +55,10 @@ function EmptyDocumentsState({ t }: { t: Awaited<ReturnType<typeof getTranslatio
 export default async function DocumentsPage({
   searchParams
 }: {
-  searchParams: Promise<{
-    documentTypeKey?: string;
-    status?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    q?: string;
-    hasNoConnections?: string;
-  }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   requireFeature("documents");
-  const [context, search, t] = await Promise.all([
+  const [context, rawSearch, t] = await Promise.all([
     requireUser("/dashboard/documents"),
     searchParams,
     getTranslations("documents")
@@ -81,19 +69,50 @@ export default async function DocumentsPage({
     return <EmptyDocumentsState t={t} />;
   }
 
-  const [{ items: documents }, uploads] = await Promise.all([
-    listDocuments(organizationId, {
-      documentTypeKey: search.documentTypeKey,
-      status: asDocumentStatus(search.status),
-      dateFrom: search.dateFrom,
-      dateTo: search.dateTo,
-      q: search.q,
-      hasNoConnections: search.hasNoConnections === "true"
-    }),
-    listRecentUploads(organizationId)
-  ]);
+  const filter = parseDocumentsSearchParams(rawSearch);
+  const rawView = Array.isArray(rawSearch.view) ? rawSearch.view[0] : rawSearch.view;
+  const viewParse = documentsViewSearchParamSchema.safeParse({ view: rawView });
+  const view = (viewParse.success ? viewParse.data.view : undefined) ?? "list";
+
+  const client = await paperlessFor(organizationId);
+
+  const [{ items: documents, nextCursor }, uploads, tags, correspondents, documentTypes, selectedEntity] =
+    await Promise.all([
+      listDocuments(organizationId, filter),
+      listRecentUploads(organizationId),
+      getCachedTags(client, organizationId),
+      getCachedCorrespondents(client, organizationId),
+      getCachedDocumentTypes(client, organizationId),
+      filter.entityId
+        ? getEntity(
+            { db: await createClient(), orgId: organizationId, actorId: context.user.id, correlationId: randomUUID() },
+            filter.entityId
+          ).catch(() => null)
+        : Promise.resolve(null)
+    ]);
+
+  // Large Cards view only: one extra page-scoped Paperless call for `content` — never mirrored,
+  // never cached (see getPaperlessContentSnippets's own comment).
+  const contentByPaperlessId =
+    view === "largeCards" && documents.length > 0
+      ? Object.fromEntries(
+          await getPaperlessContentSnippets(
+            client,
+            documents.map((d) => d.paperless_document_id)
+          )
+        )
+      : {};
+
   const isFiltered = Boolean(
-    search.documentTypeKey || search.status || search.dateFrom || search.q || search.hasNoConnections
+    filter.documentTypeKey ||
+      filter.status ||
+      filter.dateFrom ||
+      filter.dateTo ||
+      filter.q ||
+      filter.tagIds?.length ||
+      filter.correspondentId ||
+      filter.entityId ||
+      filter.hasNoConnections
   );
 
   // Only surface uploads that haven't (yet, or ever) landed in `documents` — an upload that
@@ -101,7 +120,7 @@ export default async function DocumentsPage({
   const inFlightUploads = uploads.filter((upload) => upload.status !== "completed");
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-5">
+    <div className="mx-auto grid max-w-7xl gap-5">
       <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
         <h1 className="text-3xl font-black">{t("list.title")}</h1>
         <p className="mt-1 text-sm text-muted">
@@ -129,11 +148,22 @@ export default async function DocumentsPage({
                   {upload.error_message ? ` — ${upload.error_message}` : ""}
                 </p>
               </div>
-              <StatusBadge status={upload.status} />
+              <DocumentStatusBadge status={upload.status} />
             </div>
           ))}
         </section>
       ) : null}
+
+      <DocumentsFilterBar
+        current={{ ...filter, view }}
+        filterOptions={{
+          tags,
+          correspondents,
+          documentTypes: documentTypes.map((dt) => ({ key: toDocumentTypeKey(dt.name), name: dt.name }))
+        }}
+        key={JSON.stringify(rawSearch)}
+        selectedEntity={selectedEntity ? { id: selectedEntity.id, label: selectedEntity.display_name } : null}
+      />
 
       {isFiltered ? (
         <div className="flex items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
@@ -149,17 +179,15 @@ export default async function DocumentsPage({
           {isFiltered ? t("list.emptyFiltered") : t("list.emptyUnfiltered")}
         </p>
       ) : (
-        <DocumentsBulkList
-          documents={documents}
-          filter={{
-            documentTypeKey: search.documentTypeKey,
-            status: asDocumentStatus(search.status),
-            dateFrom: search.dateFrom,
-            dateTo: search.dateTo,
-            q: search.q,
-            hasNoConnections: search.hasNoConnections === "true"
-          }}
-        />
+        <>
+          <DocumentsBulkList
+            contentByPaperlessId={contentByPaperlessId}
+            documents={documents}
+            filter={filter}
+            viewMode={view}
+          />
+          <DocumentsPagination hasCursor={Boolean(filter.cursor)} nextCursor={nextCursor} />
+        </>
       )}
     </div>
   );

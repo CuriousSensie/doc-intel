@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { documentsConfig } from "@/config/documents";
 import { AuthorizationError, NotFoundError, ValidationError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
-import { decodeCursor, encodeCursor } from "@/lib/pagination";
 import {
   getPaperlessDocument,
   getPaperlessDocumentHistory,
@@ -148,19 +147,28 @@ export async function completeUpload(userId: string, uploadId: string): Promise<
   return updated;
 }
 
+export type DocumentSort = "created" | "title" | "documentType";
+export type DocumentSortDirection = "asc" | "desc";
+
 export type ListDocumentsOptions = {
   documentTypeKey?: string;
   dateFrom?: string; // yyyy-mm-dd
   dateTo?: string;
   status?: Document["status"];
   // Not mirrored locally (no second search engine, per specs/00's non-goals) — always
-  // Paperless-delegated. `tag` isn't mirrored either (only correspondent_name/document_type_key
-  // are), so it's delegated too.
+  // Paperless-delegated. Tags/correspondent aren't mirrored either (only correspondent_name/
+  // document_type_key text are, for display only), so they're delegated too.
   q?: string;
-  tag?: string;
+  // Search mode for `q`: full text (title + content, Paperless's default `query=`) or
+  // title-only (`title__icontains=`). Ignored when `q` is unset.
+  titleOnly?: boolean;
+  tagIds?: number[];
+  correspondentId?: number;
   // Business filters — served entirely from our own DB, never sent to Paperless.
   entityId?: string;
   hasNoConnections?: boolean;
+  sort?: DocumentSort;
+  sortDirection?: DocumentSortDirection;
   cursor?: string | null;
   limit?: number;
 };
@@ -168,26 +176,65 @@ export type ListDocumentsOptions = {
 const LIST_DOCUMENT_COLUMNS =
   "id, organization_id, paperless_document_id, title, document_type_key, document_date, correspondent_name, page_count, byte_size, mime_type, checksum, status, source, import_job_id, synced_at, created_by, created_at, updated_at, deleted_at" as const;
 
-// Resolves the `q`/`tag` Paperless-first id set — factored out so listDocumentIds() can call
-// it once and reuse the result across every page instead of re-issuing the same Paperless
-// search on every 200-row page it loops (found reading this code before any importer existed
-// to make the cost visible: a filtered "select all matching" over 2,000 ids meant ~10 identical
-// searches against Paperless for the exact same query string).
+// Maps a sort option to its real mirrored column — all three (created_at, title,
+// document_type_key) are already columns on `documents`, so no schema change was needed to add
+// sorting (a separate "added"/"modified" sort was deliberately declined — Paperless's own
+// `modified` timestamp isn't mirrored, and adding a column just for a sort key wasn't judged
+// worth it for this pass).
+const SORT_COLUMNS: Record<DocumentSort, string> = {
+  created: "created_at",
+  title: "title",
+  documentType: "document_type_key"
+};
+
+// Resolves the `q`/`tagIds`/`correspondentId` Paperless-first id set as a single combined
+// request — factored out so listDocumentIds() can call it once and reuse the result across
+// every page instead of re-issuing the same Paperless search on every 200-row page it loops
+// (found reading this code before any importer existed to make the cost visible: a filtered
+// "select all matching" over 2,000 ids meant ~10 identical searches against Paperless for the
+// exact same query string).
 async function resolvePaperlessIdFilter(
   organizationId: string,
-  options: Pick<ListDocumentsOptions, "q" | "tag">
+  options: Pick<ListDocumentsOptions, "q" | "titleOnly" | "tagIds" | "correspondentId">
 ): Promise<Set<number> | null> {
-  if (!options.q && !options.tag) return null;
+  if (!options.q && !options.tagIds?.length && !options.correspondentId) return null;
 
   const client = await paperlessFor(organizationId);
   const params = new URLSearchParams({ page_size: String(MAX_PAPERLESS_ID_SET) });
-  if (options.q) params.set("query", options.q);
-  if (options.tag) params.set("tags__name__iexact", options.tag);
+  if (options.q) {
+    if (options.titleOnly) params.set("title__icontains", options.q);
+    else params.set("query", options.q);
+  }
+  if (options.tagIds?.length) params.set("tags__id__in", options.tagIds.join(","));
+  if (options.correspondentId) params.set("correspondent__id__in", String(options.correspondentId));
 
   const envelope = await client.get<{ results: { id: number }[] }>(
     `/api/documents/?${params.toString()}`
   );
   return new Set(envelope.results.map((r) => r.id));
+}
+
+// Local to documents.service.ts rather than a change to the shared `{createdAt, id}` cursor in
+// src/lib/pagination.ts — five other modules (admin, entities, notifications) depend on that
+// exact shape, and only documents needs a cursor that can carry any of three different sort
+// columns. `sortValue` is always the current sort column's own value (a string for
+// title/document_type_key, an ISO timestamp for created_at).
+type DocumentCursor = { sortValue: string; id: string };
+
+function encodeDocumentCursor(cursor: DocumentCursor): string {
+  return Buffer.from(`${cursor.sortValue}|${cursor.id}`, "utf8").toString("base64url");
+}
+
+function decodeDocumentCursor(value: string | null | undefined): DocumentCursor | null {
+  if (!value) return null;
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    const [sortValue, id] = decoded.split("|");
+    if (sortValue === undefined || !id) return null;
+    return { sortValue, id };
+  } catch {
+    return null;
+  }
 }
 
 // specs/05-level-1-structure.md §Tables and saved views: "A mixed query resolves Paperless-side
@@ -204,6 +251,9 @@ export async function listDocuments(
   precomputed: { paperlessIds?: Set<number> | null } = {}
 ): Promise<{ items: Document[]; nextCursor: string | null }> {
   const limit = options.limit ?? DEFAULT_PAGE_SIZE;
+  const sort = options.sort ?? "created";
+  const sortColumn = SORT_COLUMNS[sort];
+  const ascending = options.sortDirection === "asc";
   const db = await createClient();
 
   const paperlessIds =
@@ -219,6 +269,10 @@ export async function listDocuments(
   }
 
   if (options.hasNoConnections) {
+    // The RPC behind this always orders by created_at/id (see its own comment) — a non-default
+    // sort combined with "no connections" silently falls back to created-at ordering rather
+    // than a second migration to thread a sort column through the SQL function, a narrow,
+    // documented limitation rather than a schema change for a rarely-combined pair of filters.
     return listDocumentsWithoutConnections(organizationId, options, limit, paperlessIds);
   }
 
@@ -245,27 +299,29 @@ export async function listDocuments(
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
   if (entityConnectedDocIds) query = query.in("id", [...entityConnectedDocIds]);
 
-  const cursor = decodeCursor(options.cursor);
+  const cursor = decodeDocumentCursor(options.cursor);
   if (cursor) {
+    const op = ascending ? "gt" : "lt";
     query = query.or(
-      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`
+      `${sortColumn}.${op}.${cursor.sortValue},and(${sortColumn}.eq.${cursor.sortValue},id.${op}.${cursor.id})`
     );
   }
 
   query = query
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
+    .order(sortColumn, { ascending })
+    .order("id", { ascending })
     .limit(limit + 1);
 
   const { data, error } = await query;
   if (error) throw error;
 
-  return paginate(data as Document[] | null, limit);
+  return paginate(data as Document[] | null, limit, sortColumn);
 }
 
 function paginate(
   data: Document[] | null,
-  limit: number
+  limit: number,
+  sortColumn: string
 ): { items: Document[]; nextCursor: string | null } {
   const items = data ?? [];
   const hasMore = items.length > limit;
@@ -274,7 +330,13 @@ function paginate(
 
   return {
     items: page,
-    nextCursor: hasMore && last ? encodeCursor({ createdAt: last.created_at, id: last.id }) : null
+    nextCursor:
+      hasMore && last
+        ? encodeDocumentCursor({
+            sortValue: String((last as unknown as Record<string, unknown>)[sortColumn] ?? ""),
+            id: last.id
+          })
+        : null
   };
 }
 
@@ -292,7 +354,9 @@ async function listDocumentsWithoutConnections(
   paperlessIds: Set<number> | null
 ): Promise<{ items: Document[]; nextCursor: string | null }> {
   const db = await createClient();
-  const cursor = decodeCursor(options.cursor);
+  // Always created_at/id — see this function's own call site comment on why a non-default sort
+  // doesn't reach here.
+  const cursor = decodeDocumentCursor(options.cursor);
 
   const { data, error } = await db.rpc("list_documents_without_connections", {
     p_organization_id: organizationId,
@@ -301,13 +365,13 @@ async function listDocumentsWithoutConnections(
     p_date_from: options.dateFrom ?? null,
     p_date_to: options.dateTo ?? null,
     p_paperless_ids: paperlessIds ? [...paperlessIds] : null,
-    p_cursor_created_at: cursor?.createdAt ?? null,
+    p_cursor_created_at: cursor?.sortValue ?? null,
     p_cursor_id: cursor?.id ?? null,
     p_limit: limit + 1
   });
   if (error) throw error;
 
-  return paginate(data, limit);
+  return paginate(data, limit, "created_at");
 }
 
 // specs/05-level-1-structure.md §Bulk business actions/§Export: "select all matching filter"

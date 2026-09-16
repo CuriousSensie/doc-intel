@@ -382,6 +382,108 @@ describe("listDocuments — hasNoConnections", () => {
   });
 });
 
+describe("listDocuments — sort", () => {
+  function makeRow(id: string, title: string) {
+    return {
+      id,
+      organization_id: "org-1",
+      paperless_document_id: 1,
+      title,
+      document_type_key: "invoice",
+      created_at: "2026-01-01T00:00:00Z"
+    };
+  }
+
+  it("defaults to created_at descending when no sort is given", async () => {
+    const order = vi.fn(() => chain());
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order,
+        limit: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null })
+      };
+      return proxy;
+    }
+    order.mockImplementation(() => chain());
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocuments } = await import("@/modules/documents/documents.service");
+    await listDocuments("org-1", {});
+
+    expect(order).toHaveBeenNthCalledWith(1, "created_at", { ascending: false });
+    expect(order).toHaveBeenNthCalledWith(2, "id", { ascending: false });
+  });
+
+  it("sorts by title ascending when requested, with id as the tiebreaker in the same direction", async () => {
+    const order = vi.fn();
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: (...args: unknown[]) => {
+          order(...args);
+          return proxy;
+        },
+        limit: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null })
+      };
+      return proxy;
+    }
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocuments } = await import("@/modules/documents/documents.service");
+    await listDocuments("org-1", { sort: "title", sortDirection: "asc" });
+
+    expect(order).toHaveBeenNthCalledWith(1, "title", { ascending: true });
+    expect(order).toHaveBeenNthCalledWith(2, "id", { ascending: true });
+  });
+});
+
+describe("resolvePaperlessIdFilter (via listDocumentIds)", () => {
+  it("combines q/titleOnly/tagIds/correspondentId into a single Paperless request", async () => {
+    const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }] });
+    vi.doMock("@/lib/paperless/client", () => ({ paperlessFor: async () => ({ get }) }));
+
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: () => proxy,
+        limit: () => Promise.resolve({ data: [], error: null })
+      };
+      return proxy;
+    }
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocumentIds } = await import("@/modules/documents/documents.service");
+    await listDocumentIds("org-1", {
+      q: "invoice",
+      titleOnly: true,
+      tagIds: [1, 2],
+      correspondentId: 9
+    });
+
+    expect(get).toHaveBeenCalledTimes(1);
+    const url = get.mock.calls[0][0] as string;
+    expect(url).toContain("title__icontains=invoice");
+    expect(url).toContain("tags__id__in=1%2C2");
+    expect(url).toContain("correspondent__id__in=9");
+    expect(url).not.toContain("query=");
+  });
+});
+
 describe("listDocumentIds", () => {
   it("resolves the q/tag Paperless search once across multiple pages, not once per page", async () => {
     const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }, { id: 2 }] });
