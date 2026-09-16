@@ -17,6 +17,7 @@
     "recentUploads": "Your recent uploads",
     "noUploadsYet": "No uploads yet.",
     "uploadADocument": "Upload a document",
+    "maxSizePerFile": "Up to {size} per file. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
     "noDocumentsYet": "No documents yet."
   },
   "layout": {

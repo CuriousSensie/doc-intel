@@ -1,11 +1,16 @@
 import { getTranslations } from "next-intl/server";
 
 import { Link } from "@/i18n/navigation";
+import { DocumentProcessingRefresh } from "@/components/documents/document-processing-refresh";
+import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
+import { DocumentUploadForm } from "@/components/documents/document-upload-form";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { documentsConfig } from "@/config/documents";
 import { isFeatureEnabled } from "@/config/features";
 import { getOwnerAdminSummary, getMemberSummary } from "@/modules/dashboard/dashboard.service";
 import { requireUser } from "@/modules/auth/session";
+import { listRecentUploads } from "@/modules/documents/documents.service";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 import { getMembership } from "@/modules/organizations/organizations.service";
 
@@ -24,6 +29,56 @@ function StatRow({ label, value, href }: { label: string; value: number | string
     </Link>
   ) : (
     content
+  );
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function DocumentUploadPanel({ organizationId }: { organizationId: string }) {
+  const [uploads, t] = await Promise.all([
+    listRecentUploads(organizationId),
+    getTranslations("dashboard.home")
+  ]);
+  const inFlightUploads = uploads.filter((upload) => upload.status !== "completed");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("uploadADocument")}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <p className="text-sm text-muted">
+          {t("maxSizePerFile", { size: formatSize(documentsConfig.maxSizeBytes) })}
+        </p>
+        <DocumentUploadForm />
+        {inFlightUploads.length > 0 ? (
+          <div className="grid gap-2">
+            <DocumentProcessingRefresh active />
+            <h2 className="text-sm font-semibold text-muted">{t("processing")}</h2>
+            {inFlightUploads.map((upload) => (
+              <div
+                className="flex flex-col justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 sm:flex-row sm:items-center"
+                key={upload.id}
+              >
+                <div>
+                  <p className="font-semibold">{upload.filename}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {formatSize(upload.size_bytes)} &middot;{" "}
+                    {new Date(upload.created_at).toLocaleString()}
+                    {upload.error_message ? ` - ${upload.error_message}` : ""}
+                  </p>
+                </div>
+                <DocumentStatusBadge status={upload.status} />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -190,7 +245,7 @@ export default async function DashboardPage() {
     : null;
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-5">
+    <div className="grid gap-5">
       <div>
         <h1 className="text-3xl font-black">
           {profile?.name ? t("welcomeBackWithName", { name: profile.name }) : t("welcomeBack")}
@@ -220,10 +275,21 @@ async function RoleGatedHome({
 }) {
   const membership = await getMembership(organizationId, userId);
   const role = membership?.role;
+  const canUpload = role === "owner" || role === "admin" || role === "member";
 
   if (role === "owner" || role === "admin") {
-    return <OwnerAdminHome organizationId={organizationId} />;
+    return (
+      <div className="grid gap-4">
+        {canUpload ? <DocumentUploadPanel organizationId={organizationId} /> : null}
+        <OwnerAdminHome organizationId={organizationId} />
+      </div>
+    );
   }
 
-  return <MemberHome canUpload={role === "member"} organizationId={organizationId} />;
+  return (
+    <div className="grid gap-4">
+      {canUpload ? <DocumentUploadPanel organizationId={organizationId} /> : null}
+      <MemberHome canUpload={canUpload} organizationId={organizationId} />
+    </div>
+  );
 }

@@ -4,17 +4,47 @@ import { z } from "zod";
 // querystring, reused by the page's searchParams parsing and every server action that takes a
 // ListDocumentsOptions-shaped filter. Every field is optional — an empty object is "all
 // documents", the same default the page already had before any of this existed.
-export const documentStatusSchema = z.enum(["pending", "processing", "ready", "failed", "orphaned"]);
+export const documentStatusSchema = z.enum([
+  "pending",
+  "processing",
+  "ready",
+  "failed",
+  "orphaned"
+]);
 
-export const documentSortSchema = z.enum(["created", "title", "documentType"]);
+export const documentSortSchema = z.enum(["created", "title", "mimeType", "size", "pages"]);
 export const documentSortDirectionSchema = z.enum(["asc", "desc"]);
 export const documentViewModeSchema = z.enum(["list", "smallCards", "largeCards"]);
+export const documentListFieldSchema = z.enum([
+  "title",
+  "tags",
+  "correspondent",
+  "documentType",
+  "connections",
+  "pages",
+  "createdAt"
+]);
+export const DEFAULT_DOCUMENT_LIST_FIELDS: DocumentListField[] = [
+  "title",
+  "tags",
+  "correspondent",
+  "documentType",
+  "connections",
+  "pages",
+  "createdAt"
+];
 
 export const listDocumentsFilterSchema = z.object({
   documentTypeKey: z.string().min(1).optional(),
   status: documentStatusSchema.optional(),
-  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   q: z.string().min(1).optional(),
   // Search mode for `q` — full text (title + content, Paperless's default `query=`) vs.
   // title-only (`title__icontains=`). Meaningless without `q`, harmlessly ignored if set alone.
@@ -32,9 +62,13 @@ export const listDocumentsFilterSchema = z.object({
 // server actions, it only decides which component renders and whether the page needs the
 // extra Large-Cards content-snippet fetch. Driven by the URL (not localStorage) so a plain
 // reload keeps it and a shared link reproduces exactly what the sender saw.
-export const documentsViewSearchParamSchema = z.object({ view: documentViewModeSchema.optional() });
+export const documentsViewSearchParamSchema = z.object({
+  view: documentViewModeSchema.optional(),
+  fields: z.array(documentListFieldSchema).optional()
+});
 
 export type ListDocumentsFilter = z.infer<typeof listDocumentsFilterSchema>;
+export type DocumentListField = z.infer<typeof documentListFieldSchema>;
 
 // Parses the raw `searchParams` object Next.js hands a Server Component page — string/undefined
 // for everything, comma-joined for the one array field, "true"/"false" for booleans. Invalid
@@ -69,6 +103,20 @@ export function parseDocumentsSearchParams(
 
   const result = listDocumentsFilterSchema.safeParse(candidate);
   return result.success ? result.data : {};
+}
+
+export function parseDocumentListFields(
+  raw: Record<string, string | string[] | undefined>
+): DocumentListField[] {
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const fields = first(raw.fields)
+    ?.split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const result = documentsViewSearchParamSchema.safeParse({ fields });
+  return result.success && result.data.fields?.length
+    ? result.data.fields
+    : DEFAULT_DOCUMENT_LIST_FIELDS;
 }
 
 // Document detail page's Details tab — every field optional, only the ones actually changed

@@ -11,6 +11,7 @@ import type { DocumentsViewMode } from "@/components/documents/documents-filter-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PaperlessTag } from "@/lib/paperless/documents";
+import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import {
   bulkConnectDocumentsAction,
   getBackgroundOperationAction,
@@ -35,13 +36,17 @@ export function DocumentsBulkList({
   filter,
   viewMode = "list",
   contentByPaperlessId = {},
-  tagsByDocumentId = {}
+  tagsByDocumentId = {},
+  connectionCountsByDocumentId = {},
+  visibleFields
 }: {
   documents: Document[];
   filter: ListDocumentsOptions;
   viewMode?: DocumentsViewMode;
   contentByPaperlessId?: Record<number, string>;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
+  connectionCountsByDocumentId?: Record<string, number>;
+  visibleFields: DocumentListField[];
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllMatching, setSelectAllMatching] = useState(false);
@@ -67,10 +72,7 @@ export function DocumentsBulkList({
 
   // Carried onto each row's detail-page link so next/prev navigation there stays scoped to
   // this exact filtered/sorted view (documents.service.ts's getAdjacentDocumentId).
-  const ctxQuery = useMemo(
-    () => `?ctx=${encodeURIComponent(JSON.stringify(filter))}`,
-    [filter]
-  );
+  const ctxQuery = useMemo(() => `?ctx=${encodeURIComponent(JSON.stringify(filter))}`, [filter]);
 
   useEffect(() => {
     return () => {
@@ -119,11 +121,15 @@ export function DocumentsBulkList({
         setStatus(
           op.status === "completed"
             ? op.failure_count > 0
-              ? t("bulk.connectedWithFailures", { count: op.success_count, failed: op.failure_count })
+              ? t("bulk.connectedWithFailures", {
+                  count: op.success_count,
+                  failed: op.failure_count
+                })
               : t("bulk.connected", { count: op.success_count })
             : t("bulk.bulkConnectFailed", { error: op.error_message ?? t("bulk.unknownError") })
         );
-        if (op.status === "completed" && op.kind === "bulk_connect") setLastOperationId(operationId);
+        if (op.status === "completed" && op.kind === "bulk_connect")
+          setLastOperationId(operationId);
         router.refresh();
       }
     }, POLL_INTERVAL_MS);
@@ -164,7 +170,10 @@ export function DocumentsBulkList({
             : summary.skipped > 0
               ? t("bulk.connectedWithSkipped", { count: summary.created, skipped: summary.skipped })
               : summary.failed > 0
-                ? t("bulk.connectedWithFailures", { count: summary.created, failed: summary.failed })
+                ? t("bulk.connectedWithFailures", {
+                    count: summary.created,
+                    failed: summary.failed
+                  })
                 : t("bulk.connected", { count: summary.created })
         );
         setLastOperationId(summary.operationId);
@@ -224,7 +233,11 @@ export function DocumentsBulkList({
         />
         <span className="text-muted">{t("bulk.selectPage")}</span>
         {matchingCount === null ? (
-          <button className="underline underline-offset-4" onClick={handleSelectAllMatching} type="button">
+          <button
+            className="underline underline-offset-4"
+            onClick={handleSelectAllMatching}
+            type="button"
+          >
             {t("bulk.selectAllMatching")}
           </button>
         ) : null}
@@ -232,13 +245,28 @@ export function DocumentsBulkList({
         {hasSelection ? (
           <>
             <span className="font-semibold">{t("bulk.selected", { count: selectionCount })}</span>
-            <Button disabled={isPending} onClick={() => setPickerOpen((v) => !v)} size="sm" variant="outline">
+            <Button
+              disabled={isPending}
+              onClick={() => setPickerOpen((v) => !v)}
+              size="sm"
+              variant="outline"
+            >
               {t("bulk.connectToEntity")}
             </Button>
-            <Button disabled={isPending} onClick={() => handleExport("csv")} size="sm" variant="outline">
+            <Button
+              disabled={isPending}
+              onClick={() => handleExport("csv")}
+              size="sm"
+              variant="outline"
+            >
               {t("bulk.exportCsv")}
             </Button>
-            <Button disabled={isPending} onClick={() => handleExport("xlsx")} size="sm" variant="outline">
+            <Button
+              disabled={isPending}
+              onClick={() => handleExport("xlsx")}
+              size="sm"
+              variant="outline"
+            >
               {t("bulk.exportXlsx")}
             </Button>
             <Button onClick={clearSelection} size="sm" variant="ghost">
@@ -248,10 +276,20 @@ export function DocumentsBulkList({
         ) : (
           <>
             <span className="ml-auto" />
-            <Button disabled={isPending} onClick={() => handleExport("csv")} size="sm" variant="outline">
+            <Button
+              disabled={isPending}
+              onClick={() => handleExport("csv")}
+              size="sm"
+              variant="outline"
+            >
               {t("bulk.exportViewCsv")}
             </Button>
-            <Button disabled={isPending} onClick={() => handleExport("xlsx")} size="sm" variant="outline">
+            <Button
+              disabled={isPending}
+              onClick={() => handleExport("xlsx")}
+              size="sm"
+              variant="outline"
+            >
               {t("bulk.exportViewXlsx")}
             </Button>
           </>
@@ -301,26 +339,32 @@ export function DocumentsBulkList({
         <DocumentSmallCardsView
           ctxQuery={ctxQuery}
           documents={documents}
+          connectionCountsByDocumentId={connectionCountsByDocumentId}
           onToggle={toggle}
           selectedIds={selectedIds}
           tagsByDocumentId={tagsByDocumentId}
+          visibleFields={visibleFields}
         />
       ) : viewMode === "largeCards" ? (
         <DocumentLargeCardsView
+          connectionCountsByDocumentId={connectionCountsByDocumentId}
           contentByPaperlessId={contentByPaperlessId}
           ctxQuery={ctxQuery}
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}
           tagsByDocumentId={tagsByDocumentId}
+          visibleFields={visibleFields}
         />
       ) : (
         <DocumentListView
+          connectionCountsByDocumentId={connectionCountsByDocumentId}
           ctxQuery={ctxQuery}
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}
           tagsByDocumentId={tagsByDocumentId}
+          visibleFields={visibleFields}
         />
       )}
     </div>

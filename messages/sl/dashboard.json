@@ -17,6 +17,7 @@
     "recentUploads": "Vaša nedavna nalaganja",
     "noUploadsYet": "Ni še nalaganj.",
     "uploadADocument": "Naloži dokument",
+    "maxSizePerFile": "Do {size} na datoteko. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
     "noDocumentsYet": "Ni še dokumentov."
   },
   "layout": {

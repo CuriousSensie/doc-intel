@@ -149,7 +149,7 @@ export async function completeUpload(userId: string, uploadId: string): Promise<
   return updated;
 }
 
-export type DocumentSort = "created" | "title" | "documentType";
+export type DocumentSort = "created" | "title" | "mimeType" | "size" | "pages";
 export type DocumentSortDirection = "asc" | "desc";
 
 export type ListDocumentsOptions = {
@@ -178,16 +178,19 @@ export type ListDocumentsOptions = {
 const LIST_DOCUMENT_COLUMNS =
   "id, organization_id, paperless_document_id, title, document_type_key, document_date, correspondent_name, page_count, byte_size, mime_type, checksum, status, source, import_job_id, synced_at, created_by, created_at, updated_at, deleted_at" as const;
 
-// Maps a sort option to its real mirrored column — all three (created_at, title,
-// document_type_key) are already columns on `documents`, so no schema change was needed to add
-// sorting (a separate "added"/"modified" sort was deliberately declined — Paperless's own
-// `modified` timestamp isn't mirrored, and adding a column just for a sort key wasn't judged
-// worth it for this pass).
 const SORT_COLUMNS: Record<DocumentSort, string> = {
   created: "created_at",
   title: "title",
-  documentType: "document_type_key"
+  mimeType: "mime_type",
+  size: "byte_size",
+  pages: "page_count"
 };
+const NULLABLE_SORTS = new Set<DocumentSort>(["mimeType", "size", "pages"]);
+
+function nextUtcDate(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + 1)).toISOString();
+}
 
 // Resolves the `q`/`tagIds`/`correspondentId` Paperless-first id set as a single combined
 // request — factored out so listDocumentIds() can call it once and reuse the result across
@@ -220,7 +223,7 @@ async function resolvePaperlessIdFilter(
 // src/lib/pagination.ts — five other modules (admin, entities, notifications) depend on that
 // exact shape, and only documents needs a cursor that can carry any of three different sort
 // columns. `sortValue` is always the current sort column's own value (a string for
-// title/document_type_key, an ISO timestamp for created_at).
+// title/mime_type, an ISO timestamp for created_at, or a stringified number for numeric sorts).
 type DocumentCursor = { sortValue: string; id: string };
 
 function encodeDocumentCursor(cursor: DocumentCursor): string {
@@ -280,7 +283,12 @@ export async function listDocuments(
 
   let entityConnectedDocIds: Set<string> | null = null;
   if (options.entityId) {
-    const ctx: ServiceContext = { db, orgId: organizationId, actorId: null, correlationId: randomUUID() };
+    const ctx: ServiceContext = {
+      db,
+      orgId: organizationId,
+      actorId: null,
+      correlationId: randomUUID()
+    };
     // listConnectedIds(), not getConnections() — this only needs which documents are on the
     // other side, never the label/entity-type hydration getConnections() also does.
     const others = await listConnectedIds(ctx, "entity", options.entityId);
@@ -296,8 +304,8 @@ export async function listDocuments(
 
   if (options.documentTypeKey) query = query.eq("document_type_key", options.documentTypeKey);
   if (options.status) query = query.eq("status", options.status);
-  if (options.dateFrom) query = query.gte("document_date", options.dateFrom);
-  if (options.dateTo) query = query.lte("document_date", options.dateTo);
+  if (options.dateFrom) query = query.gte("created_at", `${options.dateFrom}T00:00:00.000Z`);
+  if (options.dateTo) query = query.lt("created_at", nextUtcDate(options.dateTo));
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
   if (entityConnectedDocIds) query = query.in("id", [...entityConnectedDocIds]);
 
@@ -310,7 +318,7 @@ export async function listDocuments(
   }
 
   query = query
-    .order(sortColumn, { ascending })
+    .order(sortColumn, NULLABLE_SORTS.has(sort) ? { ascending, nullsFirst: false } : { ascending })
     .order("id", { ascending })
     .limit(limit + 1);
 
@@ -398,13 +406,50 @@ export async function listDocumentIds(
 
   while (ids.length < cap) {
     const { items, nextCursor }: { items: Document[]; nextCursor: string | null } =
-      await listDocuments(organizationId, { ...options, cursor, limit: pageSize }, { paperlessIds });
+      await listDocuments(
+        organizationId,
+        { ...options, cursor, limit: pageSize },
+        { paperlessIds }
+      );
     ids.push(...items.map((d) => d.id));
     if (!nextCursor) break;
     cursor = nextCursor;
   }
 
   return ids.slice(0, cap);
+}
+
+export async function countConnectionsForDocuments(
+  organizationId: string,
+  documentIds: string[]
+): Promise<Record<string, number>> {
+  if (documentIds.length === 0) return {};
+
+  const db = await createClient();
+  const [sourceRows, targetRows] = await Promise.all([
+    db
+      .from("connections")
+      .select("source_id")
+      .eq("organization_id", organizationId)
+      .eq("source_kind", "document")
+      .in("source_id", documentIds)
+      .is("deleted_at", null),
+    db
+      .from("connections")
+      .select("target_id")
+      .eq("organization_id", organizationId)
+      .eq("target_kind", "document")
+      .in("target_id", documentIds)
+      .is("deleted_at", null)
+  ]);
+
+  if (sourceRows.error) throw sourceRows.error;
+  if (targetRows.error) throw targetRows.error;
+
+  const counts: Record<string, number> = Object.fromEntries(documentIds.map((id) => [id, 0]));
+  for (const row of sourceRows.data ?? []) counts[row.source_id] = (counts[row.source_id] ?? 0) + 1;
+  for (const row of targetRows.data ?? []) counts[row.target_id] = (counts[row.target_id] ?? 0) + 1;
+  return counts;
 }
 
 export type DocumentDetails = Document & {
@@ -447,7 +492,12 @@ export async function getDocument(documentId: string): Promise<DocumentDetails> 
   if (!doc) throw new NotFoundError("Document not found");
 
   const organizationId = doc.organization_id;
-  const ctx: ServiceContext = { db, orgId: organizationId, actorId: null, correlationId: randomUUID() };
+  const ctx: ServiceContext = {
+    db,
+    orgId: organizationId,
+    actorId: null,
+    correlationId: randomUUID()
+  };
 
   const [connections, paperless, history, resolvedByteSize] = await Promise.all([
     getConnections(ctx, "document", documentId),
@@ -465,7 +515,11 @@ export async function getDocument(documentId: string): Promise<DocumentDetails> 
         return null;
       }
     })(),
-    getDocumentHistory(documentId, { db, organizationId, paperlessDocumentId: doc.paperless_document_id }),
+    getDocumentHistory(documentId, {
+      db,
+      organizationId,
+      paperlessDocumentId: doc.paperless_document_id
+    }),
     // byte_size is only ever populated on the direct-upload path (sync-paperless-document.ts's
     // own comment — Paperless's document API has no such field at all). Anything synced another
     // way (webhook, reconciliation, import) shows "—" forever otherwise, which is what "file
@@ -475,7 +529,9 @@ export async function getDocument(documentId: string): Promise<DocumentDetails> 
       ? (async () => {
           try {
             const client = await paperlessFor(organizationId);
-            return await client.headContentLength(`/api/documents/${doc.paperless_document_id}/download/`);
+            return await client.headContentLength(
+              `/api/documents/${doc.paperless_document_id}/download/`
+            );
           } catch {
             return null;
           }
