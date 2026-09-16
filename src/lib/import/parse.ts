@@ -102,9 +102,22 @@ export async function* streamDelimitedRows(
 // are the analyze *endpoint's* job (Phase 3 M5) — this is only the mechanical parse.
 export async function analyzeDelimitedFile(
   filePath: string,
-  maxRows: number
+  maxRows: number,
+  overrides: { encoding?: string; delimiter?: Delimiter } = {}
 ): Promise<AnalyzeDelimitedResult> {
-  const { encoding, delimiter } = await sniffDelimitedFile(filePath);
+  const detected = await sniffDelimitedFile(filePath);
+  const encoding = overrides.encoding ?? detected.encoding;
+  // Re-sniff after decoding with the override; incorrect decoding can corrupt delimiters too.
+  const delimiter =
+    overrides.delimiter ??
+    (overrides.encoding
+      ? sniffDelimiter(
+          decodeBuffer(await readFileHead(filePath, HEAD_SAMPLE_BYTES), encoding).split(
+            /\r?\n/,
+            2
+          )[0] ?? ""
+        )
+      : detected.delimiter);
 
   let header: string[] | null = null;
   const samples: string[][] = [];

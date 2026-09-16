@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { importsConfig } from "@/config/imports";
-import { AuthorizationError, NotFoundError, UnprocessableError, ValidationError } from "@/lib/errors";
+import {
+  AuthorizationError,
+  NotFoundError,
+  UnprocessableError,
+  ValidationError
+} from "@/lib/errors";
 import { logEvent } from "@/lib/events";
 import {
   analyzeDelimitedFile,
@@ -24,6 +29,8 @@ import { setImportControl } from "@/lib/import/control";
 import type { Database, Json } from "@/types/database";
 
 import {
+  analysisOptionsSchema,
+  type AnalysisOptions,
   mappingSchemaForKind,
   type DocumentImportMapping,
   type EntityImportMapping,
@@ -31,7 +38,11 @@ import {
   type ImportMapping,
   type MetadataOnlyImportMapping
 } from "./imports.schemas";
-import { resolveDocumentRowPlans, resolveEntityRowPlans, type RawImportRow } from "./imports.matching";
+import {
+  resolveDocumentRowPlans,
+  resolveEntityRowPlans,
+  type RawImportRow
+} from "./imports.matching";
 import { openJobArchive } from "./imports.archive";
 
 export type ImportJob = Database["public"]["Tables"]["import_jobs"]["Row"];
@@ -81,7 +92,9 @@ export async function createImportJob(
   input: { kind: ImportKind; filename: string; size: number; fromMappingId?: string }
 ): Promise<{ importJobId: string; signedUrl: string; token: string; path: string }> {
   if (input.size <= 0 || input.size > importsConfig.maxSizeBytes) {
-    throw new ValidationError(`File size must be between 1 byte and ${importsConfig.maxSizeBytes} bytes`);
+    throw new ValidationError(
+      `File size must be between 1 byte and ${importsConfig.maxSizeBytes} bytes`
+    );
   }
   detectImportFileFormat(input.filename); // throws PARSE_ERROR on .xls / unsupported ext
 
@@ -172,7 +185,8 @@ const ROW_INSERT_BATCH_SIZE = 1000;
 async function analyzeSource(
   filePath: string,
   filename: string,
-  kind: ImportKind
+  kind: ImportKind,
+  overrides: AnalysisOptions = {}
 ): Promise<AnalyzeImportResult & { archiveEntries?: ZipEntryInfo[]; manifestFileName?: string }> {
   const format = detectImportFileFormat(filename);
 
@@ -191,7 +205,7 @@ async function analyzeSource(
         const analyzed =
           manifestFormat === "xlsx"
             ? await analyzeXlsxFile(manifest.path, importsConfig.maxRows)
-            : await analyzeDelimitedFile(manifest.path, importsConfig.maxRows);
+            : await analyzeDelimitedFile(manifest.path, importsConfig.maxRows, overrides);
         return {
           ...analyzed,
           archiveEntries: entries.filter((e) => e.fileName !== manifestEntry.fileName),
@@ -220,14 +234,16 @@ async function analyzeSource(
     // by filename (specs/06-importer.md: "Documents appear... status = processing" applies
     // even with no metadata beyond the filename itself).
     return {
-      columns: [{ index: 0, header: "filename", sample: entries.slice(0, 3).map((e) => e.fileName) }],
+      columns: [
+        { index: 0, header: "filename", sample: entries.slice(0, 3).map((e) => e.fileName) }
+      ],
       rowCount: entries.length,
       archiveEntries: entries
     };
   }
 
   if (format === "xlsx") return analyzeXlsxFile(filePath, importsConfig.maxRows);
-  return analyzeDelimitedFile(filePath, importsConfig.maxRows);
+  return analyzeDelimitedFile(filePath, importsConfig.maxRows, overrides);
 }
 
 // Streams every raw row (as string[]) regardless of source shape — the archive-without-
@@ -278,22 +294,32 @@ async function* streamRawRows(
   });
 }
 
-export async function analyzeImportJob(ctx: ServiceContext, id: string): Promise<AnalyzeImportResult> {
+export async function analyzeImportJob(
+  ctx: ServiceContext,
+  id: string,
+  input: AnalysisOptions = {}
+): Promise<AnalyzeImportResult> {
+  const overrides = analysisOptionsSchema.parse(input);
   await assertOrgWriteAccess(ctx);
   const admin = createAdminClient();
   const job = await fetchImportJob(admin, ctx.orgId, id);
-  assertStatus(job, ["draft", "mapping"]);
+  assertStatus(job, ["draft", "mapping", "ready"]);
   if (!job.storage_key || !job.source_filename) {
     throw new UnprocessableError("Import job has no uploaded source file yet");
   }
 
   const temp = await downloadStorageObjectToTempFile(importsConfig.bucket, job.storage_key);
   try {
-    const analyzed = await analyzeSource(temp.path, job.source_filename, job.kind);
+    const analyzed = await analyzeSource(temp.path, job.source_filename, job.kind, overrides);
 
     // Materialize every row up front (specs/02-data-model.md: "do not process spreadsheets in
     // memory without materializing rows") — bulk inserts of ~1000, not one insert per row.
-    await admin.from("import_rows").delete().eq("import_job_id", id).eq("organization_id", ctx.orgId);
+    const { error: deleteError } = await admin
+      .from("import_rows")
+      .delete()
+      .eq("import_job_id", id)
+      .eq("organization_id", ctx.orgId);
+    if (deleteError) throw deleteError;
 
     let rowNumber = 0;
     let batch: Database["public"]["Tables"]["import_rows"]["Insert"][] = [];
@@ -334,7 +360,20 @@ export async function analyzeImportJob(ctx: ServiceContext, id: string): Promise
 
     const { error: updateError } = await admin
       .from("import_jobs")
-      .update({ status: "mapping", total_rows: rowNumber })
+      .update({
+        status: "mapping",
+        total_rows: rowNumber,
+        options: {
+          ...((job.options as Record<string, Json>) ?? {}),
+          analysis: {
+            columns: analyzed.columns,
+            rowCount: rowNumber,
+            encoding: analyzed.encoding ?? null,
+            delimiter: analyzed.delimiter ?? null
+          },
+          validation: null
+        } as unknown as Json
+      })
       .eq("id", id)
       .eq("organization_id", ctx.orgId);
     if (updateError) throw updateError;
@@ -348,7 +387,12 @@ export async function analyzeImportJob(ctx: ServiceContext, id: string): Promise
       metadata: { rowCount: rowNumber, kind: job.kind }
     });
 
-    return { columns: analyzed.columns, rowCount: analyzed.rowCount, encoding: analyzed.encoding, delimiter: analyzed.delimiter };
+    return {
+      columns: analyzed.columns,
+      rowCount: analyzed.rowCount,
+      encoding: analyzed.encoding,
+      delimiter: analyzed.delimiter
+    };
   } finally {
     await temp.cleanup();
   }
@@ -371,14 +415,20 @@ export async function updateImportMapping(
   const schema = mappingSchemaForKind(job.kind);
   const parsed = schema.safeParse(rawMapping);
   if (!parsed.success) {
-    throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+    throw new ValidationError(
+      parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+    );
   }
 
   // Re-mapping after a validate() always requires revalidation — never leave a job "ready"
   // against a mapping the review screen never actually saw.
   const { data, error } = await admin
     .from("import_jobs")
-    .update({ mapping: parsed.data as Json, status: "mapping" })
+    .update({
+      mapping: parsed.data as Json,
+      status: "mapping",
+      options: { ...((job.options as Record<string, Json>) ?? {}), validation: null }
+    })
     .eq("id", id)
     .eq("organization_id", ctx.orgId)
     .select("*")
@@ -429,6 +479,8 @@ export async function listImportMappings(
 // -------------------------------------------------------------------------------------------
 
 export type ValidateImportSummary = {
+  /** Subset of failed rows for which a referenced record/document was not found. */
+  unmatched?: number;
   ok: number;
   skippedDuplicate: number;
   needsReview: number;
@@ -437,7 +489,10 @@ export type ValidateImportSummary = {
 
 const VALIDATE_PAGE_SIZE = 200;
 
-export async function validateImportJob(ctx: ServiceContext, id: string): Promise<ValidateImportSummary> {
+export async function validateImportJob(
+  ctx: ServiceContext,
+  id: string
+): Promise<ValidateImportSummary> {
   await assertOrgWriteAccess(ctx);
   const admin = createAdminClient();
   const job = await fetchImportJob(admin, ctx.orgId, id);
@@ -446,7 +501,9 @@ export async function validateImportJob(ctx: ServiceContext, id: string): Promis
   const schema = mappingSchemaForKind(job.kind);
   const mappingParsed = schema.safeParse(job.mapping);
   if (!mappingParsed.success) {
-    throw new UnprocessableError("Import mapping is missing or invalid — map the file before validating");
+    throw new UnprocessableError(
+      "Import mapping is missing or invalid — map the file before validating"
+    );
   }
 
   const { error: statusError } = await admin
@@ -456,79 +513,110 @@ export async function validateImportJob(ctx: ServiceContext, id: string): Promis
     .eq("organization_id", ctx.orgId);
   if (statusError) throw statusError;
 
-  const archiveEntries = await loadArchiveEntriesIfNeeded(job);
-  const summary: ValidateImportSummary = { ok: 0, skippedDuplicate: 0, needsReview: 0, failed: 0 };
+  try {
+    const archiveEntries = await loadArchiveEntriesIfNeeded(job);
+    const summary: ValidateImportSummary = {
+      ok: 0,
+      skippedDuplicate: 0,
+      needsReview: 0,
+      failed: 0
+    };
 
-  let lastId = 0;
-  for (;;) {
-    const { data: page, error } = await admin
-      .from("import_rows")
-      .select("id, row_number, raw")
+    let lastId = 0;
+    for (;;) {
+      const { data: page, error } = await admin
+        .from("import_rows")
+        .select("id, row_number, raw")
+        .eq("organization_id", ctx.orgId)
+        .eq("import_job_id", id)
+        .gt("id", lastId)
+        .order("id", { ascending: true })
+        .limit(VALIDATE_PAGE_SIZE);
+      if (error) throw error;
+      if (!page || page.length === 0) break;
+
+      const rows: RawImportRow[] = page.map((r) => ({
+        rowNumber: r.row_number,
+        raw: r.raw as unknown as string[]
+      }));
+
+      const plans =
+        job.kind === "entities"
+          ? await resolveEntityRowPlans(ctx, mappingParsed.data as EntityImportMapping, rows)
+          : await resolveDocumentRowPlans(ctx, job.kind, {
+              // mappingSchemaForKind(job.kind) already validated this against the right schema
+              // for this specific job's kind above — TS can't correlate that dynamic dispatch
+              // back to a literal type, so this asserts what's already been checked at runtime.
+              mapping: mappingParsed.data as DocumentImportMapping | MetadataOnlyImportMapping,
+              rows,
+              archiveEntries
+            });
+
+      const updates = page.map((r) => {
+        const plan = plans.get(r.row_number);
+        const verdict = planToVerdict(plan);
+        summary[verdict.summaryKey]++;
+        if (
+          verdict.errorCode === "ENTITY_NOT_FOUND" ||
+          verdict.errorCode === "DOCUMENT_NOT_FOUND"
+        ) {
+          summary.unmatched = (summary.unmatched ?? 0) + 1;
+        }
+        return {
+          id: r.id,
+          status: verdict.status,
+          result: verdict.result as Json,
+          error_code: verdict.errorCode ?? null,
+          error_message: verdict.errorMessage ?? null
+        };
+      });
+
+      const { error: bulkError } = await admin.rpc("bulk_update_import_rows", {
+        p_import_job_id: id,
+        p_organization_id: ctx.orgId,
+        p_rows: updates as unknown as Json
+      });
+      if (bulkError) throw bulkError;
+
+      lastId = page[page.length - 1].id;
+    }
+
+    const { error: finishError } = await admin
+      .from("import_jobs")
+      .update({
+        status: "ready",
+        processed_rows: summary.failed + summary.needsReview,
+        failed_rows: summary.failed + summary.needsReview,
+        succeeded_rows: 0,
+        skipped_rows: 0,
+        options: {
+          ...((job.options as Record<string, Json>) ?? {}),
+          validation: summary
+        } as unknown as Json
+      })
+      .eq("id", id)
+      .eq("organization_id", ctx.orgId);
+    if (finishError) throw finishError;
+
+    await logEvent({
+      actorId: ctx.actorId,
+      action: "import.validated",
+      entityType: "import_job",
+      entityId: id,
+      organizationId: ctx.orgId,
+      metadata: summary
+    });
+
+    return summary;
+  } catch (error) {
+    await admin
+      .from("import_jobs")
+      .update({ status: "mapping" })
+      .eq("id", id)
       .eq("organization_id", ctx.orgId)
-      .eq("import_job_id", id)
-      .gt("id", lastId)
-      .order("id", { ascending: true })
-      .limit(VALIDATE_PAGE_SIZE);
-    if (error) throw error;
-    if (!page || page.length === 0) break;
-
-    const rows: RawImportRow[] = page.map((r) => ({
-      rowNumber: r.row_number,
-      raw: r.raw as unknown as string[]
-    }));
-
-    const plans =
-      job.kind === "entities"
-        ? await resolveEntityRowPlans(ctx, mappingParsed.data as EntityImportMapping, rows)
-        : await resolveDocumentRowPlans(ctx, job.kind, {
-            // mappingSchemaForKind(job.kind) already validated this against the right schema
-            // for this specific job's kind above — TS can't correlate that dynamic dispatch
-            // back to a literal type, so this asserts what's already been checked at runtime.
-            mapping: mappingParsed.data as DocumentImportMapping | MetadataOnlyImportMapping,
-            rows,
-            archiveEntries
-          });
-
-    const updates = page.map((r) => {
-      const plan = plans.get(r.row_number);
-      const verdict = planToVerdict(plan);
-      summary[verdict.summaryKey]++;
-      return {
-        id: r.id,
-        status: verdict.status,
-        result: verdict.result as Json,
-        error_code: verdict.errorCode ?? null,
-        error_message: verdict.errorMessage ?? null
-      };
-    });
-
-    const { error: bulkError } = await admin.rpc("bulk_update_import_rows", {
-      p_import_job_id: id,
-      p_organization_id: ctx.orgId,
-      p_rows: updates as unknown as Json
-    });
-    if (bulkError) throw bulkError;
-
-    lastId = page[page.length - 1].id;
+      .eq("status", "validating");
+    throw error;
   }
-
-  const { error: finishError } = await admin
-    .from("import_jobs")
-    .update({ status: "ready" })
-    .eq("id", id)
-    .eq("organization_id", ctx.orgId);
-  if (finishError) throw finishError;
-
-  await logEvent({
-    actorId: ctx.actorId,
-    action: "import.validated",
-    entityType: "import_job",
-    entityId: id,
-    organizationId: ctx.orgId,
-    metadata: summary
-  });
-
-  return summary;
 }
 
 type RowVerdict = {
@@ -536,7 +624,7 @@ type RowVerdict = {
   result: Record<string, unknown>;
   errorCode?: ImportErrorCode;
   errorMessage?: string;
-  summaryKey: keyof ValidateImportSummary;
+  summaryKey: "ok" | "skippedDuplicate" | "needsReview" | "failed";
 };
 
 // specs/06-importer.md: "VALIDATE: dry run over ALL rows; writes nothing [to business data];
@@ -579,7 +667,11 @@ function planToVerdict(plan: unknown): RowVerdict {
   }
 
   if (p.action === "skip_duplicate") {
-    return { status: "pending", result: p as Record<string, unknown>, summaryKey: "skippedDuplicate" };
+    return {
+      status: "pending",
+      result: p as Record<string, unknown>,
+      summaryKey: "skippedDuplicate"
+    };
   }
 
   return { status: "pending", result: p as Record<string, unknown>, summaryKey: "ok" };
@@ -699,21 +791,29 @@ export async function retryFailedRows(ctx: ServiceContext, id: string): Promise<
 
   // specs/03-api.md: "Re-queues only failed rows" — never touches ok/skipped_duplicate rows,
   // so a partial success is never reprocessed.
-  const { data, error } = await admin
+  // Exact affected-row count avoids both transferring every id and PostgREST's response-row cap.
+  const { count: affectedRows, error } = await admin
     .from("import_rows")
-    .update({ status: "pending", attempts: 0, error_code: null, error_message: null })
+    .update(
+      { status: "pending", attempts: 0, error_code: null, error_message: null },
+      { count: "exact" }
+    )
     .eq("organization_id", ctx.orgId)
     .eq("import_job_id", id)
-    .eq("status", "failed")
-    .select("id");
+    .eq("status", "failed");
   if (error) throw error;
 
-  const count = data?.length ?? 0;
+  const count = affectedRows ?? 0;
   if (count === 0) return { count: 0 };
 
   const { error: updateError } = await admin
     .from("import_jobs")
-    .update({ status: "ready", failed_rows: 0, finished_at: null })
+    .update({
+      status: "ready",
+      failed_rows: Math.max(0, job.failed_rows - count),
+      processed_rows: Math.max(0, job.processed_rows - count),
+      finished_at: null
+    })
     .eq("id", id)
     .eq("organization_id", ctx.orgId);
   if (updateError) throw updateError;
@@ -730,7 +830,9 @@ export async function listImportRows(
   importJobId: string,
   options: { status?: ImportRow["status"]; cursor?: string | null; limit?: number } = {}
 ): Promise<{ items: ImportRow[]; nextCursor: string | null }> {
-  const limit = options.limit ?? 50;
+  const limit = Number.isFinite(options.limit)
+    ? Math.max(1, Math.min(100, Math.trunc(options.limit!)))
+    : 50;
   let query = ctx.db
     .from("import_rows")
     .select("*")
@@ -739,7 +841,9 @@ export async function listImportRows(
 
   if (options.status) query = query.eq("status", options.status);
 
-  const cursorId = options.cursor ? Number(Buffer.from(options.cursor, "base64url").toString("utf8")) : null;
+  const cursorId = options.cursor
+    ? Number(Buffer.from(options.cursor, "base64url").toString("utf8"))
+    : null;
   if (cursorId) query = query.gt("id", cursorId);
 
   query = query.order("id", { ascending: true }).limit(limit + 1);
@@ -757,3 +861,25 @@ export async function listImportRows(
     nextCursor: hasMore && last ? Buffer.from(String(last.id), "utf8").toString("base64url") : null
   };
 }
+
+/** Count upload/OCR outcomes separately from rows handed off by the chunk executor. */
+export async function getImportDocumentProgress(ctx: ServiceContext, id: string) {
+  const count = async (statuses?: ImportJobUploadStatus[]) => {
+    let query = ctx.db
+      .from("document_uploads")
+      .select("id, import_rows!inner(import_job_id)", { count: "exact", head: true })
+      .eq("organization_id", ctx.orgId)
+      .eq("import_rows.import_job_id", id);
+    if (statuses) query = query.in("status", statuses);
+    const { count, error } = await query;
+    if (error) throw error;
+    return count ?? 0;
+  };
+  const [total, completed, failed] = await Promise.all([
+    count(),
+    count(["completed"]),
+    count(["failed", "expired"])
+  ]);
+  return { total, completed, failed, pending: Math.max(0, total - completed - failed) };
+}
+type ImportJobUploadStatus = Database["public"]["Tables"]["document_uploads"]["Row"]["status"];

@@ -12,6 +12,7 @@ import type documents from "@/../messages/en/documents.json";
 import type entities from "@/../messages/en/entities.json";
 import type entityTypes from "@/../messages/en/entityTypes.json";
 import type connections from "@/../messages/en/connections.json";
+import type imports from "@/../messages/en/imports.json";
 import type savedViews from "@/../messages/en/savedViews.json";
 
 declare module "next-intl" {
@@ -32,6 +33,7 @@ declare module "next-intl" {
       entityTypes: typeof entityTypes;
       connections: typeof connections;
       savedViews: typeof savedViews;
+      imports: typeof imports;
     };
     Locale: "en" | "sl";
   }

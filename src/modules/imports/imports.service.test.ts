@@ -45,6 +45,7 @@ describe("validateImportJob — row status semantics", () => {
     vi.doMock("@/modules/imports/imports.archive", () => ({ openJobArchive: vi.fn() }));
 
     const capturedUpdateCalls: unknown[] = [];
+    const jobUpdates: Record<string, unknown>[] = [];
     let importRowsPage = 0;
 
     const rpc = vi.fn((name: string, args: unknown) => {
@@ -58,8 +59,15 @@ describe("validateImportJob — row status semantics", () => {
     const from = vi.fn((table: string) => {
       if (table === "import_jobs") {
         return {
-          select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: job, error: null }) }) }) }),
-          update: () => ({ eq: () => ({ eq: () => Promise.resolve({ error: null }) }) })
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ maybeSingle: () => Promise.resolve({ data: job, error: null }) })
+            })
+          }),
+          update: (update: Record<string, unknown>) => {
+            jobUpdates.push(update);
+            return { eq: () => ({ eq: () => Promise.resolve({ error: null }) }) };
+          }
         };
       }
       if (table === "import_rows") {
@@ -101,9 +109,74 @@ describe("validateImportJob — row status semantics", () => {
     const summary = await validateImportJob(ctx, "job-1");
 
     expect(summary).toEqual({ ok: 1, skippedDuplicate: 0, needsReview: 0, failed: 1 });
+    expect(jobUpdates.find((update) => update.status === "ready")).toMatchObject({
+      processed_rows: 1,
+      failed_rows: 1,
+      options: { validation: summary }
+    });
 
-    const rows = (capturedUpdateCalls[0] as { p_rows: Array<{ id: number; status: string }> }).p_rows;
+    const rows = (capturedUpdateCalls[0] as { p_rows: Array<{ id: number; status: string }> })
+      .p_rows;
     expect(rows.find((r) => r.id === 1)?.status).toBe("pending");
     expect(rows.find((r) => r.id === 2)?.status).toBe("failed");
+  });
+});
+
+describe("retryFailedRows — progress accounting", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it("uses the exact affected count beyond the response-row cap and preserves conflicts", async () => {
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "owner" })
+    }));
+    const updateJob = vi.fn(() => ({ eq: () => ({ eq: () => Promise.resolve({ error: null }) }) }));
+    const updateRows = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({ eq: () => Promise.resolve({ count: 1200, data: null, error: null }) })
+      })
+    }));
+    vi.doMock("@/lib/supabase/admin", () => ({
+      createAdminClient: () => ({
+        from: (table: string) =>
+          table === "import_rows"
+            ? { update: updateRows }
+            : {
+                select: () => ({
+                  eq: () => ({
+                    eq: () => ({
+                      maybeSingle: () =>
+                        Promise.resolve({
+                          error: null,
+                          data: {
+                            status: "completed_with_errors",
+                            processed_rows: 2000,
+                            failed_rows: 1203
+                          }
+                        })
+                    })
+                  })
+                }),
+                update: updateJob
+              }
+      })
+    }));
+    const { retryFailedRows } = await import("./imports.service");
+    const result = await retryFailedRows(
+      { db: {} as never, orgId: "org-1", actorId: "user-1", correlationId: "corr-1" },
+      "job-1"
+    );
+    expect(result).toEqual({ count: 1200 });
+    expect(updateRows).toHaveBeenCalledWith(expect.objectContaining({ status: "pending" }), {
+      count: "exact"
+    });
+    expect(updateJob).toHaveBeenCalledWith({
+      status: "ready",
+      processed_rows: 800,
+      failed_rows: 3,
+      finished_at: null
+    });
   });
 });

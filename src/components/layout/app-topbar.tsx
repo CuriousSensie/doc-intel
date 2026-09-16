@@ -33,7 +33,7 @@ export function AppTopbar({
   const t = useTranslations("common.topbar");
 
   return (
-    <header className="sticky top-0 z-30 flex h-(--topbar-height) shrink-0 items-center gap-3 border-b border-border bg-panel/95 px-4 backdrop-blur supports-backdrop-filter:bg-panel/75 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-(--topbar-height) shrink-0 items-center gap-1 border-b border-border bg-panel/95 px-2 backdrop-blur supports-backdrop-filter:bg-panel/75 sm:gap-3 sm:px-6">
       <Button
         aria-label={t("openNavigation")}
         className="lg:hidden"
@@ -44,14 +44,14 @@ export function AppTopbar({
         <Menu aria-hidden className="size-5" />
       </Button>
 
-      <div className="min-w-0 flex-1">
+      <div className="hidden min-w-0 flex-1 sm:block">
         {title ? (
           <div className="hidden truncate text-sm font-bold sm:block sm:text-base">{title}</div>
         ) : null}
       </div>
 
       {organizationSwitcher ? (
-        <div className="max-w-28 shrink sm:max-w-none">{organizationSwitcher}</div>
+        <div className="min-w-0 flex-1 sm:max-w-60 sm:flex-initial">{organizationSwitcher}</div>
       ) : null}
 
       {notificationsHref ? (
@@ -68,7 +68,9 @@ export function AppTopbar({
               />
             ) : null}
             <span className="sr-only">
-              {unreadCount > 0 ? t("unreadNotifications", { count: unreadCount }) : t("notifications")}
+              {unreadCount > 0
+                ? t("unreadNotifications", { count: unreadCount })
+                : t("notifications")}
             </span>
           </Link>
         </Button>

@@ -21,11 +21,15 @@ export function OrganizationSwitcher({
   }
 
   return (
-    <form action={switchOrganizationAction} className="flex items-center gap-2" ref={formRef}>
+    <form
+      action={switchOrganizationAction}
+      className="flex min-w-0 items-center gap-2"
+      ref={formRef}
+    >
       <input name="next" type="hidden" value={next ?? "/organizations"} />
       <select
         aria-label="Switch organization"
-        className="min-h-10 rounded-md border border-border bg-panel px-3 text-sm font-semibold outline-none transition focus:border-foreground focus:ring-2 focus:ring-foreground/15"
+        className="min-h-10 w-full min-w-0 truncate rounded-md border border-border bg-panel px-3 text-sm font-semibold outline-none transition focus:border-foreground focus:ring-2 focus:ring-foreground/15"
         defaultValue={activeOrganizationId ?? ""}
         name="organizationId"
         onChange={() => formRef.current?.requestSubmit()}

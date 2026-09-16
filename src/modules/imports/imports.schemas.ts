@@ -137,3 +137,11 @@ export function mappingSchemaForKind(kind: ImportKind) {
 }
 
 export type ImportMapping = EntityImportMapping | DocumentImportMapping | MetadataOnlyImportMapping;
+
+export const analysisOptionsSchema = z.object({
+  encoding: z
+    .enum(["UTF-8", "windows-1250", "windows-1252", "ISO-8859-2", "UTF-16LE", "UTF-16BE"])
+    .optional(),
+  delimiter: z.enum([",", ";", "\t"]).optional()
+});
+export type AnalysisOptions = z.infer<typeof analysisOptionsSchema>;

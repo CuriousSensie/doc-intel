@@ -3,7 +3,7 @@ import { AuthenticationError } from "@/lib/errors";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { getAuthContext } from "@/modules/auth/session";
-import { getImportJob } from "@/modules/imports/imports.service";
+import { getImportJob, getImportDocumentProgress } from "@/modules/imports/imports.service";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       skipped_rows: job.skipped_rows,
       error: job.error,
       started_at: job.started_at,
-      finished_at: job.finished_at
+      finished_at: job.finished_at,
+      validation: (job.options as { validation?: unknown } | null)?.validation ?? null,
+      document_progress: job.kind === "documents" ? await getImportDocumentProgress(ctx, id) : null
     });
   } catch (error) {
     return apiError(error);

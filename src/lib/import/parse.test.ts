@@ -177,3 +177,21 @@ describe("listZipEntries / openZipEntryStream", () => {
     });
   });
 });
+
+describe("explicit file settings", () => {
+  it("honors the user's encoding and delimiter in both headers and sample values", async () => {
+    const path = join(dir, "override.csv");
+    await writeFile(path, iconv.encode("Ime\tMesto\nČebelica\tŽalec\n", "UTF-16LE"));
+    const result = await analyzeDelimitedFile(path, 50000, {
+      encoding: "UTF-16LE",
+      delimiter: "\t"
+    });
+    expect(result.encoding).toBe("UTF-16LE");
+    expect(result.delimiter).toBe("\t");
+    expect(result.columns).toEqual([
+      { index: 0, header: "Ime", sample: ["Čebelica"] },
+      { index: 1, header: "Mesto", sample: ["Žalec"] }
+    ]);
+    expect(result.rowCount).toBe(1);
+  });
+});

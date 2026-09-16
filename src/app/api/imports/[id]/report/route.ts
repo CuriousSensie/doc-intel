@@ -23,12 +23,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const ctx = await buildRequestContext();
     const job = await getImportJob(ctx, id);
     const csv = await buildImportReportCsv(ctx, id);
+    const filename = `${job.source_filename ?? "import"}-report.csv`;
+    const asciiFilename = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 
     return new Response(csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${job.source_filename ?? "import"}-report.csv"`
+        "Content-Disposition": `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
       }
     });
   } catch (error) {
