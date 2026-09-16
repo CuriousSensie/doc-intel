@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "crypto";
+import { cache } from "react";
 
 import { ConflictError } from "@/lib/errors";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
@@ -51,7 +52,13 @@ export async function getOrganization(organizationId: string) {
   return data;
 }
 
-export async function getMembership(organizationId: string, userId: string) {
+// cache()'d for the same reason as getCurrentUser()/getCurrentProfile() (src/modules/auth/
+// session.ts) — getActiveOrganizationId() already calls this once to validate the active-org
+// cookie, and several write paths (updateDocument, deleteDocument, ...) call it again for the
+// role check with the exact same (organizationId, userId) pair. Found measuring a document
+// save: that redundant round trip was real, measurable latency stacked on top of the several
+// other sequential Supabase calls a single server action already pays for.
+export const getMembership = cache(async (organizationId: string, userId: string) => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("organization_members")
@@ -65,7 +72,7 @@ export async function getMembership(organizationId: string, userId: string) {
   }
 
   return data;
-}
+});
 
 export async function createOrganization(name: string, requestedSlug?: string) {
   const supabase = await createClient();
