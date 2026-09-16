@@ -1,4 +1,4 @@
-import type { PaperlessClient } from "./client";
+import type { OwnedObjectPermissions, PaperlessClient } from "./client";
 import type {
   PaperlessDocument,
   PaperlessDocumentHistoryEntry,
@@ -24,10 +24,52 @@ export function updatePaperlessDocument(
     title?: string;
     created?: string;
     document_type?: number | null;
+    correspondent?: number | null;
+    tags?: number[];
     custom_fields?: Array<{ field: number; value: unknown }>;
   }
 ): Promise<PaperlessDocument> {
   return client.patch<PaperlessDocument>(`/api/documents/${paperlessDocumentId}/`, patch);
+}
+
+// specs/03-api.md DELETE /documents/:id — soft-delete locally, delete in Paperless.
+export function deletePaperlessDocument(
+  client: PaperlessClient,
+  paperlessDocumentId: number
+): Promise<void> {
+  return client.delete(`/api/documents/${paperlessDocumentId}/`);
+}
+
+// specs/12-agent-rules.md rule 4: never create a Paperless object without explicit owner/group
+// permissions — same createOwnedObject() path provision-tenant.ts already uses for document
+// types/storage paths, now reused for the document detail page's inline "create tag/
+// correspondent/document type" pickers. Paperless itself enforces name uniqueness per model;
+// a duplicate name surfaces as a normal mapped Paperless error, not something checked here.
+// `color` accepted on create, confirmed live (2026-09-16) — Paperless derives `text_color`
+// itself from the contrast, never sent by us.
+export function createPaperlessTag(
+  client: PaperlessClient,
+  name: string,
+  ownership: OwnedObjectPermissions,
+  color?: string
+): Promise<{ id: number; name: string; color: string; text_color: string }> {
+  return client.createOwnedObject("/api/tags/", { name, ...(color ? { color } : {}) }, ownership);
+}
+
+export function createPaperlessCorrespondent(
+  client: PaperlessClient,
+  name: string,
+  ownership: OwnedObjectPermissions
+): Promise<{ id: number; name: string }> {
+  return client.createOwnedObject("/api/correspondents/", { name }, ownership);
+}
+
+export function createPaperlessDocumentType(
+  client: PaperlessClient,
+  name: string,
+  ownership: OwnedObjectPermissions
+): Promise<{ id: number; name: string }> {
+  return client.createOwnedObject("/api/document_types/", { name }, ownership);
 }
 
 // specs/05-level-1-structure.md §Bulk business actions: "Paperless's [bulk actions]: change
@@ -122,7 +164,7 @@ async function listAllPaginated<T>(client: PaperlessClient, path: string): Promi
   return items;
 }
 
-export type PaperlessTag = { id: number; name: string; color: string };
+export type PaperlessTag = { id: number; name: string; color: string; text_color: string };
 export type PaperlessCorrespondent = { id: number; name: string };
 export type PaperlessDocumentType = { id: number; name: string };
 
@@ -163,6 +205,26 @@ export async function getPaperlessContentSnippets(
     `/api/documents/?${params.toString()}`
   );
   return new Map(envelope.results.map((r) => [r.id, r.content]));
+}
+
+// Documents list page (all three view modes): a page-scoped read of `tags` for the ~25
+// documents currently on screen, used to render each row/card's tag-color ribbon. Same
+// id__in-scoped pattern as getPaperlessContentSnippets — tags aren't mirrored locally (only
+// Paperless-native), so this is always a live, page-scoped call, never cached across pages.
+export async function getPaperlessDocumentTags(
+  client: PaperlessClient,
+  paperlessDocumentIds: number[]
+): Promise<Map<number, number[]>> {
+  if (paperlessDocumentIds.length === 0) return new Map();
+
+  const params = new URLSearchParams({
+    id__in: paperlessDocumentIds.join(","),
+    page_size: String(paperlessDocumentIds.length)
+  });
+  const envelope = await client.get<PaperlessListEnvelope<{ id: number; tags: number[] }>>(
+    `/api/documents/?${params.toString()}`
+  );
+  return new Map(envelope.results.map((r) => [r.id, r.tags]));
 }
 
 // documents.document_type_key has no canonical source (specs/02-data-model.md gives it as a

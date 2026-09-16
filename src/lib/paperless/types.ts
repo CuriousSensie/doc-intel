@@ -53,6 +53,8 @@ export type PaperlessDocument = {
   owner: number | null;
   page_count: number | null;
   mime_type: string | null;
+  // Confirmed live (2026-09-16): present on both list and detail shapes.
+  original_file_name: string;
   custom_fields: Array<{ field: number; value: unknown }>;
   versions: Array<{
     id: number;

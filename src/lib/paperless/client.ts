@@ -249,6 +249,33 @@ export class PaperlessClient {
     return res;
   }
 
+  // A real HTTP HEAD, not a GET with the body discarded — confirmed live (2026-09-16) that
+  // the pinned instance's download/preview routes both advertise and honor HEAD (`allow: GET,
+  // HEAD, OPTIONS`), returning Content-Length with no body on the wire. Used for the document
+  // detail page's file-size fallback (documents.byte_size is only ever populated on the upload
+  // path — see sync-paperless-document.ts's own comment — so anything synced another way needs
+  // this instead of downloading the whole file just to measure it).
+  async headContentLength(path: string): Promise<number | null> {
+    if (this.orgId !== ADMIN_ORG_ID) {
+      await requireOrgToken(this.orgId, "paperless:read");
+    }
+
+    // Explicitly uncompressed — confirmed live: undici's default `Accept-Encoding: gzip` makes
+    // Django's GZipMiddleware advertise gzip on the (bodyless) HEAD response too, and it drops
+    // Content-Length entirely once it does (it can't know the compressed length without a body
+    // to compress). `identity` keeps Content-Length meaningful, which is this method's entire
+    // point.
+    const res = await fetch(`${this.creds.baseUrl}${path}`, {
+      method: "HEAD",
+      headers: { Authorization: `Token ${this.creds.token}`, "Accept-Encoding": "identity" },
+      dispatcher: getPaperlessAgent()
+    } as RequestInit & { dispatcher: Agent });
+
+    if (!res.ok) return null;
+    const length = res.headers.get("content-length");
+    return length ? Number(length) : null;
+  }
+
   // Shared by createOwnedObject() and setOwnedObjectPermissions() — the one guard that makes
   // isolation test #20 ("no creation/grant without explicit, tenant-matching permissions") a
   // compile-time-adjacent guarantee instead of a convention two call sites could each get wrong.
