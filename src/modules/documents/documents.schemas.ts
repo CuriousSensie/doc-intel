@@ -70,3 +70,29 @@ export function parseDocumentsSearchParams(
   const result = listDocumentsFilterSchema.safeParse(candidate);
   return result.success ? result.data : {};
 }
+
+// Document detail page's Details tab — every field optional, only the ones actually changed
+// are sent (updateDocument() only builds a Paperless patch for keys present on the input).
+export const updateDocumentSchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  documentDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  documentTypeId: z.number().int().positive().nullable().optional(),
+  correspondentId: z.number().int().positive().nullable().optional(),
+  tagIds: z.array(z.number().int().positive()).optional()
+});
+
+export const paperlessMetaKindSchema = z.enum(["tag", "correspondent", "documentType"]);
+
+export const createPaperlessMetaSchema = z.object({
+  kind: paperlessMetaKindSchema,
+  name: z.string().trim().min(1).max(200),
+  // Tags only — ignored server-side for correspondent/documentType (Paperless doesn't color
+  // those). Hex string, e.g. "#a6cee3".
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional()
+});

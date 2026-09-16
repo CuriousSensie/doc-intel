@@ -345,6 +345,194 @@ describe("updateDocument", () => {
     expect(mirrorUpdatePayload).toEqual({ title: "New title" });
     expect(result.title).toBe("New title");
   });
+
+  it("patches tags without touching the mirror row (tags aren't mirrored)", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "member" })
+    }));
+    vi.doMock("@/lib/paperless/client", () => ({
+      paperlessFor: vi.fn().mockResolvedValue({})
+    }));
+    const updatePaperlessDocument = vi.fn().mockResolvedValue({ tags: [1, 2] });
+    vi.doMock("@/lib/paperless/documents", () => ({ updatePaperlessDocument }));
+    const adminFrom = vi.fn();
+    vi.doMock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: adminFrom }) }));
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
+
+    const { updateDocument } = await import("@/modules/documents/documents.service");
+    const result = await updateDocument("user-1", "org-1", "doc-1", { tagIds: [1, 2] });
+
+    expect(updatePaperlessDocument).toHaveBeenCalledWith({}, 42, { tags: [1, 2] });
+    expect(adminFrom).not.toHaveBeenCalled();
+    expect(result).toEqual(DOC_ROW);
+  });
+
+  it("patches correspondent and mirrors the resolved name back", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "member" })
+    }));
+    vi.doMock("@/lib/paperless/client", () => ({
+      paperlessFor: vi.fn().mockResolvedValue({})
+    }));
+    const updatePaperlessDocument = vi.fn().mockResolvedValue({ correspondent: 7 });
+    const getPaperlessCorrespondentName = vi.fn().mockResolvedValue("Acme Corp");
+    vi.doMock("@/lib/paperless/documents", () => ({
+      updatePaperlessDocument,
+      getPaperlessCorrespondentName
+    }));
+
+    let mirrorUpdatePayload: unknown;
+    vi.doMock("@/lib/supabase/admin", () => ({
+      createAdminClient: () => ({
+        from: () => ({
+          update: (payload: unknown) => {
+            mirrorUpdatePayload = payload;
+            return {
+              eq: () => ({
+                eq: () => ({
+                  select: () => ({
+                    single: () =>
+                      Promise.resolve({
+                        data: { ...DOC_ROW, correspondent_name: "Acme Corp" },
+                        error: null
+                      })
+                  })
+                })
+              })
+            };
+          }
+        })
+      })
+    }));
+    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
+
+    const { updateDocument } = await import("@/modules/documents/documents.service");
+    const result = await updateDocument("user-1", "org-1", "doc-1", { correspondentId: 7 });
+
+    expect(updatePaperlessDocument).toHaveBeenCalledWith({}, 42, { correspondent: 7 });
+    expect(getPaperlessCorrespondentName).toHaveBeenCalledWith({}, 7);
+    expect(mirrorUpdatePayload).toEqual({ correspondent_name: "Acme Corp" });
+    expect(result.correspondent_name).toBe("Acme Corp");
+  });
+});
+
+describe("deleteDocument", () => {
+  const DOC_ROW = { id: "doc-1", organization_id: "org-1", paperless_document_id: 42, title: "Invoice" };
+
+  it("rejects a read-only member before touching Paperless", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "read-only" })
+    }));
+    const paperlessFor = vi.fn();
+    vi.doMock("@/lib/paperless/client", () => ({ paperlessFor }));
+
+    const { deleteDocument } = await import("@/modules/documents/documents.service");
+    await expect(deleteDocument("user-1", "org-1", "doc-1")).rejects.toThrow(/write access/);
+    expect(paperlessFor).not.toHaveBeenCalled();
+  });
+
+  it("deletes in Paperless, soft-deletes the mirror row, and logs the event", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "member" })
+    }));
+    vi.doMock("@/lib/paperless/client", () => ({
+      paperlessFor: vi.fn().mockResolvedValue({})
+    }));
+    const deletePaperlessDocument = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/paperless/documents", () => ({ deletePaperlessDocument }));
+
+    let mirrorUpdatePayload: unknown;
+    vi.doMock("@/lib/supabase/admin", () => ({
+      createAdminClient: () => ({
+        from: () => ({
+          update: (payload: unknown) => {
+            mirrorUpdatePayload = payload;
+            return { eq: () => ({ eq: () => Promise.resolve({ error: null }) }) };
+          }
+        })
+      })
+    }));
+    const logEvent = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/events", () => ({ logEvent }));
+
+    const { deleteDocument } = await import("@/modules/documents/documents.service");
+    await deleteDocument("user-1", "org-1", "doc-1");
+
+    expect(deletePaperlessDocument).toHaveBeenCalledWith({}, 42);
+    expect(mirrorUpdatePayload).toHaveProperty("deleted_at");
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "document.deleted", entityId: "doc-1" })
+    );
+  });
+});
+
+describe("getAdjacentDocumentId", () => {
+  const CURRENT = {
+    id: "doc-current",
+    title: "M",
+    created_at: "2026-06-01T00:00:00Z"
+  } as unknown as Parameters<typeof import("./documents.service").getAdjacentDocumentId>[1];
+
+  it("queries ascending for 'previous' against a default (descending) list", async () => {
+    const order = vi.fn();
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: (...args: unknown[]) => {
+          order(...args);
+          return proxy;
+        },
+        limit: () => Promise.resolve({ data: [{ id: "doc-prev", created_at: "2026-05-01T00:00:00Z" }], error: null })
+      };
+      return proxy;
+    }
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { getAdjacentDocumentId } = await import("@/modules/documents/documents.service");
+    const result = await getAdjacentDocumentId("org-1", CURRENT, {}, "previous");
+
+    expect(order).toHaveBeenNthCalledWith(1, "created_at", { ascending: true });
+    expect(result).toBe("doc-prev");
+  });
+
+  it("returns null when there is no adjacent document", async () => {
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: () => proxy,
+        limit: () => Promise.resolve({ data: [], error: null })
+      };
+      return proxy;
+    }
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { getAdjacentDocumentId } = await import("@/modules/documents/documents.service");
+    const result = await getAdjacentDocumentId("org-1", CURRENT, {}, "next");
+
+    expect(result).toBeNull();
+  });
 });
 
 describe("listDocuments — hasNoConnections", () => {

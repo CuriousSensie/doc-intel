@@ -1,18 +1,30 @@
 "use server";
 
 import { logEvent } from "@/lib/events";
-import { bulkEditPaperlessDocuments } from "@/lib/paperless/documents";
+import {
+  bulkEditPaperlessDocuments,
+  createPaperlessCorrespondent,
+  createPaperlessDocumentType,
+  createPaperlessTag
+} from "@/lib/paperless/documents";
 import { paperlessFor } from "@/lib/paperless/client";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { createBackgroundOperation, completeBackgroundOperation } from "@/modules/background-operations/background-operations.service";
-import { listDocumentsFilterSchema } from "@/modules/documents/documents.schemas";
 import {
+  createPaperlessMetaSchema,
+  listDocumentsFilterSchema,
+  updateDocumentSchema
+} from "@/modules/documents/documents.schemas";
+import {
+  deleteDocument,
+  getAdjacentDocumentId,
   getDocument,
   getDocumentHistory,
-  listDocumentIds,
+  getDocumentRow,
   listDocuments,
+  listDocumentIds,
   updateDocument,
   type ListDocumentsOptions
 } from "@/modules/documents/documents.service";
@@ -49,19 +61,53 @@ export async function getDocumentHistoryAction(documentId: string) {
   return getDocumentHistory(documentId);
 }
 
-export async function updateDocumentAction(
-  documentId: string,
-  input: {
-    title?: string;
-    documentDate?: string;
-    documentTypeId?: number | null;
-    customFieldValues?: Array<{ field: number; value: unknown }>;
-  }
-) {
+export async function updateDocumentAction(documentId: string, input: unknown) {
   requireFeature("documents");
+  const parsed = updateDocumentSchema.parse(input);
   const ctx = await buildRequestContext();
   if (!ctx.actorId) throw new Error("updateDocumentAction requires an authenticated actor");
-  return updateDocument(ctx.actorId, ctx.orgId, documentId, input);
+  return updateDocument(ctx.actorId, ctx.orgId, documentId, parsed);
+}
+
+// specs/03-api.md DELETE /documents/:id, wired to the document detail page's "Delete" action.
+export async function deleteDocumentAction(documentId: string) {
+  requireFeature("documents");
+  const ctx = await buildRequestContext();
+  if (!ctx.actorId) throw new Error("deleteDocumentAction requires an authenticated actor");
+  await deleteDocument(ctx.actorId, ctx.orgId, documentId);
+}
+
+// The Details tab's inline "create tag/correspondent/document type" pickers — creates the
+// Paperless object with proper tenant owner/group permissions (specs/12-agent-rules.md rule 4)
+// and returns it so the caller can immediately select it without a second round trip.
+export async function createPaperlessMetaAction(input: unknown) {
+  requireFeature("documents");
+  const parsed = createPaperlessMetaSchema.parse(input);
+  const ctx = await buildRequestContext();
+
+  const client = await paperlessFor(ctx.orgId);
+  const ownership = client.ownership;
+  if (!ownership) throw new Error("Expected tenant Paperless ownership");
+
+  if (parsed.kind === "tag") return createPaperlessTag(client, parsed.name, ownership, parsed.color);
+  if (parsed.kind === "correspondent") {
+    return createPaperlessCorrespondent(client, parsed.name, ownership);
+  }
+  return createPaperlessDocumentType(client, parsed.name, ownership);
+}
+
+// Paperless-ngx-style next/previous document navigation, scoped to the filter+sort the caller
+// is currently viewing (see getAdjacentDocumentId's own comment).
+export async function getAdjacentDocumentAction(
+  documentId: string,
+  direction: "next" | "previous",
+  filter: ListDocumentsOptions = {}
+) {
+  requireFeature("documents");
+  const parsedFilter = listDocumentsFilterSchema.parse(filter);
+  const ctx = await buildRequestContext();
+  const current = await getDocumentRow(documentId);
+  return getAdjacentDocumentId(ctx.orgId, current, parsedFilter, direction);
 }
 
 // specs/05-level-1-structure.md §Bulk business actions: Paperless's own bulk actions (type,

@@ -4,6 +4,8 @@ import { documentsConfig } from "@/config/documents";
 import { AuthorizationError, NotFoundError, ValidationError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
 import {
+  deletePaperlessDocument,
+  getPaperlessCorrespondentName,
   getPaperlessDocument,
   getPaperlessDocumentHistory,
   getPaperlessDocumentTypeName,
@@ -407,7 +409,12 @@ export async function listDocumentIds(
 
 export type DocumentDetails = Document & {
   connections: ConnectionWithOther[];
-  paperless: { customFields: Array<{ field: number; value: unknown }> } | null;
+  paperless: {
+    customFields: Array<{ field: number; value: unknown }>;
+    content: string;
+    tagIds: number[];
+    originalFileName: string;
+  } | null;
   history: DocumentHistoryEntry[];
 };
 
@@ -442,21 +449,41 @@ export async function getDocument(documentId: string): Promise<DocumentDetails> 
   const organizationId = doc.organization_id;
   const ctx: ServiceContext = { db, orgId: organizationId, actorId: null, correlationId: randomUUID() };
 
-  const [connections, paperless, history] = await Promise.all([
+  const [connections, paperless, history, resolvedByteSize] = await Promise.all([
     getConnections(ctx, "document", documentId),
     (async (): Promise<DocumentDetails["paperless"]> => {
       try {
         const client = await paperlessFor(organizationId);
         const paperlessDoc = await getPaperlessDocument(client, doc.paperless_document_id);
-        return { customFields: paperlessDoc.custom_fields };
+        return {
+          customFields: paperlessDoc.custom_fields,
+          content: paperlessDoc.content,
+          tagIds: paperlessDoc.tags,
+          originalFileName: paperlessDoc.original_file_name
+        };
       } catch {
         return null;
       }
     })(),
-    getDocumentHistory(documentId, { db, organizationId, paperlessDocumentId: doc.paperless_document_id })
+    getDocumentHistory(documentId, { db, organizationId, paperlessDocumentId: doc.paperless_document_id }),
+    // byte_size is only ever populated on the direct-upload path (sync-paperless-document.ts's
+    // own comment — Paperless's document API has no such field at all). Anything synced another
+    // way (webhook, reconciliation, import) shows "—" forever otherwise, which is what "file
+    // size is not shown" turned out to mean. A live HEAD request is cheap (no body on the wire,
+    // confirmed live) and never persisted — display-only, not a second source of truth.
+    doc.byte_size === null
+      ? (async () => {
+          try {
+            const client = await paperlessFor(organizationId);
+            return await client.headContentLength(`/api/documents/${doc.paperless_document_id}/download/`);
+          } catch {
+            return null;
+          }
+        })()
+      : Promise.resolve(doc.byte_size)
   ]);
 
-  return { ...doc, connections, paperless, history };
+  return { ...doc, byte_size: resolvedByteSize, connections, paperless, history };
 }
 
 export type DocumentHistoryEntry =
@@ -509,7 +536,7 @@ export async function getDocumentHistory(
     paperlessDocumentId = doc.paperless_document_id;
   }
 
-  const [paperlessEntries, businessEntries] = await Promise.all([
+  const [paperlessEntries, businessEntries, connectionEntries] = await Promise.all([
     (async (): Promise<DocumentHistoryEntry[]> => {
       try {
         const client = await paperlessFor(organizationId);
@@ -545,10 +572,37 @@ export async function getDocumentHistory(
         actorId: row.actor_id,
         metadata: row.metadata
       }));
+    })(),
+    // Connection create/delete events are logged with entity_type='connection' and the
+    // connection's own row id (connections.service.ts), never entity_type='document' — a
+    // document's own history needs a separate lookup by the document id appearing as either
+    // side of the connection in the event's metadata. Known gap: the >50-item async bulk-connect
+    // path logs one aggregate event with only the target entity's id, not each document's id, so
+    // a document connected that way won't show the event here — see bulkCreateConnections's own
+    // logEvent call.
+    (async (): Promise<DocumentHistoryEntry[]> => {
+      const { data: rows, error: auditError } = await db
+        .from("audit_logs")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .eq("entity_type", "connection")
+        .or(`metadata->>source_id.eq.${documentId},metadata->>target_id.eq.${documentId}`)
+        .order("created_at", { ascending: false });
+
+      if (auditError) throw auditError;
+
+      return (rows ?? []).map((row) => ({
+        source: "business" as const,
+        id: row.id,
+        timestamp: row.created_at,
+        action: row.action,
+        actorId: row.actor_id,
+        metadata: row.metadata
+      }));
     })()
   ]);
 
-  return [...paperlessEntries, ...businessEntries].sort((a, b) =>
+  return [...paperlessEntries, ...businessEntries, ...connectionEntries].sort((a, b) =>
     b.timestamp.localeCompare(a.timestamp)
   );
 }
@@ -567,6 +621,8 @@ export async function updateDocument(
     title?: string;
     documentDate?: string;
     documentTypeId?: number | null;
+    correspondentId?: number | null;
+    tagIds?: number[];
     customFieldValues?: Array<{ field: number; value: unknown }>;
   }
 ): Promise<Document> {
@@ -591,6 +647,8 @@ export async function updateDocument(
   if (input.title !== undefined) patch.title = input.title;
   if (input.documentDate !== undefined) patch.created = input.documentDate;
   if (input.documentTypeId !== undefined) patch.document_type = input.documentTypeId;
+  if (input.correspondentId !== undefined) patch.correspondent = input.correspondentId;
+  if (input.tagIds !== undefined) patch.tags = input.tagIds;
   if (input.customFieldValues !== undefined) patch.custom_fields = input.customFieldValues;
 
   if (Object.keys(patch).length === 0) return doc;
@@ -608,6 +666,14 @@ export async function updateDocument(
       ? toDocumentTypeKey(await getPaperlessDocumentTypeName(client, updated.document_type))
       : null;
   }
+  if (input.correspondentId !== undefined) {
+    mirrorUpdate.correspondent_name = updated.correspondent
+      ? await getPaperlessCorrespondentName(client, updated.correspondent)
+      : null;
+  }
+  // tagIds isn't mirrored (documents has no tags column, per specs/02 — tags stay
+  // Paperless-only), so a tags-only patch never populates mirrorUpdate below and correctly
+  // skips the mirror write entirely.
 
   let updatedRow = doc;
   if (Object.keys(mirrorUpdate).length > 0) {
@@ -634,6 +700,104 @@ export async function updateDocument(
   });
 
   return updatedRow;
+}
+
+// specs/03-api.md DELETE /documents/:id: "Soft-delete locally, delete in Paperless, cascade-mark
+// connections." The mark itself needs no extra write — getConnections() already treats a
+// document with deleted_at set as `isDeleted: true` on whichever side it's viewed from (same
+// mechanism specs/05 describes for a deleted entity), so a plain soft-delete here is sufficient.
+export async function deleteDocument(
+  userId: string,
+  organizationId: string,
+  documentId: string
+): Promise<void> {
+  const db = await createClient();
+  const { data: doc, error } = await db
+    .from("documents")
+    .select("*")
+    .eq("id", documentId)
+    .eq("organization_id", organizationId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!doc) throw new NotFoundError("Document not found");
+
+  const membership = await getMembership(organizationId, userId);
+  if (!membership || membership.role === "read-only") {
+    throw new AuthorizationError("You do not have write access to this organization");
+  }
+
+  const client = await paperlessFor(organizationId);
+  await deletePaperlessDocument(client, doc.paperless_document_id);
+
+  const admin = createAdminClient();
+  const { error: updateError } = await admin
+    .from("documents")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", documentId)
+    .eq("organization_id", organizationId);
+
+  if (updateError) throw updateError;
+
+  await logEvent({
+    actorId: userId,
+    action: "document.deleted",
+    entityType: "document",
+    entityId: documentId,
+    organizationId,
+    metadata: { title: doc.title }
+  });
+}
+
+// Lightweight sibling to getDocument() for callers that only need the mirror row itself (e.g.
+// next/previous navigation's sort-column values) — skips the connections/Paperless/history
+// fan-out getDocument() does for the full detail page render.
+export async function getDocumentRow(documentId: string): Promise<Document> {
+  const db = await createClient();
+  const { data: doc, error } = await db
+    .from("documents")
+    .select("*")
+    .eq("id", documentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!doc) throw new NotFoundError("Document not found");
+  return doc;
+}
+
+// Paperless-ngx-style "next document"/"previous document" navigation, scoped to whatever
+// filter+sort the caller arrived from (the document list page passes its current querystring
+// through as `ctx` on each row link — see documents-filter-bar.tsx). Reuses listDocuments()'s
+// own sort-column mapping and keyset comparison rather than a second implementation: a "next"
+// row is exactly what a one-row page starting right after the current document's own cursor
+// would return, in the same sort order; "previous" is the same query with the order reversed.
+export async function getAdjacentDocumentId(
+  organizationId: string,
+  current: Document,
+  options: ListDocumentsOptions,
+  direction: "next" | "previous"
+): Promise<string | null> {
+  const sort = options.sort ?? "created";
+  const sortColumn = SORT_COLUMNS[sort];
+  const baseAscending = options.sortDirection === "asc";
+  // "next" walks the list in its own displayed order; "previous" walks it backwards — so
+  // "previous" always queries with the opposite ascending/descending flag from the list's own.
+  const queryAscending = direction === "next" ? baseAscending : !baseAscending;
+
+  const sortValue = String((current as unknown as Record<string, unknown>)[sortColumn] ?? "");
+  const cursor = encodeDocumentCursor({ sortValue, id: current.id });
+
+  const { items } = await listDocuments(organizationId, {
+    ...options,
+    sort,
+    sortDirection: queryAscending ? "asc" : "desc",
+    cursor,
+    limit: 1
+  });
+
+  return items[0]?.id ?? null;
 }
 
 // Surfaces the upload pipeline's in-flight/failed state (validating, submitting, processing,
