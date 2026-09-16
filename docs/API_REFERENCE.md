@@ -368,6 +368,21 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `createExportAction({documentIds?, filter?, format}): Promise<{operationId, total}>` — always enqueues `worker/jobs/export.ts` (never runs synchronously, regardless of row count).
 - `getExportAction(operationId)` — polling read.
 
+## `src/modules/imports/` — Pomočnik Level 1
+- `type ImportJob`, `type ImportRow`, `type ImportMappingRecord`
+- `createImportJob(ctx, {kind, filename, size, fromMappingId?}): Promise<{importJobId, signedUrl, token, path}>` — validates file kind/size, inserts a draft via the caller context, and signs an upload URL in the private `import-sources` bucket.
+- `analyzeImportJob(ctx, id, {encoding?, delimiter?} = {}): Promise<{columns, rowCount, encoding?, delimiter?}>` — parses CSV/TSV/XLSX or a ZIP manifest, materializes every source row into `import_rows`, and persists a bounded preview in `import_jobs.options.analysis`.
+- `updateImportMapping(ctx, id, rawMapping): Promise<ImportJob>` — validates the mapping for the job kind and invalidates prior validation.
+- `validateImportJob(ctx, id): Promise<{ok, skippedDuplicate, needsReview, failed, unmatched?}>` — dry-runs all rows with the same planner used by execution; executable rows stay `pending`, permanent failures become terminal.
+- `startImportJob(ctx, id)`, `pauseImportJob(ctx, id)`, `resumeImportJob(ctx, id)`, `cancelImportJob(ctx, id): Promise<ImportJob>` — queue/control transitions around `run-import-chunk`.
+- `retryFailedRows(ctx, id): Promise<{count}>` — requeues only `status='failed'` rows and fixes counters using an exact affected-row count.
+- `listImportJobs(ctx): Promise<ImportJob[]>`, `getImportJob(ctx, id): Promise<ImportJob>`, `listImportRows(ctx, id, options?): Promise<{items,nextCursor}>`, `listImportMappings(ctx, kind?)`, `saveImportMapping(ctx, input)`, `getImportDocumentProgress(ctx, id)`
+- `imports.matching.ts`: `resolveEntityRowPlans()`, `resolveDocumentRowPlans()`, `parseFieldValue()` — shared dry-run/execution planner. `on_missing:"fail_row"` produces `ENTITY_NOT_FOUND`; `skip_connection` produces an executable plan flagged `needsReview`.
+- `imports.apply.ts`: `applyEntityLinks()`, `applyFieldWrites()`, `buildCustomFieldIdByKey()` — shared synchronous/deferred document-field and entity-link executor.
+- `run-import-chunk.ts`: `runImportChunk(orgId, importJobId): Promise<void>` — claims up to `importsConfig.chunkSize` pending rows, writes row outcomes in one bulk RPC, increments job counters once per chunk, and re-enqueues itself while the Redis control flag remains `running`.
+- `imports.actions.ts`: typed Server Action wrappers for the UI. These return `{data}` / `{error}` objects instead of redirecting because the wizard is interactive.
+- `imports.report.ts`: `buildImportReportCsv(job, rows): string`
+
 ## Route Handlers — Pomočnik
 
 Per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md): fetch/polling/streaming/download
@@ -382,6 +397,8 @@ surfaces only; everything else is a Server Action (see the modules above).
 | `POST /api/internal/paperless/document-consumed` | HMAC-verified post-consume webhook — see `docs/SECURITY.md`. |
 | `GET /api/search?q=` | Pomočnik Level 1. Entity name/identifier match, scoped to the active org — backs the two-interaction connection picker. Entities only today; documents aren't searchable from this endpoint. |
 | `GET /api/exports/[id]/download` | Pomočnik Level 1 (Milestone 7). Loads the `background_operations` row (RLS-scoped), issues a 5-minute signed URL against the private `exports` bucket, 307-redirects. |
+| `GET /api/imports/[id]` | Pomočnik Level 1 (Phase 3). Polling endpoint for import job state, validation summary, row counters, and document/OCR progress for document imports. |
+| `GET /api/imports/[id]/report` | Pomočnik Level 1 (Phase 3). Streams the current `import_rows` report as CSV with RFC 5987 filename support for non-ASCII source names. |
 
 ## `src/lib/api-response.ts`
 

@@ -1,7 +1,10 @@
 import type { ServiceContext } from "@/lib/service-context";
 import { ImportRowError, type ImportErrorCode } from "@/lib/import/errors";
 import { parseLocaleDate, parseLocaleNumber, type DateFormat } from "@/lib/import/locale";
-import { getEntityTypeByKey, getVisibleFieldSchema } from "@/modules/entity-types/entity-types.service";
+import {
+  getEntityTypeByKey,
+  getVisibleFieldSchema
+} from "@/modules/entity-types/entity-types.service";
 import type { EntityFieldDefinition, EntityFieldType } from "@/modules/entities/field-schema";
 import { normalizeIdentifier } from "@/modules/entities/identifier-normalization";
 import type { Relation } from "@/modules/connections/connections.service";
@@ -156,7 +159,13 @@ export async function resolveEntityRowPlans(
       plans.set(
         row.rowNumber,
         existingEntityId
-          ? { action: "update", entityId: existingEntityId, entityTypeId: entityType.id, displayName, data }
+          ? {
+              action: "update",
+              entityId: existingEntityId,
+              entityTypeId: entityType.id,
+              displayName,
+              data
+            }
           : { action: "create", entityTypeId: entityType.id, displayName, data }
       );
     } catch (err) {
@@ -254,6 +263,9 @@ export type DocumentRowPlan =
       archiveFileName: string;
       fieldWrites: ResolvedFieldWrite[];
       entityLinks: ResolvedEntityLink[];
+      needsReview?: true;
+      reviewCode?: ImportErrorCode;
+      reviewMessage?: string;
     }
   | {
       action: "connect_existing";
@@ -261,6 +273,9 @@ export type DocumentRowPlan =
       paperlessDocumentId: number;
       fieldWrites: ResolvedFieldWrite[];
       entityLinks: ResolvedEntityLink[];
+      needsReview?: true;
+      reviewCode?: ImportErrorCode;
+      reviewMessage?: string;
     }
   | {
       // specs/06-importer.md §Duplicates: the default strategy's second clause — a skipped
@@ -268,6 +283,9 @@ export type DocumentRowPlan =
       action: "skip_duplicate";
       documentId: string;
       entityLinks: ResolvedEntityLink[];
+      needsReview?: true;
+      reviewCode?: ImportErrorCode;
+      reviewMessage?: string;
     }
   | { action: "error"; code: ImportErrorCode; message: string };
 
@@ -295,6 +313,15 @@ export async function resolveDocumentRowPlans(
     try {
       const entityLinks = resolveEntityLinksForRow(mapping.entityLinks, row, linkMatches);
       const fieldWrites = resolveFieldWritesForRow(mapping.fields, row);
+      const linkReview = reviewEntityLinks(entityLinks);
+      if (linkReview?.fatal) {
+        plans.set(row.rowNumber, {
+          action: "error",
+          code: "ENTITY_NOT_FOUND",
+          message: linkReview.message
+        });
+        continue;
+      }
       const match = documentMatches.get(row.rowNumber);
 
       if (kind === "metadata_only") {
@@ -311,7 +338,8 @@ export async function resolveDocumentRowPlans(
           documentId: match.documentId,
           paperlessDocumentId: match.paperlessDocumentId,
           fieldWrites,
-          entityLinks
+          entityLinks,
+          ...linkReview?.planFlags
         });
         continue;
       }
@@ -333,10 +361,16 @@ export async function resolveDocumentRowPlans(
             action: "create_document",
             archiveFileName: match.archiveFileName,
             fieldWrites,
-            entityLinks
+            entityLinks,
+            ...linkReview?.planFlags
           });
         } else {
-          plans.set(row.rowNumber, { action: "skip_duplicate", documentId: match.documentId, entityLinks });
+          plans.set(row.rowNumber, {
+            action: "skip_duplicate",
+            documentId: match.documentId,
+            entityLinks,
+            ...linkReview?.planFlags
+          });
         }
         continue;
       }
@@ -354,7 +388,8 @@ export async function resolveDocumentRowPlans(
         action: "create_document",
         archiveFileName: match.archiveFileName,
         fieldWrites,
-        entityLinks
+        entityLinks,
+        ...linkReview?.planFlags
       });
     } catch (err) {
       plans.set(row.rowNumber, toErrorPlan(err));
@@ -393,7 +428,9 @@ async function batchMatchDocuments(
       // specs/06-importer.md §Matching: "exact, then case-insensitive, then basename-without-
       // extension" — checked in that order.
       const entry =
-        byName.get(raw) ?? byLowerName.get(raw.toLowerCase()) ?? byBaseName.get(basenameNoExt(raw).toLowerCase());
+        byName.get(raw) ??
+        byLowerName.get(raw.toLowerCase()) ??
+        byBaseName.get(basenameNoExt(raw).toLowerCase());
       if (entry) matches.set(row.rowNumber, { archiveFileName: entry.fileName });
     }
     return matches;
@@ -421,7 +458,10 @@ async function batchMatchDocuments(
     if (error) throw error;
     for (const doc of data ?? []) {
       if (doc.checksum) {
-        byLookup.set(doc.checksum, { documentId: doc.id, paperlessDocumentId: doc.paperless_document_id });
+        byLookup.set(doc.checksum, {
+          documentId: doc.id,
+          paperlessDocumentId: doc.paperless_document_id
+        });
       }
     }
   } else if (strategy === "paperless_id") {
@@ -449,14 +489,20 @@ async function batchMatchDocuments(
       .in("title", distinct);
     if (error) throw error;
     for (const doc of data ?? []) {
-      byLookup.set(doc.title, { documentId: doc.id, paperlessDocumentId: doc.paperless_document_id });
+      byLookup.set(doc.title, {
+        documentId: doc.id,
+        paperlessDocumentId: doc.paperless_document_id
+      });
     }
   }
 
   for (const [rowNumber, raw] of values) {
     const match = byLookup.get(raw);
     if (match) {
-      matches.set(rowNumber, { documentId: match.documentId, paperlessDocumentId: match.paperlessDocumentId });
+      matches.set(rowNumber, {
+        documentId: match.documentId,
+        paperlessDocumentId: match.paperlessDocumentId
+      });
     }
   }
 
@@ -490,10 +536,12 @@ async function batchMatchEntityLinks(
 
       if (link.matchBy === "identifier" && link.identifierKind) {
         const normalized = normalizeIdentifier(link.identifierKind, raw);
-        if (!byIdentifierKind.has(link.identifierKind)) byIdentifierKind.set(link.identifierKind, new Set());
+        if (!byIdentifierKind.has(link.identifierKind))
+          byIdentifierKind.set(link.identifierKind, new Set());
         byIdentifierKind.get(link.identifierKind)!.add(normalized);
       } else if (link.matchBy === "display_name") {
-        if (!byDisplayNameType.has(link.entityTypeKey)) byDisplayNameType.set(link.entityTypeKey, new Set());
+        if (!byDisplayNameType.has(link.entityTypeKey))
+          byDisplayNameType.set(link.entityTypeKey, new Set());
         byDisplayNameType.get(link.entityTypeKey)!.add(raw);
       } else if (link.matchBy === "id") {
         if (!byIdType.has(link.entityTypeKey)) byIdType.set(link.entityTypeKey, new Set());
@@ -584,13 +632,45 @@ function resolveEntityLinksForRow(
           : {})
       });
     } else if (link.onMissing === "fail_row") {
-      resolved.push({ outcome: "fail_row", message: `No match for "${raw}" and on_missing is fail_row` });
+      resolved.push({
+        outcome: "fail_row",
+        message: `No match for "${raw}" and on_missing is fail_row`
+      });
     } else {
       resolved.push({ outcome: "skipped", relation: link.relation });
     }
   }
 
   return resolved;
+}
+
+function reviewEntityLinks(links: ResolvedEntityLink[]): {
+  fatal?: true;
+  message: string;
+  planFlags?: {
+    needsReview: true;
+    reviewCode: ImportErrorCode;
+    reviewMessage: string;
+  };
+} | null {
+  const failed = links.find((link) => link.outcome === "fail_row");
+  if (failed?.outcome === "fail_row") {
+    return { fatal: true, message: failed.message };
+  }
+
+  if (links.some((link) => link.outcome === "skipped")) {
+    const message = "One or more entity links were skipped because no matching entity was found";
+    return {
+      message,
+      planFlags: {
+        needsReview: true,
+        reviewCode: "ENTITY_NOT_FOUND",
+        reviewMessage: message
+      }
+    };
+  }
+
+  return null;
 }
 
 function resolveFieldWritesForRow(
@@ -604,7 +684,10 @@ function resolveFieldWritesForRow(
     if (raw === undefined || raw.trim() === "") continue;
 
     if (field.target === "document_date") {
-      writes.push({ target: "document_date", value: parseLocaleDate(raw.trim(), field.dateFormat) });
+      writes.push({
+        target: "document_date",
+        value: parseLocaleDate(raw.trim(), field.dateFormat)
+      });
     } else {
       writes.push({
         target: "custom_field",

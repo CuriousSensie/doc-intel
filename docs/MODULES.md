@@ -14,6 +14,7 @@ those functions read/write, see [DATABASE.md](DATABASE.md).
 | Billing | Optional | Stripe |
 | Credits | Optional | Billing |
 | Documents | Optional | Organizations, Supabase Storage, Paperless — Pomočnik |
+| Imports | Optional | Organizations, Documents, Entities, Supabase Storage, Paperless, worker — Pomočnik |
 | Notifications | Optional | Auth |
 | Admin | Optional | Auth |
 | Audit Logs | Recommended | Auth (the write side, `src/lib/events/`, has no dependency on Admin — only the `/admin/audit-log` read UI does) |
@@ -397,6 +398,37 @@ private-bucket-plus-signed-URL pattern `document-uploads` already established, n
 **Not built**: the spec's optional "original files as a ZIP, worker-generated, expiring link"
 add-on. Only row export (CSV/XLSX) exists. See `PHASE2_HANDOFF.md` for the reasoning and what
 isolation test 16 (which needs this feature to test) currently looks like as a result.
+
+## Imports — Pomočnik Level 1
+
+**Purpose**: guided migration of legacy data into Pomočnik: entities from CSV/XLSX,
+documents from ZIP archives with optional CSV/XLSX manifests, and metadata-only updates against
+existing documents. The UI is `/dashboard/imports`; the core code lives in
+`src/modules/imports/` and `src/components/imports/`.
+
+**Dependency**: Organizations, Supabase Storage (`import-sources`), Documents, Entities,
+Connections, Paperless, Redis/BullMQ, and the worker process for real execution.
+
+**Pipeline**: `createImportJob()` creates a draft and signed source upload URL; `analyzeImportJob()`
+parses headers/sample rows and materializes every source row; `updateImportMapping()` stores the
+user-confirmed mapping; `validateImportJob()` dry-runs all rows using the same planner as the
+worker; `startImportJob()` starts a bounded self-perpetuating chunk chain; reports stream from
+`import_rows` as CSV. The UI makes validate/review mandatory before the run button becomes
+available.
+
+**Scale and isolation**: executable dry-run rows stay `pending`, because `claim_import_chunk()`
+claims only pending rows. Permanent validation failures are terminal and count toward progress
+before execution. `on_missing:"fail_row"` entity links become `ENTITY_NOT_FOUND` rows during
+planning, so a tenant cannot map an import to another tenant's identifier; `on_missing:"skip_connection"`
+still lets the document row execute but records `needs_review`. Milestone 9
+adds `scripts/verify-phase3-m9.ts`, which generated a 10,000-document ZIP with XLSX manifest and
+verified analyze + validate live in 43.5 seconds (16.6s analyze, 27.0s validate) without starting
+10,000 OCR jobs.
+
+**How to extend**: all matching behavior belongs in `imports.matching.ts`; all writes belong in
+`imports.apply.ts` or `run-import-chunk.ts`. Keep validation and execution on the same planner.
+The deliberately deferred `custom_field` document-matching strategy remains rejected at the
+schema layer until there is a live-verified batched custom-field-value lookup.
 
 ## Admin
 

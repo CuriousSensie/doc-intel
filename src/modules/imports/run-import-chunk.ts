@@ -24,7 +24,12 @@ import {
   type EntityRowPlan,
   type RawImportRow
 } from "./imports.matching";
-import { mappingSchemaForKind, type DocumentImportMapping, type EntityImportMapping, type MetadataOnlyImportMapping } from "./imports.schemas";
+import {
+  mappingSchemaForKind,
+  type DocumentImportMapping,
+  type EntityImportMapping,
+  type MetadataOnlyImportMapping
+} from "./imports.schemas";
 import type { ImportJob, ImportRow } from "./imports.service";
 
 type AdminDb = ReturnType<typeof createAdminClient>;
@@ -67,7 +72,12 @@ async function fetchJob(admin: AdminDb, orgId: string, importJobId: string): Pro
   return data;
 }
 
-async function claimChunk(admin: AdminDb, orgId: string, importJobId: string, limit: number): Promise<ClaimedRow[]> {
+async function claimChunk(
+  admin: AdminDb,
+  orgId: string,
+  importJobId: string,
+  limit: number
+): Promise<ClaimedRow[]> {
   const { data, error } = await admin.rpc("claim_import_chunk", {
     p_import_job_id: importJobId,
     p_organization_id: orgId,
@@ -147,7 +157,12 @@ export async function runImportChunk(orgId: string, importJobId: string): Promis
     return;
   }
 
-  const ctx: ServiceContext = { db: admin, orgId, actorId: job.created_by, correlationId: randomUUID() };
+  const ctx: ServiceContext = {
+    db: admin,
+    orgId,
+    actorId: job.created_by,
+    correlationId: randomUUID()
+  };
   const schema = mappingSchemaForKind(job.kind);
   const mappingParsed = schema.safeParse(job.mapping);
 
@@ -164,7 +179,10 @@ export async function runImportChunk(orgId: string, importJobId: string): Promis
     return;
   }
 
-  const rows: RawImportRow[] = claimed.map((r) => ({ rowNumber: r.row_number, raw: r.raw as unknown as string[] }));
+  const rows: RawImportRow[] = claimed.map((r) => ({
+    rowNumber: r.row_number,
+    raw: r.raw as unknown as string[]
+  }));
   let archive: OpenedJobArchive | null = null;
 
   try {
@@ -179,9 +197,18 @@ export async function runImportChunk(orgId: string, importJobId: string): Promis
             archiveEntries: archive?.entries
           });
 
-    const customFieldIdByKey = job.kind === "entities" ? new Map<string, number | null>() : await buildCustomFieldIdByKey(ctx);
+    const customFieldIdByKey =
+      job.kind === "entities"
+        ? new Map<string, number | null>()
+        : await buildCustomFieldIdByKey(ctx);
 
-    const rowUpdates: Array<{ id: number; status: string; result: Json; error_code: string | null; error_message: string | null }> = [];
+    const rowUpdates: Array<{
+      id: number;
+      status: string;
+      result: Json;
+      error_code: string | null;
+      error_message: string | null;
+    }> = [];
     const retryRowIds: number[] = [];
     let succeededDelta = 0;
     let failedDelta = 0;
@@ -303,7 +330,13 @@ async function bulkFail(
   const { error } = await admin.rpc("bulk_update_import_rows", {
     p_import_job_id: importJobId,
     p_organization_id: orgId,
-    p_rows: rows.map((r) => ({ id: r.id, status: "failed", result: {}, error_code: code, error_message: message })) as unknown as Json
+    p_rows: rows.map((r) => ({
+      id: r.id,
+      status: "failed",
+      result: {},
+      error_code: code,
+      error_message: message
+    })) as unknown as Json
   });
   if (error) throw error;
 
@@ -327,7 +360,12 @@ async function executeRowPlan(
   customFieldIdByKey: Map<string, number | null>
 ): Promise<RowOutcome> {
   if (!plan) {
-    return { status: "failed", result: {}, errorCode: "UNKNOWN", errorMessage: "No plan resolved for this row" };
+    return {
+      status: "failed",
+      result: {},
+      errorCode: "UNKNOWN",
+      errorMessage: "No plan resolved for this row"
+    };
   }
 
   if (plan.action === "error") {
@@ -343,25 +381,47 @@ async function executeRowPlan(
   if (plan.action === "create" || plan.action === "update") {
     const entity =
       plan.action === "create"
-        ? await createEntity(ctx, { entityTypeId: plan.entityTypeId, displayName: plan.displayName, data: plan.data })
-        : await updateEntity(ctx, plan.entityId, { displayName: plan.displayName, data: plan.data });
+        ? await createEntity(ctx, {
+            entityTypeId: plan.entityTypeId,
+            displayName: plan.displayName,
+            data: plan.data
+          })
+        : await updateEntity(ctx, plan.entityId, {
+            displayName: plan.displayName,
+            data: plan.data
+          });
     return { status: "ok", result: { entityId: entity.id, action: plan.action } };
   }
 
   if (plan.action === "skip_duplicate") {
     const links = await applyEntityLinks(ctx, plan.documentId, plan.entityLinks);
-    return { status: "skipped_duplicate", result: { documentId: plan.documentId, links } };
+    return {
+      status: plan.needsReview ? "needs_review" : "skipped_duplicate",
+      result: { documentId: plan.documentId, links },
+      errorCode: plan.reviewCode,
+      errorMessage: plan.reviewMessage
+    };
   }
 
   if (plan.action === "connect_existing") {
     const links = await applyEntityLinks(ctx, plan.documentId, plan.entityLinks);
     await applyFieldWrites(ctx, plan.paperlessDocumentId, plan.fieldWrites, customFieldIdByKey);
-    return { status: "ok", result: { documentId: plan.documentId, links } };
+    return {
+      status: plan.needsReview ? "needs_review" : "ok",
+      result: { documentId: plan.documentId, links },
+      errorCode: plan.reviewCode,
+      errorMessage: plan.reviewMessage
+    };
   }
 
   // plan.action === "create_document"
   if (!archivePath) {
-    return { status: "failed", result: {}, errorCode: "UNKNOWN", errorMessage: "Archive not available for this row" };
+    return {
+      status: "failed",
+      result: {},
+      errorCode: "UNKNOWN",
+      errorMessage: "Archive not available for this row"
+    };
   }
 
   const uploadId = await createDocumentUploadFromArchiveEntry(
@@ -374,13 +434,15 @@ async function executeRowPlan(
   );
 
   return {
-    status: "ok",
+    status: plan.needsReview ? "needs_review" : "ok",
     result: {
       uploadId,
       ingestPending: true,
       pendingEntityLinks: plan.entityLinks,
       pendingFieldWrites: plan.fieldWrites
-    }
+    },
+    errorCode: plan.reviewCode,
+    errorMessage: plan.reviewMessage
   };
 }
 

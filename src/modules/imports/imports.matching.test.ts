@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { ServiceContext } from "@/lib/service-context";
 import { resolveDocumentRowPlans, resolveEntityRowPlans } from "./imports.matching";
-import type { DocumentImportMapping, EntityImportMapping, MetadataOnlyImportMapping } from "./imports.schemas";
+import type {
+  DocumentImportMapping,
+  EntityImportMapping,
+  MetadataOnlyImportMapping
+} from "./imports.schemas";
 
 // Same Proxy-based mock-DB pattern as connections.service.test.ts/entities.service.test.ts —
 // responses queued per table, consumed in call order.
@@ -87,7 +91,9 @@ describe("resolveEntityRowPlans", () => {
   it("plans an update when the identifier matches an existing entity", async () => {
     const db = makeDb({
       entity_types: [{ data: CUSTOMER_ENTITY_TYPE, error: null }],
-      entity_identifiers: [{ data: [{ entity_id: "existing-entity", normalized: "SI12345678" }], error: null }]
+      entity_identifiers: [
+        { data: [{ entity_id: "existing-entity", normalized: "SI12345678" }], error: null }
+      ]
     });
 
     const plans = await resolveEntityRowPlans(makeCtx(db), mapping, [
@@ -151,7 +157,10 @@ describe("resolveDocumentRowPlans (kind: documents)", () => {
       archiveEntries: [{ fileName: "invoice-1.pdf", uncompressedSize: 100 }]
     });
 
-    expect(plans.get(1)).toMatchObject({ action: "create_document", archiveFileName: "invoice-1.pdf" });
+    expect(plans.get(1)).toMatchObject({
+      action: "create_document",
+      archiveFileName: "invoice-1.pdf"
+    });
   });
 
   it("falls back to a case-insensitive match, then a basename-without-extension match", async () => {
@@ -206,7 +215,9 @@ describe("resolveDocumentRowPlans (kind: documents)", () => {
     };
     const db = makeDb({
       documents: [{ data: [{ id: "existing-doc", checksum: "abc123" }], error: null }],
-      entity_identifiers: [{ data: [{ entity_id: "cust-1", normalized: "SI12345678" }], error: null }]
+      entity_identifiers: [
+        { data: [{ entity_id: "cust-1", normalized: "SI12345678" }], error: null }
+      ]
     });
 
     const plans = await resolveDocumentRowPlans(makeCtx(db), "documents", {
@@ -240,7 +251,7 @@ describe("resolveDocumentRowPlans (kind: documents)", () => {
     expect(plans.get(1)).toMatchObject({ action: "error", code: "DUPLICATE" });
   });
 
-  it("resolves entity links per on_missing: create / skip_connection / fail_row", async () => {
+  it("fails the row for on_missing fail_row instead of carrying a dead link into execution", async () => {
     const mapping: DocumentImportMapping = {
       documentBy: { strategy: "filename", column: 0 },
       entityLinks: [
@@ -259,8 +270,39 @@ describe("resolveDocumentRowPlans (kind: documents)", () => {
       archiveEntries: [{ fileName: "invoice.pdf", uncompressedSize: 1 }]
     });
 
+    expect(plans.get(1)).toMatchObject({
+      action: "error",
+      code: "ENTITY_NOT_FOUND",
+      message: 'No match for "SI333" and on_missing is fail_row'
+    });
+  });
+
+  it("keeps on_missing skip_connection executable but flags the row for review", async () => {
+    const mapping: DocumentImportMapping = {
+      documentBy: { strategy: "filename", column: 0 },
+      entityLinks: [
+        CUSTOMER_LINK({ column: 1, onMissing: "create" }),
+        CUSTOMER_LINK({ column: 2, onMissing: "skip_connection" })
+      ],
+      fields: [],
+      duplicateStrategy: "skip"
+    };
+    const db = makeDb({ entity_identifiers: [{ data: [], error: null }] });
+
+    const plans = await resolveDocumentRowPlans(makeCtx(db), "documents", {
+      mapping,
+      rows: [{ rowNumber: 1, raw: ["invoice.pdf", "SI111", "SI222"] }],
+      archiveEntries: [{ fileName: "invoice.pdf", uncompressedSize: 1 }]
+    });
+
     const plan = plans.get(1) as { entityLinks: Array<{ outcome: string }> };
-    expect(plan.entityLinks.map((l) => l.outcome)).toEqual(["create", "skipped", "fail_row"]);
+    expect(plan).toMatchObject({
+      action: "create_document",
+      archiveFileName: "invoice.pdf",
+      needsReview: true,
+      reviewCode: "ENTITY_NOT_FOUND"
+    });
+    expect(plan.entityLinks.map((l) => l.outcome)).toEqual(["create", "skipped"]);
   });
 
   it("carries the identifier kind+value through a create outcome (regression: entities auto-created via a link came out with no identifier)", async () => {
@@ -295,7 +337,9 @@ describe("resolveDocumentRowPlans (kind: metadata_only)", () => {
       fields: []
     };
     const db = makeDb({
-      documents: [{ data: [{ id: "doc-1", checksum: "abc123", paperless_document_id: 42 }], error: null }]
+      documents: [
+        { data: [{ id: "doc-1", checksum: "abc123", paperless_document_id: 42 }], error: null }
+      ]
     });
 
     const plans = await resolveDocumentRowPlans(makeCtx(db), "metadata_only", {

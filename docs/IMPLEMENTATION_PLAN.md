@@ -559,19 +559,102 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 
 ## Phase 3 — Importer
 
-- [ ] Migration: `import_jobs`, `import_rows`, `import_mappings`
-- [ ] `src/modules/imports/` — all three kinds (entities, documents, metadata_only)
+All work is on `feat/phase3-imports` (not yet merged to `main`), commits 9c0135e through
+ae4c984. Milestones 1–8 are implemented and verified against the real live stack (Supabase
+Cloud + the pinned Paperless container + a real worker — no mocked Paperless anywhere, per
+`CLAUDE.md`). Milestone 9 is now implemented and awaiting review: importer isolation test #11
+is live, the `on_missing:"fail_row"`/`skip_connection` planner bug is fixed, and the 10k
+ZIP+XLSX analyze/validate harness has been run against the live stack. See
+`PHASE3_MILESTONE9_REVIEW.md` for changed files, verification, and remaining boundaries. All
+phase documentation remains local pending final closeout.
+
+Per this file's own rule, every item below is checked only once merged to `main` — none of
+Phase 3 has been merged yet, so every checkbox stays open regardless of how much is actually
+built and verified. See `docs/PHASE3_HANDOFF.md` for the full walkthrough, what's genuinely
+verified vs. deferred, and how to manually exercise the pipeline.
+
+- [ ] Migration: `import_jobs`, `import_rows`, `import_mappings` — done (M1,
+      `20260915112736_phase3_import_foundation.sql`), plus `20260916090000_import_bulk_write_functions.sql`
+      (`bulk_update_import_rows`, `increment_import_job_progress`) and
+      `20260916140000_documents_query_perf.sql` (M7's query-perf indexes + RPC). All four
+      migrations pushed to the live Supabase Cloud project this session; `check-rls-coverage.ts`
+      passes.
+- [ ] `src/modules/imports/` — all three kinds (entities, documents, metadata_only) — done (M5/M6):
+      `imports.schemas.ts`, `imports.matching.ts` (shared plan resolution — the same function
+      resolves what validate() previews AND what run-import-chunk.ts actually executes),
+      `imports.apply.ts` (entity-link/field-write application, shared between the synchronous
+      documents/metadata_only path and sync-paperless-document.ts's deferred path for
+      newly-created documents), `imports.archive.ts`, `imports.service.ts`, `imports.report.ts`,
+      `imports.actions.ts`. `custom_field` document-matching strategy is a deliberate,
+      documented deferral (ADR-0016) — `filename`/`checksum`/`paperless_id` are implemented.
 - [ ] `src/lib/import/parse.ts` (CSV/TSV/XLSX/ZIP, encoding/delimiter sniff, sl-SI parsing,
-      unit tests)
-- [ ] Full pipeline: analyze → map → validate → review → run → report
-- [ ] `worker/jobs/run-import-row.ts` (chunked, per-row transactional, retry, bounded
-      outstanding submissions)
-- [ ] Pause/resume/cancel/retry-failed
-- [ ] Duplicate-file connections-still-applied behavior
-- [ ] Per-job completion independent of OCR-queue drain
-- [ ] `GET /imports/:id/report`
-- [ ] Docs updated
-- [ ] **Phase 3 exit criteria met**
+      unit tests) — done (M4): streaming CSV/TSV (csv-parse + iconv-lite), streaming XLSX
+      (exceljs's `WorkbookReader`, never the in-memory `Workbook`), ZIP central-directory
+      listing/extraction (yauzl). `.xls` deliberately unsupported (ADR-0015 — SheetJS is off the
+      npm registry and has a CVE history for a parser that reads untrusted files). Encoding
+      detection redesigned after live verification showed chardet scores a genuine windows-1250
+      sample and windows-1252 an exact tied confidence — only a confident UTF-8 read is trusted;
+      everything else falls back to windows-1250 exactly as specs/06 directs, rather than
+      trusting whichever codepage cousin chardet ranked first by coincidence. 44 unit tests, all
+      against real chardet/iconv-lite/exceljs/yauzl (no mocks).
+- [ ] Full pipeline: analyze → map → validate → review → run → report — analyze/map/validate/run
+      done (M5/M6) and verified live (real entities import with create-then-update-on-reimport;
+      real ZIP+manifest documents import through the real M3 ingest pipeline, real Paperless
+      document, real deferred connection creation, real cross-import entity reuse by
+      identifier). M8 now adds the localized four-stage wizard, persistent preview and review,
+      explicit acknowledgement, paginated row results, saved mappings and separate OCR progress.
+      The real browser CSV path is verified through upload, validation, execution and report.
+      `GET /imports/:id/report` done (Route Handler, live CSV generation from `import_rows`,
+      never a pre-built file).
+- [ ] `worker/jobs/run-import-chunk.ts` (chunked, per-row transactional, retry, bounded
+      outstanding submissions) — done (M6), renamed from the originally-reserved
+      `run-import-row` queue since execution is per-*chunk* (default 50 rows,
+      `importsConfig.chunkSize`), not per-row. Self-perpetuating job chain (each chunk
+      re-enqueues itself on completion) bounds per-org concurrency
+      (`importsConfig.defaultConcurrencyPerOrganization`, default 4) without a fixed worker
+      pool — `startImportJob()` enqueues exactly N initial chains. Per-row `attempts`
+      (max 3, transient-vs-permanent distinguished) is separate from BullMQ's own job-level
+      retry, which only covers whole-chunk infrastructure failures.
+- [ ] Pause/resume/cancel/retry-failed — done (M5/M6): a Redis control flag
+      (`src/lib/import/control.ts`) checked before every chunk claim/reschedule, so pause/cancel
+      take effect for chunks still queued, not just future ones; in-flight chunks finish.
+      `retryFailedRows()` re-queues only `status='failed'` rows.
+- [ ] Duplicate-file connections-still-applied behavior — done (M6): `skip_duplicate` plans
+      still run `applyEntityLinks()` against the pre-existing document.
+- [ ] Per-job completion independent of OCR-queue drain — done: a `create_document` row is
+      marked `ok` once its `document_uploads` row exists and ingestion is enqueued, not once
+      OCR/full-text indexing finishes (that was already Phase 3 M3's own design). Its entity
+      links/field writes are deferred to `sync-paperless-document.ts` (which runs once the
+      document exists in our mirror, well before OCR completes) — verified live, including a
+      real cross-import entity match by identifier.
+- [ ] `GET /imports/:id/report` — done (M5), see above.
+- [ ] Docs updated — this file, `SPEC_TRACEABILITY.md`, `DATABASE.md`, `MODULES.md`,
+      `API_REFERENCE.md`, and `ARCHITECTURE.md` now describe the Phase 3 module/runtime. Final
+      polishing remains local until the phase is reviewed.
+- [ ] M8 UI and feature flag — implemented and committed as ae4c984; see
+      `PHASE3_MILESTONE8_REVIEW.md`.
+- [ ] M9 scale/isolation verification — implemented, awaiting review. `e2e/isolation.spec.ts`
+      now includes isolation test #11 and passes live. `scripts/verify-phase3-m9.ts --rows 10000`
+      generated a 10,000-document ZIP with XLSX manifest and ran the real analyze/validate path
+      in 43.5s total (16.6s analyze, 27.0s validate, 0 row errors). The full
+      `--rows 10000 --execute` run is prepared but intentionally not started without an operator
+      window because it would enqueue 10,000 Paperless ingests/OCR tasks.
+- [ ] **Phase 3 exit criteria met** — not yet merged to `main`; the only remaining operational
+      gate is deciding when to run the full 10k `--execute` import against Paperless.
+
+**Two real, load-bearing bugs were found and fixed only by live verification, not by any unit
+test** — recorded in `docs/PHASE3_HANDOFF.md` and worth restating here since they're the kind
+of thing worth remembering as a class of risk: (1) `validateImportJob()`'s dry run originally
+wrote the *real* terminal row status (`ok`) during validation — the same column
+`claim_import_chunk()` reads to find work — so every import silently stalled at
+`processed_rows=0` forever once validated; fixed so only a genuine `action:"error"` plan gets a
+terminal status from validate(), everything executable stays `pending` for the real run. (2)
+Both the direct entities-import path and entity-links' `on_missing:"create"` path originally
+built entities without ever writing the matched identifier value into the entity's own `data` —
+so a freshly imported/auto-created entity had no `entity_identifiers` row at all, defeating
+"mappings are saved per tenant and reusable" (a monthly re-import would create duplicates
+forever instead of updating). Both are covered by regression tests now, but the tests only
+exist *because* the live run caught them first.
 
 ## Phase 4 — Rules Engine
 

@@ -24,7 +24,6 @@ import type { ServiceContext } from "@/lib/service-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadStorageObjectToTempFile } from "@/lib/supabase/storage-stream";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
-import { getMembership } from "@/modules/organizations/organizations.service";
 import { setImportControl } from "@/lib/import/control";
 import type { Database, Json } from "@/types/database";
 
@@ -57,7 +56,13 @@ type AdminDb = ReturnType<typeof createAdminClient>;
 // explicit role check instead of RLS.
 async function assertOrgWriteAccess(ctx: ServiceContext): Promise<void> {
   if (!ctx.actorId) throw new AuthorizationError("Authentication required");
-  const membership = await getMembership(ctx.orgId, ctx.actorId);
+  const { data: membership, error } = await ctx.db
+    .from("organization_members")
+    .select("role")
+    .eq("organization_id", ctx.orgId)
+    .eq("user_id", ctx.actorId)
+    .maybeSingle();
+  if (error) throw error;
   if (!membership || membership.role === "read-only") {
     throw new AuthorizationError("You do not have write access to this organization");
   }
@@ -642,7 +647,16 @@ type RowVerdict = {
 // unaffected by this — the review screen's "N ok / N duplicates / N needs review / N failed"
 // counts still reflect what each row's plan actually resolves to.
 function planToVerdict(plan: unknown): RowVerdict {
-  const p = plan as { action?: string; code?: ImportErrorCode; message?: string } | undefined;
+  const p = plan as
+    | {
+        action?: string;
+        code?: ImportErrorCode;
+        message?: string;
+        needsReview?: boolean;
+        reviewCode?: ImportErrorCode;
+        reviewMessage?: string;
+      }
+    | undefined;
 
   if (!p) {
     return {
@@ -670,11 +684,19 @@ function planToVerdict(plan: unknown): RowVerdict {
     return {
       status: "pending",
       result: p as Record<string, unknown>,
-      summaryKey: "skippedDuplicate"
+      errorCode: p.reviewCode,
+      errorMessage: p.reviewMessage,
+      summaryKey: p.needsReview ? "needsReview" : "skippedDuplicate"
     };
   }
 
-  return { status: "pending", result: p as Record<string, unknown>, summaryKey: "ok" };
+  return {
+    status: "pending",
+    result: p as Record<string, unknown>,
+    errorCode: p.reviewCode,
+    errorMessage: p.reviewMessage,
+    summaryKey: p.needsReview ? "needsReview" : "ok"
+  };
 }
 
 async function loadArchiveEntriesIfNeeded(job: ImportJob): Promise<ZipEntryInfo[] | undefined> {

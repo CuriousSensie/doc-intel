@@ -93,6 +93,46 @@ through the service-role admin client from `src/lib/supabase/admin.ts`, called o
 code that has already done its own authorization check. See
 [SECURITY.md](SECURITY.md#service-role) for the exact rule.
 
+## Import flow
+
+Phase 3's importer is intentionally split between short request-time operations and durable
+worker execution. The browser uploads the source file directly to the private `import-sources`
+bucket, then Server Actions call `analyzeImportJob()`, `updateImportMapping()`, and
+`validateImportJob()` under a `ServiceContext`. The dry run materializes and plans every row but
+does not write entities, documents, fields, or connections.
+
+```mermaid
+sequenceDiagram
+  participant UI as Import wizard
+  participant Actions as imports.actions.ts
+  participant Storage as Supabase Storage
+  participant DB as Postgres
+  participant Worker as run-import-chunk
+  participant Paperless
+
+  UI->>Actions: createImportJob(kind, file metadata)
+  Actions->>DB: insert import_jobs draft
+  Actions-->>UI: signed upload URL
+  UI->>Storage: PUT source file
+  UI->>Actions: analyzeImportJob()
+  Actions->>Storage: download source
+  Actions->>DB: bulk insert import_rows
+  UI->>Actions: validateImportJob()
+  Actions->>DB: write per-row dry-run verdicts
+  UI->>Actions: startImportJob()
+  Actions->>Worker: enqueue bounded chunk chains
+  Worker->>DB: claim pending rows
+  Worker->>Paperless: submit document files when needed
+  Worker->>DB: bulk row outcomes + progress counters
+```
+
+`imports.matching.ts` is the shared planner for dry run and real execution, so validation cannot
+promise one behavior while the worker performs another. Rows that can execute remain
+`pending` after validation because `claim_import_chunk()` claims only `pending`; rows with
+permanent validation errors are terminal and already counted. The worker updates counters once
+per chunk, not once per row, and the document/OCR progress shown in the UI comes from
+`document_uploads`, separate from import row completion.
+
 ## Auth flow
 
 ```mermaid
