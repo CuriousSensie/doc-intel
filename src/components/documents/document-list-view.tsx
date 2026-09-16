@@ -4,6 +4,8 @@ import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
+import { DocumentTagChips } from "@/components/documents/document-tag-chips";
+import type { PaperlessTag } from "@/lib/paperless/documents";
 import type { Document } from "@/modules/documents/documents.service";
 
 // The original (and still default) row rendering — extracted out of documents-bulk-list.tsx so
@@ -11,11 +13,15 @@ import type { Document } from "@/modules/documents/documents.service";
 export function DocumentListView({
   documents,
   selectedIds,
-  onToggle
+  onToggle,
+  ctxQuery = "",
+  tagsByDocumentId = {}
 }: {
   documents: Document[];
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
+  ctxQuery?: string;
+  tagsByDocumentId?: Record<string, PaperlessTag[]>;
 }) {
   const t = useTranslations("documents");
 
@@ -35,7 +41,7 @@ export function DocumentListView({
           />
           <Link
             className="flex flex-1 flex-col justify-between gap-3 sm:flex-row sm:items-center"
-            href={`/dashboard/documents/${document.id}`}
+            href={`/dashboard/documents/${document.id}${ctxQuery}`}
           >
             <div>
               <p className="font-semibold">{document.title}</p>
@@ -46,6 +52,9 @@ export function DocumentListView({
                 {" · "}
                 {new Date(document.created_at).toLocaleString()}
               </p>
+              <div className="mt-1.5">
+                <DocumentTagChips tags={tagsByDocumentId[document.id] ?? []} />
+              </div>
             </div>
             <DocumentStatusBadge status={document.status} />
           </Link>

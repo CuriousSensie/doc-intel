@@ -12,7 +12,12 @@ import { DocumentsFilterBar } from "@/components/documents/documents-filter-bar"
 import { DocumentsPagination } from "@/components/documents/documents-pagination";
 import { Button } from "@/components/ui/button";
 import { documentsConfig } from "@/config/documents";
-import { getPaperlessContentSnippets, toDocumentTypeKey } from "@/lib/paperless/documents";
+import {
+  getPaperlessContentSnippets,
+  getPaperlessDocumentTags,
+  toDocumentTypeKey,
+  type PaperlessTag
+} from "@/lib/paperless/documents";
 import { paperlessFor } from "@/lib/paperless/client";
 import {
   getCachedCorrespondents,
@@ -103,6 +108,26 @@ export default async function DocumentsPage({
         )
       : {};
 
+  // Every view mode: page-scoped tag ids -> resolved {name,color,text_color}, for the per-row/
+  // card colored tag chips. Tags aren't mirrored, so this is always a live call, same
+  // id__in-scoped pattern as the content snippets above.
+  const tagById = new Map(tags.map((tg) => [tg.id, tg]));
+  const tagsByPaperlessId =
+    documents.length > 0
+      ? await getPaperlessDocumentTags(
+          client,
+          documents.map((d) => d.paperless_document_id)
+        )
+      : new Map<number, number[]>();
+  const tagsByDocumentId: Record<string, PaperlessTag[]> = Object.fromEntries(
+    documents.map((d) => [
+      d.id,
+      (tagsByPaperlessId.get(d.paperless_document_id) ?? [])
+        .map((tagId) => tagById.get(tagId))
+        .filter((tag): tag is PaperlessTag => Boolean(tag))
+    ])
+  );
+
   const isFiltered = Boolean(
     filter.documentTypeKey ||
       filter.status ||
@@ -184,6 +209,7 @@ export default async function DocumentsPage({
             contentByPaperlessId={contentByPaperlessId}
             documents={documents}
             filter={filter}
+            tagsByDocumentId={tagsByDocumentId}
             viewMode={view}
           />
           <DocumentsPagination hasCursor={Boolean(filter.cursor)} nextCursor={nextCursor} />

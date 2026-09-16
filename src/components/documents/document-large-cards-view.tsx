@@ -6,6 +6,8 @@ import { Link } from "@/i18n/navigation";
 import { useState } from "react";
 
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
+import { DocumentTagChips } from "@/components/documents/document-tag-chips";
+import type { PaperlessTag } from "@/lib/paperless/documents";
 import type { Document } from "@/modules/documents/documents.service";
 
 function Thumbnail({ documentId, title }: { documentId: string; title: string }) {
@@ -36,12 +38,16 @@ export function DocumentLargeCardsView({
   documents,
   selectedIds,
   onToggle,
-  contentByPaperlessId
+  contentByPaperlessId,
+  ctxQuery = "",
+  tagsByDocumentId = {}
 }: {
   documents: Document[];
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
   contentByPaperlessId: Record<number, string>;
+  ctxQuery?: string;
+  tagsByDocumentId?: Record<string, PaperlessTag[]>;
 }) {
   const t = useTranslations("documents");
 
@@ -66,7 +72,7 @@ export function DocumentLargeCardsView({
               type="checkbox"
             />
             <Thumbnail documentId={document.id} title={document.title} />
-            <Link className="flex flex-1 flex-col gap-1 overflow-hidden" href={`/dashboard/documents/${document.id}`}>
+            <Link className="flex flex-1 flex-col gap-1 overflow-hidden" href={`/dashboard/documents/${document.id}${ctxQuery}`}>
               <div className="flex items-start justify-between gap-3">
                 <p className="font-semibold">{document.title}</p>
                 <DocumentStatusBadge status={document.status} />
@@ -79,6 +85,9 @@ export function DocumentLargeCardsView({
                 {new Date(document.created_at).toLocaleString()}
               </p>
               {snippet ? <p className="mt-1 line-clamp-3 text-sm text-muted">{snippet}</p> : null}
+              <div className="mt-1">
+                <DocumentTagChips tags={tagsByDocumentId[document.id] ?? []} />
+              </div>
             </Link>
           </div>
         );

@@ -6,6 +6,8 @@ import { Link } from "@/i18n/navigation";
 import { useState } from "react";
 
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
+import { DocumentTagChips } from "@/components/documents/document-tag-chips";
+import type { PaperlessTag } from "@/lib/paperless/documents";
 import type { Document } from "@/modules/documents/documents.service";
 
 function Thumbnail({ documentId, title }: { documentId: string; title: string }) {
@@ -34,11 +36,15 @@ function Thumbnail({ documentId, title }: { documentId: string; title: string })
 export function DocumentSmallCardsView({
   documents,
   selectedIds,
-  onToggle
+  onToggle,
+  ctxQuery = "",
+  tagsByDocumentId = {}
 }: {
   documents: Document[];
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
+  ctxQuery?: string;
+  tagsByDocumentId?: Record<string, PaperlessTag[]>;
 }) {
   const t = useTranslations("documents");
 
@@ -56,7 +62,7 @@ export function DocumentSmallCardsView({
             onChange={() => onToggle(document.id)}
             type="checkbox"
           />
-          <Link className="flex flex-col gap-2" href={`/dashboard/documents/${document.id}`}>
+          <Link className="flex flex-col gap-2" href={`/dashboard/documents/${document.id}${ctxQuery}`}>
             <Thumbnail documentId={document.id} title={document.title} />
             <div>
               <p className="truncate text-sm font-semibold" title={document.title}>
@@ -66,8 +72,11 @@ export function DocumentSmallCardsView({
                 {document.document_type_key ?? t("list.uncategorized")}
                 {document.correspondent_name ? ` · ${document.correspondent_name}` : ""}
               </p>
-              <div className="mt-1">
+              <div className="mt-1 flex items-center gap-1">
                 <DocumentStatusBadge status={document.status} />
+              </div>
+              <div className="mt-1">
+                <DocumentTagChips max={2} tags={tagsByDocumentId[document.id] ?? []} />
               </div>
             </div>
           </Link>

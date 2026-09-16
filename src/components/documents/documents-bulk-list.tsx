@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { DocumentLargeCardsView } from "@/components/documents/document-large-cards-view";
 import { DocumentListView } from "@/components/documents/document-list-view";
@@ -10,6 +10,7 @@ import { DocumentSmallCardsView } from "@/components/documents/document-small-ca
 import type { DocumentsViewMode } from "@/components/documents/documents-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { PaperlessTag } from "@/lib/paperless/documents";
 import {
   bulkConnectDocumentsAction,
   getBackgroundOperationAction,
@@ -33,12 +34,14 @@ export function DocumentsBulkList({
   documents,
   filter,
   viewMode = "list",
-  contentByPaperlessId = {}
+  contentByPaperlessId = {},
+  tagsByDocumentId = {}
 }: {
   documents: Document[];
   filter: ListDocumentsOptions;
   viewMode?: DocumentsViewMode;
   contentByPaperlessId?: Record<number, string>;
+  tagsByDocumentId?: Record<string, PaperlessTag[]>;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllMatching, setSelectAllMatching] = useState(false);
@@ -61,6 +64,13 @@ export function DocumentsBulkList({
 
   const selectionCount = selectAllMatching ? (matchingCount ?? 0) : selectedIds.size;
   const hasSelection = selectionCount > 0;
+
+  // Carried onto each row's detail-page link so next/prev navigation there stays scoped to
+  // this exact filtered/sorted view (documents.service.ts's getAdjacentDocumentId).
+  const ctxQuery = useMemo(
+    () => `?ctx=${encodeURIComponent(JSON.stringify(filter))}`,
+    [filter]
+  );
 
   useEffect(() => {
     return () => {
@@ -288,16 +298,30 @@ export function DocumentsBulkList({
       ) : null}
 
       {documents.length === 0 ? null : viewMode === "smallCards" ? (
-        <DocumentSmallCardsView documents={documents} onToggle={toggle} selectedIds={selectedIds} />
-      ) : viewMode === "largeCards" ? (
-        <DocumentLargeCardsView
-          contentByPaperlessId={contentByPaperlessId}
+        <DocumentSmallCardsView
+          ctxQuery={ctxQuery}
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}
+          tagsByDocumentId={tagsByDocumentId}
+        />
+      ) : viewMode === "largeCards" ? (
+        <DocumentLargeCardsView
+          contentByPaperlessId={contentByPaperlessId}
+          ctxQuery={ctxQuery}
+          documents={documents}
+          onToggle={toggle}
+          selectedIds={selectedIds}
+          tagsByDocumentId={tagsByDocumentId}
         />
       ) : (
-        <DocumentListView documents={documents} onToggle={toggle} selectedIds={selectedIds} />
+        <DocumentListView
+          ctxQuery={ctxQuery}
+          documents={documents}
+          onToggle={toggle}
+          selectedIds={selectedIds}
+          tagsByDocumentId={tagsByDocumentId}
+        />
       )}
     </div>
   );
