@@ -85,9 +85,9 @@
   },
   "detail": {
     "metadata": "Metadata",
-    "type": "Type",
+    "type": "Document type",
     "correspondent": "Correspondent",
-    "date": "Date",
+    "date": "Date created",
     "pages": "Pages",
     "liveDataUnavailable": "Live document data is unavailable right now — showing the last synced metadata only.",
     "customFields": "Custom fields",
@@ -97,6 +97,55 @@
     "noHistory": "No history yet.",
     "cannotPreview": "This file can't be previewed inline in your browser.",
     "download": "Download {title}",
-    "previewAlt": "Preview of {title}"
+    "previewAlt": "Preview of {title}",
+    "titleField": "Title",
+    "tags": "Tags",
+    "mimeType": "File type",
+    "fileSize": "File size",
+    "originalFileName": "Original file name",
+    "unsavedChanges": "You have unsaved changes.",
+    "saveChanges": "Save changes",
+    "saving": "Saving…",
+    "tabs": {
+      "details": "Details",
+      "content": "Content",
+      "connections": "Connections",
+      "history": "History",
+      "permissions": "Permissions"
+    },
+    "actions": {
+      "previous": "Previous document",
+      "next": "Next document",
+      "download": "Download",
+      "delete": "Delete",
+      "share": "Share",
+      "comingSoon": "Coming soon",
+      "deleteConfirmTitle": "Delete this document?",
+      "deleteConfirmDescription": "This deletes the file in Paperless and removes it from your document list. Connections to it are kept, shown as \"connected document was deleted\".",
+      "deleteConfirmAction": "Delete document",
+      "cancel": "Cancel",
+      "deleteFailed": "Could not delete this document"
+    },
+    "content": {
+      "summaryTitle": "AI summary",
+      "summaryDescription": "An automatic summary of this document will appear here.",
+      "comingSoon": "Coming soon",
+      "fullContent": "Extracted content",
+      "unavailable": "Content is unavailable right now.",
+      "empty": "No text was extracted from this document."
+    },
+    "permissions": {
+      "comingSoon": "Sharing and per-document permissions are coming soon."
+    },
+    "picker": {
+      "add": "Add",
+      "done": "Done",
+      "searchPlaceholder": "Search or create…",
+      "createNew": "Create \"{name}\"",
+      "creating": "Creating…",
+      "remove": "Remove {name}",
+      "saveFailed": "Could not save this change",
+      "createFailed": "Could not create this"
+    }
   }
 }

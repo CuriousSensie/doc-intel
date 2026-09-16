@@ -12,6 +12,7 @@
     "otherGroup": "Other",
     "unknown": "Unknown",
     "deleted": "deleted",
+    "disconnect": "Disconnect",
     "via": "via {source}",
     "relations": {
       "belongs_to": "Belongs to",

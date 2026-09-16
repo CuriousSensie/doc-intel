@@ -12,6 +12,7 @@
     "otherGroup": "Drugo",
     "unknown": "Neznano",
     "deleted": "izbrisano",
+    "disconnect": "Prekini povezavo",
     "via": "preko {source}",
     "relations": {
       "belongs_to": "Pripada",

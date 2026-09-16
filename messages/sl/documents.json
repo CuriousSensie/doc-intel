@@ -85,9 +85,9 @@
   },
   "detail": {
     "metadata": "Metapodatki",
-    "type": "Tip",
+    "type": "Vrsta dokumenta",
     "correspondent": "Korespondent",
-    "date": "Datum",
+    "date": "Datum nastanka",
     "pages": "Strani",
     "liveDataUnavailable": "Živi podatki o dokumentu trenutno niso na voljo — prikazani so samo nazadnje sinhronizirani metapodatki.",
     "customFields": "Dodatna polja",
@@ -97,6 +97,55 @@
     "noHistory": "Ni še zgodovine.",
     "cannotPreview": "Te datoteke ni mogoče predogledati neposredno v vašem brskalniku.",
     "download": "Prenesi {title}",
-    "previewAlt": "Predogled {title}"
+    "previewAlt": "Predogled {title}",
+    "titleField": "Naslov",
+    "tags": "Oznake",
+    "mimeType": "Vrsta datoteke",
+    "fileSize": "Velikost datoteke",
+    "originalFileName": "Izvirno ime datoteke",
+    "unsavedChanges": "Imate neshranjene spremembe.",
+    "saveChanges": "Shrani spremembe",
+    "saving": "Shranjevanje…",
+    "tabs": {
+      "details": "Podrobnosti",
+      "content": "Vsebina",
+      "connections": "Povezave",
+      "history": "Zgodovina",
+      "permissions": "Dovoljenja"
+    },
+    "actions": {
+      "previous": "Prejšnji dokument",
+      "next": "Naslednji dokument",
+      "download": "Prenesi",
+      "delete": "Izbriši",
+      "share": "Deli",
+      "comingSoon": "Kmalu na voljo",
+      "deleteConfirmTitle": "Izbrišem ta dokument?",
+      "deleteConfirmDescription": "S tem izbrišete datoteko v Paperless in jo odstranite s seznama dokumentov. Povezave nanjo ostanejo, prikazane kot \"povezan dokument je bil izbrisan\".",
+      "deleteConfirmAction": "Izbriši dokument",
+      "cancel": "Prekliči",
+      "deleteFailed": "Dokumenta ni bilo mogoče izbrisati"
+    },
+    "content": {
+      "summaryTitle": "Povzetek z UI",
+      "summaryDescription": "Tu se bo prikazal samodejni povzetek tega dokumenta.",
+      "comingSoon": "Kmalu na voljo",
+      "fullContent": "Izluščena vsebina",
+      "unavailable": "Vsebina trenutno ni na voljo.",
+      "empty": "Iz tega dokumenta ni bilo izluščeno nobeno besedilo."
+    },
+    "permissions": {
+      "comingSoon": "Deljenje in dovoljenja po dokumentih bodo kmalu na voljo."
+    },
+    "picker": {
+      "add": "Dodaj",
+      "done": "Končano",
+      "searchPlaceholder": "Išči ali ustvari…",
+      "createNew": "Ustvari \"{name}\"",
+      "creating": "Ustvarjanje…",
+      "remove": "Odstrani {name}",
+      "saveFailed": "Spremembe ni bilo mogoče shraniti",
+      "createFailed": "Ni bilo mogoče ustvariti"
+    }
   }
 }
