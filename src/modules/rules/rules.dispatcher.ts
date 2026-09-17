@@ -115,6 +115,14 @@ async function findOrCreateTagId(ctx: ServiceContext, name: string): Promise<num
   return created.id;
 }
 
+// remove_tag must never create the tag it's trying to remove — a name that doesn't exist is
+// already "removed" (no-op), not a reason to add it to the tenant's tag list first.
+async function findExistingTagId(ctx: ServiceContext, name: string): Promise<number | null> {
+  const client = await paperlessFor(ctx.orgId);
+  const tags = await getCachedTags(client, ctx.orgId);
+  return tags.find((t) => t.name.toLowerCase() === name.toLowerCase())?.id ?? null;
+}
+
 async function findOrCreateCorrespondentId(ctx: ServiceContext, name: string): Promise<number> {
   const client = await paperlessFor(ctx.orgId);
   const correspondents = await getCachedCorrespondents(client, ctx.orgId);
@@ -281,10 +289,11 @@ async function dispatchOne(
       const id = await findOrCreateCorrespondentId(ctx, action.value);
       await updatePaperlessDocument(client, subject.paperlessDocumentId, { correspondent: id });
     } else if (action.type === "add_tag" || action.type === "remove_tag") {
-      const id = await findOrCreateTagId(ctx, action.value);
+      const id = action.type === "add_tag" ? await findOrCreateTagId(ctx, action.value) : await findExistingTagId(ctx, action.value);
+      if (id === null) return { action, status: "noop_tag_not_found" };
+
       const currentTags = subject.fields["document.tags"];
-      const client2 = client;
-      const allTags = await getCachedTags(client2, ctx.orgId);
+      const allTags = await getCachedTags(client, ctx.orgId);
       const idByName = new Map(allTags.map((t) => [t.name, t.id]));
       const currentIds = currentTags.map((name) => idByName.get(name)).filter((v): v is number => v !== undefined);
       const nextIds =

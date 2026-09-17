@@ -10,6 +10,7 @@ import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
+import { triggerMessageKey } from "@/modules/rules/rules.schemas";
 import { listRules } from "@/modules/rules/rules.service";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export default async function RulesListPage() {
                   </Badge>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-3 text-sm text-muted">
-                  <span>{t("list.trigger", { trigger: t(`triggers.${rule.trigger}`) })}</span>
+                  <span>{t("list.trigger", { trigger: t(`triggers.${triggerMessageKey(rule.trigger)}`) })}</span>
                   <span>{t("list.priority", { priority: rule.priority })}</span>
                 </CardContent>
               </Card>

@@ -2,28 +2,60 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { FormMessage } from "@/components/forms/form-message";
-import { TextField } from "@/components/forms/text-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { DeleteRuleButton } from "@/components/rules/delete-rule-button";
 import { RuleBackfillPanel } from "@/components/rules/rule-backfill-panel";
+import { RuleDetailTabs } from "@/components/rules/rule-detail-tabs";
+import { RuleForm, type RuleFormValue } from "@/components/rules/rule-form";
 import { RuleTestPanel } from "@/components/rules/rule-test-panel";
 import { AuthorizationError, NotFoundError } from "@/lib/errors";
+import { paperlessFor } from "@/lib/paperless/client";
+import { getCachedCorrespondents, getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
-import {
-  listRuleBackfillsForRuleAction,
-  toggleRuleEnabledFormAction,
-  updateRuleFormAction
-} from "@/modules/rules/rules.actions";
-import { RULE_TRIGGERS } from "@/modules/rules/rules.schemas";
+import { listRuleBackfillsForRuleAction, toggleRuleEnabledFormAction } from "@/modules/rules/rules.actions";
+import { triggerMessageKey, type RuleAction } from "@/modules/rules/rules.schemas";
 import { getRule, listRuleRunsForRule } from "@/modules/rules/rules.service";
 
 export const dynamic = "force-dynamic";
+
+// entity_ref for connect_entity/disconnect_entity only ever stores {by:"id", entityId} — the
+// rule-form builder has no other way to show a human-readable chip for a bare id, so this
+// resolves each referenced entity's current display name and attaches it as `label` before the
+// action ever reaches the client. Never sent back to the server as-is; RuleForm rebuilds a fresh
+// {by:"id", entityId} on submit (rules.dispatcher.ts#resolveEntityRef() re-checks org ownership
+// at evaluation time regardless).
+async function enrichEntityRefs(
+  ctx: Awaited<ReturnType<typeof buildRequestContext>>,
+  actions: unknown
+): Promise<unknown> {
+  const list = Array.isArray(actions) ? (actions as RuleAction[]) : [];
+  const entityIds = list
+    .filter((a) => (a.type === "connect_entity" || a.type === "disconnect_entity") && a.entity_ref.by === "id")
+    .map((a) => (a as Extract<RuleAction, { type: "connect_entity" | "disconnect_entity" }>).entity_ref)
+    .filter((ref): ref is Extract<typeof ref, { by: "id" }> => ref.by === "id")
+    .map((ref) => ref.entityId);
+
+  if (entityIds.length === 0) return actions;
+
+  const { data } = await ctx.db.from("entities").select("id, display_name").in("id", entityIds);
+  const labelById = new Map((data ?? []).map((e) => [e.id, e.display_name]));
+
+  return list.map((action) => {
+    if (
+      (action.type === "connect_entity" || action.type === "disconnect_entity") &&
+      action.entity_ref.by === "id"
+    ) {
+      const label = labelById.get(action.entity_ref.entityId);
+      return label ? { ...action, entity_ref: { ...action.entity_ref, label } } : action;
+    }
+    return action;
+  });
+}
 
 export default async function RuleDetailPage({
   params,
@@ -50,11 +82,25 @@ export default async function RuleDetailPage({
     throw error;
   }
 
-  const [runs, backfillsResult] = await Promise.all([
+  const client = await paperlessFor(ctx.orgId);
+  const [runs, backfillsResult, tags, correspondents, documentTypes, enrichedActions] = await Promise.all([
     listRuleRunsForRule(ctx, id),
-    listRuleBackfillsForRuleAction(id)
+    listRuleBackfillsForRuleAction(id),
+    getCachedTags(client, ctx.orgId),
+    getCachedCorrespondents(client, ctx.orgId),
+    getCachedDocumentTypes(client, ctx.orgId),
+    enrichEntityRefs(ctx, rule.actions)
   ]);
   const recentBackfills = backfillsResult.data ?? [];
+
+  const formValue: RuleFormValue = {
+    id: rule.id,
+    name: rule.name,
+    trigger: rule.trigger,
+    priority: rule.priority,
+    conditions: rule.conditions,
+    actions: enrichedActions
+  };
 
   return (
     <div className="mx-auto grid max-w-2xl gap-5">
@@ -62,7 +108,7 @@ export default async function RuleDetailPage({
         <div>
           <h1 className="text-3xl font-black">{rule.name}</h1>
           <p className="mt-1 text-sm text-muted">
-            {t("list.trigger", { trigger: t(`triggers.${rule.trigger}`) })} ·{" "}
+            {t("list.trigger", { trigger: t(`triggers.${triggerMessageKey(rule.trigger)}`) })} ·{" "}
             {t("list.priority", { priority: rule.priority })}
           </p>
         </div>
@@ -84,96 +130,33 @@ export default async function RuleDetailPage({
         <DeleteRuleButton ruleId={rule.id} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("form.save")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form action={updateRuleFormAction} className="grid gap-4">
-            <input name="ruleId" type="hidden" value={rule.id} />
-            <TextField
-              defaultValue={rule.name}
-              label={t("form.nameLabel")}
-              name="name"
-              placeholder={t("form.namePlaceholder")}
-              required
-            />
-
-            <label className="grid gap-2 text-sm font-semibold">
-              <span>{t("form.triggerLabel")}</span>
-              <select
-                className="min-h-11 rounded-md border border-border bg-panel px-3 text-base font-normal outline-none transition focus:border-foreground focus:ring-2 focus:ring-foreground/15"
-                defaultValue={rule.trigger}
-                name="trigger"
-                required
-              >
-                {RULE_TRIGGERS.map((trigger) => (
-                  <option key={trigger} value={trigger}>
-                    {t(`triggers.${trigger}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <TextField
-              defaultValue={rule.priority}
-              hint={t("form.priorityHint")}
-              label={t("form.priorityLabel")}
-              name="priority"
-              type="number"
-            />
-
-            <label className="grid gap-2 text-sm font-semibold">
-              <span>{t("form.conditionsLabel")}</span>
-              <Textarea
-                className="min-h-40 font-mono text-xs"
-                defaultValue={JSON.stringify(rule.conditions, null, 2)}
-                name="conditions"
-                required
-              />
-              <span className="text-xs font-normal leading-5 text-muted">{t("form.conditionsHint")}</span>
-            </label>
-
-            <label className="grid gap-2 text-sm font-semibold">
-              <span>{t("form.actionsLabel")}</span>
-              <Textarea
-                className="min-h-32 font-mono text-xs"
-                defaultValue={JSON.stringify(rule.actions, null, 2)}
-                name="actions"
-                required
-              />
-              <span className="text-xs font-normal leading-5 text-muted">{t("form.actionsHint")}</span>
-            </label>
-
-            <Button type="submit">{t("form.save")}</Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <RuleTestPanel ruleId={rule.id} />
-
-      <RuleBackfillPanel recentBackfills={recentBackfills} ruleId={rule.id} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("detail.recentRuns")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          {runs.length === 0 ? (
-            <p className="text-sm text-muted">{t("detail.noRuns")}</p>
-          ) : (
-            runs.map((run) => (
-              <div
-                className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 text-sm"
-                key={run.id}
-              >
-                <span>{run.matched ? t("detail.runMatched") : t("detail.runNotMatched")}</span>
-                <span className="text-xs text-muted">{t("detail.runStatus", { status: run.status })}</span>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <RuleDetailTabs
+        backfill={<RuleBackfillPanel recentBackfills={recentBackfills} ruleId={rule.id} />}
+        rule={<RuleForm initial={formValue} metaOptions={{ tags, correspondents, documentTypes }} />}
+        runs={
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("detail.recentRuns")}</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              {runs.length === 0 ? (
+                <p className="text-sm text-muted">{t("detail.noRuns")}</p>
+              ) : (
+                runs.map((run) => (
+                  <div
+                    className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 text-sm"
+                    key={run.id}
+                  >
+                    <span>{run.matched ? t("detail.runMatched") : t("detail.runNotMatched")}</span>
+                    <span className="text-xs text-muted">{t("detail.runStatus", { status: run.status })}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        }
+        test={<RuleTestPanel ruleId={rule.id} />}
+      />
     </div>
   );
 }

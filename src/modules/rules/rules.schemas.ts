@@ -12,6 +12,25 @@ export const RULE_TRIGGERS = [
 export type RuleTrigger = (typeof RULE_TRIGGERS)[number];
 export const ruleTriggerSchema = z.enum(RULE_TRIGGERS);
 
+// next-intl splits a t() key on "." for nested-message lookup, so a trigger value like
+// "document.ingested" can never be used directly as a message key (found live in a browser
+// check — it silently rendered the raw "rules.triggers.document.ingested" path instead of a
+// translated label). messages/*/rules.json's `triggers` keys are the underscore form
+// ("document_ingested") specifically so this lookup is the only place that has to know it. A
+// literal record (not a `.replaceAll` function returning plain `string`) keeps the return type
+// a narrow union next-intl's typed `t()` can actually check against messages/en/rules.json.
+export const TRIGGER_MESSAGE_KEYS = {
+  "document.ingested": "document_ingested",
+  "document.updated": "document_updated",
+  "document.connected": "document_connected",
+  "entity.created": "entity_created",
+  manual: "manual"
+} as const satisfies Record<RuleTrigger, string>;
+
+export function triggerMessageKey(trigger: RuleTrigger): (typeof TRIGGER_MESSAGE_KEYS)[RuleTrigger] {
+  return TRIGGER_MESSAGE_KEYS[trigger];
+}
+
 // specs/07-rules-engine.md §Condition fields — document.custom.<key>/entity.data.<key> are
 // open-ended (rest match), everything else is fixed.
 export const CONDITION_FIELDS = [
