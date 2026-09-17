@@ -3,10 +3,10 @@
 import { useTranslations } from "next-intl";
 
 import { Link, usePathname } from "@/i18n/navigation";
-import type { NavigationItem } from "@/config/navigation";
+import type { NavigationLinkItem } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 
-export function SettingsTabs({ items }: { items: NavigationItem[] }) {
+export function SettingsTabs({ items }: { items: NavigationLinkItem[] }) {
   const pathname = usePathname();
   const t = useTranslations("common");
 

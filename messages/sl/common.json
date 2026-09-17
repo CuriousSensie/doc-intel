@@ -34,18 +34,32 @@
     "dashboard": "Nadzorna plošča",
     "notifications": "Obvestila",
     "documents": "Dokumenti",
+    "attributes": "Atributi",
+    "tags": "Oznake",
+    "correspondents": "Korespondenti",
+    "documentTypes": "Vrste dokumentov",
+    "customFields": "Polja po meri",
     "entities": "Entitete",
     "views": "Pogledi",
     "imports": "Uvozi",
     "rules": "Pravila",
     "billing": "Obračunavanje",
+    "organization": "Organizacija",
     "organizations": "Organizacije",
     "team": "Ekipa",
+    "settings": "Nastavitve",
     "admin": "Skrbništvo",
     "users": "Uporabniki",
     "auditLog": "Dnevnik revizije",
     "backToDashboard": "Nazaj na nadzorno ploščo",
     "profile": "Profil",
     "security": "Varnost"
+  },
+  "attributes": {
+    "description": "Upravljanje atributov bo na voljo tukaj. Za zdaj podrobnosti dokumentov in gradnik pravil še vedno uporabljajo žive metapodatke Paperless.",
+    "tagsTitle": "Oznake",
+    "correspondentsTitle": "Korespondenti",
+    "documentTypesTitle": "Vrste dokumentov",
+    "customFieldsTitle": "Polja po meri"
   }
 }
