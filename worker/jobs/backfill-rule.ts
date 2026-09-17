@@ -19,6 +19,30 @@ type BackfillRulePayload = JobPayload & { ruleBackfillId: string };
 type AdminDb = ReturnType<typeof createAdminClient>;
 type BackfillFilter = { documentTypeKey?: string; dateFrom?: string; dateTo?: string };
 
+// Each document's own work is a Paperless round trip (buildDocumentSubjectContext) plus a couple
+// of DB writes — dominated by network latency, not CPU, so running the chunk's up-to-50
+// documents one at a time serialized every bit of that latency. A small bounded pool gets real
+// wall-clock improvement on a 5,000-document backfill without the complexity of a queue-based
+// fan-out for what's still one chunk of one job. rulesConfig has no dedicated constant for this
+// yet since nothing else in the rules engine needed one — kept local rather than adding a config
+// knob for a single call site.
+const BACKFILL_DOCUMENT_CONCURRENCY = 8;
+
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  run: (item: T) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await run(item);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+}
+
 async function claimChunk(admin: AdminDb, orgId: string, ruleBackfillId: string, filter: BackfillFilter) {
   const { data, error } = await admin.rpc("claim_rule_backfill_documents", {
     p_rule_backfill_id: ruleBackfillId,
@@ -100,10 +124,12 @@ export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
   const ctx: ServiceContext = { db: admin, orgId, actorId: backfill.created_by, correlationId: randomUUID() };
   let matchedDelta = 0;
   let appliedDelta = 0;
-  let lastDocumentId = backfill.cursor_document_id;
+  // claim_rule_backfill_documents() orders by d.id — the last element is the max regardless of
+  // the concurrent processing order below, so the cursor only needs to be set once after the
+  // whole chunk finishes, not tracked per-iteration.
+  const lastDocumentId = documents[documents.length - 1]?.id ?? backfill.cursor_document_id;
 
-  for (const doc of documents) {
-    lastDocumentId = doc.id;
+  await mapWithConcurrency(documents, BACKFILL_DOCUMENT_CONCURRENCY, async (doc) => {
     try {
       const subject = await buildDocumentSubjectContext(ctx, doc.id);
       const { matched, trace } = evaluateConditions(rule.conditions as unknown as ConditionNode, subject);
@@ -140,7 +166,7 @@ export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
         errorMessage: err instanceof Error ? err.message : String(err)
       });
     }
-  }
+  });
 
   if (lastDocumentId) {
     const { error } = await admin.rpc("advance_rule_backfill_cursor", {

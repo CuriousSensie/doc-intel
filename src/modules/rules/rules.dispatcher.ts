@@ -16,7 +16,6 @@ import {
 import { UnprocessableError } from "@/lib/errors";
 import type { ServiceContext } from "@/lib/service-context";
 import { normalizeIdentifier } from "@/modules/entities/identifier-normalization";
-import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
 import type { Database } from "@/types/database";
 
@@ -130,15 +129,18 @@ async function findOrCreateDocumentTypeId(ctx: ServiceContext, name: string): Pr
 // last written by 'rule'/'import'/'system' is fine to overwrite (rules already resolve their
 // own field-conflict via the in-run claims map below); one last written by 'user' blocks every
 // later rule write until a human or explicit override changes it again.
-async function isUserOwned(ctx: ServiceContext, documentId: string, fieldKey: string): Promise<boolean> {
+//
+// One query per document per dispatchRuleActions() call, not one per field-writing action — a
+// rule with three Paperless-side actions (or several matched rules in the same trigger fire)
+// used to issue three separate field_provenance lookups for the same document.
+async function fetchUserOwnedFieldKeys(ctx: ServiceContext, documentId: string): Promise<Set<string>> {
   const { data, error } = await ctx.db
     .from("field_provenance")
-    .select("updated_by")
+    .select("field_key")
     .eq("document_id", documentId)
-    .eq("field_key", fieldKey)
-    .maybeSingle();
+    .eq("updated_by", "user");
   if (error) throw error;
-  return data?.updated_by === "user";
+  return new Set((data ?? []).map((row) => row.field_key));
 }
 
 async function notifyRole(
@@ -178,9 +180,11 @@ export async function dispatchRuleActions(
   options: { ruleBackfillId?: string | null } = {}
 ): Promise<ActionOutcome[]> {
   const outcomes: ActionOutcome[] = [];
+  const userOwnedFieldKeys =
+    subject.kind === "document" ? await fetchUserOwnedFieldKeys(ctx, subject.documentId) : new Set<string>();
 
   for (const action of rule.actions as unknown as RuleAction[]) {
-    outcomes.push(await dispatchOne(ctx, rule, ruleRunId, subject, fieldClaims, action, options));
+    outcomes.push(await dispatchOne(ctx, rule, ruleRunId, subject, fieldClaims, userOwnedFieldKeys, action, options));
   }
 
   return outcomes;
@@ -192,6 +196,7 @@ async function dispatchOne(
   ruleRunId: string,
   subject: SubjectContext,
   fieldClaims: Map<string, string>,
+  userOwnedFieldKeys: Set<string>,
   action: RuleAction,
   options: { ruleBackfillId?: string | null }
 ): Promise<ActionOutcome> {
@@ -238,7 +243,7 @@ async function dispatchOne(
       if (claimedBy && claimedBy !== rule.id) {
         return { action, status: `skipped_conflict:${claimedBy}` };
       }
-      if (await isUserOwned(ctx, subject.documentId, fieldKey)) {
+      if (userOwnedFieldKeys.has(fieldKey)) {
         return { action, status: "skipped_conflict:user" };
       }
       fieldClaims.set(fieldKey, rule.id);
@@ -247,8 +252,7 @@ async function dispatchOne(
     const client = await paperlessFor(ctx.orgId);
 
     if (action.type === "set_custom_field") {
-      const defs = await listCustomFieldDefs(ctx);
-      const def = defs.find((d) => d.key === action.key);
+      const def = subject.customFieldDefs.find((d) => d.key === action.key);
       if (!def?.paperless_custom_field_id) return { action, status: "skipped_unknown_field" };
       await updatePaperlessDocument(client, subject.paperlessDocumentId, {
         custom_fields: [{ field: def.paperless_custom_field_id, value: action.value }]

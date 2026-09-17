@@ -22,7 +22,8 @@ function documentSubject(overrides: Partial<DocumentSubjectContext["fields"]> = 
       ...overrides
     },
     custom,
-    paperlessAvailable: true
+    paperlessAvailable: true,
+    customFieldDefs: []
   };
 }
 

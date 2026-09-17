@@ -1,13 +1,10 @@
 import { paperlessFor } from "@/lib/paperless/client";
-import {
-  getPaperlessDocument,
-  getPaperlessCorrespondentName,
-  listPaperlessTags
-} from "@/lib/paperless/documents";
+import { getPaperlessDocument } from "@/lib/paperless/documents";
+import { getCachedCorrespondentName, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { PaperlessUnavailableError } from "@/lib/errors";
 import type { ServiceContext } from "@/lib/service-context";
 import { listConnectedIds } from "@/modules/connections/connections.service";
-import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
+import { listCustomFieldDefs, type CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 
 // The flat, evaluator-facing shape rules.evaluator.ts reads condition field paths against.
 // Built once per document per trigger fire (rules.dispatcher.ts's caller), not per rule — every
@@ -29,6 +26,9 @@ export type DocumentSubjectContext = {
   };
   custom: Record<string, unknown>; // document.custom.<key>
   paperlessAvailable: boolean;
+  // Fetched once here, reused by rules.dispatcher.ts's set_custom_field action so a matched
+  // rule doesn't re-issue the same listCustomFieldDefs() query the context builder already ran.
+  customFieldDefs: CustomFieldDef[];
 };
 
 // specs/07-rules-engine.md §Condition fields: document.content is OCR text fetched live from
@@ -59,26 +59,39 @@ export async function buildDocumentSubjectContext(
   let tagNames: string[] = [];
   const custom: Record<string, unknown> = {};
   let paperlessAvailable = true;
+  // Fetched outside the try/catch — a Paperless outage shouldn't also lose our own DB's field
+  // defs, and the dispatcher needs this list regardless of whether the Paperless fetch below
+  // succeeds (a set_custom_field action can still no-op cleanly with an empty custom map).
+  const customFieldDefs = await listCustomFieldDefs(ctx);
 
   try {
     const client = await paperlessFor(ctx.orgId);
-    const paperlessDoc = await getPaperlessDocument(client, doc.paperless_document_id);
+    // getCachedTags/getCachedCorrespondentName (src/lib/paperless/metadata-cache.ts, Redis,
+    // 5 min TTL) — every rule evaluation used to re-fetch the tenant's full tag list and do an
+    // uncached correspondent lookup on every document.ingested/.updated/.connected fire, the
+    // same N+1-across-events pattern metadata-cache.ts already exists to prevent for
+    // sync-paperless-document.ts. rules.dispatcher.ts's find-or-create helpers already used the
+    // cache; this context builder was the one place that didn't.
+    const [paperlessDoc, allTags] = await Promise.all([
+      getPaperlessDocument(client, doc.paperless_document_id),
+      getCachedTags(client, ctx.orgId)
+    ]);
     content = paperlessDoc.content;
     correspondentName = paperlessDoc.correspondent
-      ? await getPaperlessCorrespondentName(client, paperlessDoc.correspondent)
+      ? await getCachedCorrespondentName(client, ctx.orgId, paperlessDoc.correspondent)
       : null;
     // Tag *names* (not ids) are what a rule author writes conditions against — resolving every
     // tag id to a name here (rather than exposing ids) keeps the DSL's `document.tags` values
     // human-authored strings, matching how document.correspondent is a name, not an id.
-    const allTags = await listPaperlessTags(client);
     const tagById = new Map(allTags.map((t) => [t.id, t.name]));
     tagNames = paperlessDoc.tags.map((id) => tagById.get(id)).filter((n): n is string => !!n);
 
     // document.custom.<key> uses our own field key (custom_field_defs.key), not Paperless's
     // numeric field id — the id is an implementation detail a rule author never sees or writes.
-    const defs = await listCustomFieldDefs(ctx);
     const keyByPaperlessFieldId = new Map(
-      defs.filter((d) => d.paperless_custom_field_id !== null).map((d) => [d.paperless_custom_field_id, d.key])
+      customFieldDefs
+        .filter((d) => d.paperless_custom_field_id !== null)
+        .map((d) => [d.paperless_custom_field_id, d.key])
     );
     for (const cf of paperlessDoc.custom_fields) {
       const key = keyByPaperlessFieldId.get(cf.field);
@@ -104,7 +117,8 @@ export async function buildDocumentSubjectContext(
       "connection.count": connectionCount
     },
     custom,
-    paperlessAvailable
+    paperlessAvailable,
+    customFieldDefs
   };
 }
 
