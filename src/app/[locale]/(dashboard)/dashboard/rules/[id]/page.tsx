@@ -103,7 +103,7 @@ export default async function RuleDetailPage({
   };
 
   return (
-    <div className="mx-auto grid max-w-2xl gap-5">
+    <div className="mx-auto grid w-full max-w-[1800px] gap-4 px-1">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-black">{rule.name}</h1>

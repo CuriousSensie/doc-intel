@@ -203,6 +203,11 @@ function redirectWithError(path: string, error: unknown, t: Translator, locale: 
   return redirect({ href: withStatus(path, "error", message), locale });
 }
 
+function redirectTarget(formData: FormData, fallback: string): string {
+  const value = formData.get("redirectTo");
+  return typeof value === "string" && value.startsWith("/") ? value : fallback;
+}
+
 // Plain <form action={...}> handlers for the /dashboard/rules UI — same split as
 // entity-types.actions.ts: the typed *Action functions above serve client-side/JSON callers
 // (the test/backfill panels, which need to render a result inline without navigating), these
@@ -259,15 +264,16 @@ export async function toggleRuleEnabledFormAction(formData: FormData) {
   const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
   const ruleId = String(formData.get("ruleId"));
   const enabled = formData.get("enabled") === "true";
+  const returnPath = redirectTarget(formData, `/dashboard/rules/${ruleId}`);
 
   try {
     await updateRule(ctx, ruleId, { enabled });
   } catch (error) {
-    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+    redirectWithError(returnPath, error, t, locale);
   }
 
   return redirect({
-    href: withStatus(`/dashboard/rules/${ruleId}`, "message", enabled ? t("actions.enabled") : t("actions.disabled")),
+    href: withStatus(returnPath, "message", enabled ? t("actions.enabled") : t("actions.disabled")),
     locale
   });
 }
@@ -292,6 +298,7 @@ export async function startRuleBackfillFormAction(formData: FormData) {
   const ctx = await buildRequestContext();
   const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
   const ruleId = String(formData.get("ruleId"));
+  const returnPath = redirectTarget(formData, `/dashboard/rules/${ruleId}`);
 
   try {
     const documentTypeKey = formData.get("documentTypeKey");
@@ -328,10 +335,10 @@ export async function startRuleBackfillFormAction(formData: FormData) {
       );
     }
   } catch (error) {
-    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+    redirectWithError(returnPath, error, t, locale);
   }
 
-  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillStarted")), locale });
+  return redirect({ href: withStatus(returnPath, "message", t("actions.backfillStarted")), locale });
 }
 
 export async function pauseRuleBackfillFormAction(formData: FormData) {

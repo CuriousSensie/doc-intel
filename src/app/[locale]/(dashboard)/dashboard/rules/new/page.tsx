@@ -29,7 +29,7 @@ export default async function NewRulePage() {
   ]);
 
   return (
-    <div className="mx-auto grid max-w-2xl gap-5">
+    <div className="mx-auto grid w-full max-w-[1800px] gap-4 px-1">
       <div>
         <h1 className="text-3xl font-black">{t("form.create")}</h1>
       </div>

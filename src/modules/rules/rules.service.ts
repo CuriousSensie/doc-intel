@@ -40,6 +40,26 @@ export async function listRules(ctx: ServiceContext): Promise<Rule[]> {
   return data;
 }
 
+export async function countRuleRunsForRules(
+  ctx: ServiceContext,
+  ruleIds: string[]
+): Promise<Record<string, number>> {
+  if (ruleIds.length === 0) return {};
+
+  const { data, error } = await ctx.db
+    .from("rule_runs")
+    .select("rule_id")
+    .eq("organization_id", ctx.orgId)
+    .in("rule_id", ruleIds);
+
+  if (error) throw error;
+
+  return (data ?? []).reduce<Record<string, number>>((counts, run) => {
+    counts[run.rule_id] = (counts[run.rule_id] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 // specs/07-rules-engine.md §What is ours vs. Paperless's: evaluated once at create/update time,
 // not per trigger fire — a rule's delegated-or-local status only changes when its own actions
 // change. rules.delegation.ts talks to Paperless (creating/updating a workflow object) when

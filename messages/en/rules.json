@@ -8,7 +8,21 @@
     "trigger": "Trigger: {trigger}",
     "priority": "Priority {priority}",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "conditionCount": "conditions",
+    "actionCount": "actions",
+    "openActions": "Open rule actions",
+    "editRule": "Edit rule",
+    "triggerRule": "Trigger",
+    "columns": {
+      "name": "Rule name",
+      "trigger": "Triggers",
+      "conditions": "Conditions",
+      "actions": "Actions",
+      "runs": "Runs",
+      "status": "Enabled/disabled",
+      "actionsMenu": "Actions"
+    }
   },
   "authorization": {
     "manageOnly": "Only an organization owner or admin can manage rules"

@@ -8,7 +8,21 @@
     "trigger": "Sprožilec: {trigger}",
     "priority": "Prioriteta {priority}",
     "enabled": "Omogočeno",
-    "disabled": "Onemogočeno"
+    "disabled": "Onemogočeno",
+    "conditionCount": "pogojev",
+    "actionCount": "dejanj",
+    "openActions": "Odpri dejanja pravila",
+    "editRule": "Uredi pravilo",
+    "triggerRule": "Sproži",
+    "columns": {
+      "name": "Ime pravila",
+      "trigger": "Sprožilci",
+      "conditions": "Pogoji",
+      "actions": "Dejanja",
+      "runs": "Izvajanja",
+      "status": "Omogočeno/onemogočeno",
+      "actionsMenu": "Dejanja"
+    }
   },
   "authorization": {
     "manageOnly": "Samo lastnik ali skrbnik organizacije lahko upravlja pravila"
