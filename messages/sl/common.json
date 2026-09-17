@@ -56,10 +56,68 @@
     "security": "Varnost"
   },
   "attributes": {
-    "description": "Upravljanje atributov bo na voljo tukaj. Za zdaj podrobnosti dokumentov in gradnik pravil še vedno uporabljajo žive metapodatke Paperless.",
+    "description": "Upravljajte metapodatke, ki jih Paperless uporablja za organiziranje in ujemanje dokumentov.",
     "tagsTitle": "Oznake",
     "correspondentsTitle": "Korespondenti",
     "documentTypesTitle": "Vrste dokumentov",
-    "customFieldsTitle": "Polja po meri"
+    "customFieldsTitle": "Polja po meri",
+    "createTitle": "Ustvari {kind}",
+    "formDescription": "Ustvarite in uredite pravila ujemanja za ta atribut.",
+    "customFieldFormDescription": "Ustvarite in uredite lokalne definicije polj po meri.",
+    "emptyTitle": "Ni atributov",
+    "emptyDescription": "Ustvarite prvi atribut zgoraj.",
+    "viewDocuments": "Prikaži dokumente",
+    "openActions": "Odpri dejanja atributa",
+    "edit": "Uredi",
+    "delete": "Izbriši",
+    "confirmDelete": "Izbrišem {name}?",
+    "columns": {
+      "name": "Ime",
+      "matching": "Ujemanje",
+      "documents": "Dokumenti",
+      "viewDocuments": "Prikaži dokumente",
+      "actions": "Dejanja"
+    },
+    "form": {
+      "name": "Ime",
+      "color": "Barva",
+      "matchingAlgorithm": "Algoritem ujemanja",
+      "match": "Besedilo za ujemanje",
+      "create": "Ustvari atribut",
+      "save": "Shrani spremembe",
+      "cancel": "Prekliči"
+    },
+    "matching": {
+      "none": {
+        "label": "Brez",
+        "option": "Brez: onemogoči ujemanje."
+      },
+      "any": {
+        "label": "Katerakoli",
+        "option": "Katerakoli: dokument vsebuje katerokoli od teh besed"
+      },
+      "all": {
+        "label": "Vse",
+        "option": "Vse: dokument vsebuje vse te besede"
+      },
+      "exact": {
+        "label": "Točno",
+        "option": "Točno: dokument vsebuje ta niz"
+      },
+      "regex": {
+        "label": "Regularni izraz",
+        "option": "Regularni izraz: dokument ustreza temu izrazu"
+      },
+      "fuzzy": {
+        "label": "Približno",
+        "option": "Približno: dokument vsebuje podobno besedo"
+      }
+    },
+    "actions": {
+      "created": "Atribut je ustvarjen.",
+      "saved": "Atribut je shranjen.",
+      "deleted": "Atribut je izbrisan.",
+      "somethingWentWrong": "Nekaj je šlo narobe."
+    }
   }
 }
