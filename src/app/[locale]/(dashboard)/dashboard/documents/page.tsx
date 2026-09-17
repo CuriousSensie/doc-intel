@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 
-import { Link } from "@/i18n/navigation";
+import { Link, redirect } from "@/i18n/navigation";
 
 import { DocumentsBulkList } from "@/components/documents/documents-bulk-list";
 import { DocumentsFilterBar } from "@/components/documents/documents-filter-bar";
@@ -54,10 +54,11 @@ export default async function DocumentsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   requireFeature("documents");
-  const [context, rawSearch, t] = await Promise.all([
+  const [context, rawSearch, t, locale] = await Promise.all([
     requireUser("/dashboard/documents"),
     searchParams,
-    getTranslations("documents")
+    getTranslations("documents"),
+    getLocale()
   ]);
   const organizationId = await getActiveOrganizationId(context.user.id);
 
@@ -73,48 +74,71 @@ export default async function DocumentsPage({
 
   const client = await paperlessFor(organizationId);
 
-  const [{ items: documents, nextCursor }, tags, correspondents, documentTypes, selectedEntity] =
-    await Promise.all([
-      listDocuments(organizationId, filter),
-      getCachedTags(client, organizationId),
-      getCachedCorrespondents(client, organizationId),
-      getCachedDocumentTypes(client, organizationId),
-      filter.entityId
-        ? getEntity(
-            {
-              db: await createClient(),
-              orgId: organizationId,
-              actorId: context.user.id,
-              correlationId: randomUUID()
-            },
-            filter.entityId
-          ).catch(() => null)
-        : Promise.resolve(null)
-    ]);
+  const [
+    { items: documents, totalCount, page, pageSize, totalPages },
+    tags,
+    correspondents,
+    documentTypes,
+    selectedEntity
+  ] = await Promise.all([
+    listDocuments(organizationId, filter),
+    getCachedTags(client, organizationId),
+    getCachedCorrespondents(client, organizationId),
+    getCachedDocumentTypes(client, organizationId),
+    filter.entityId
+      ? getEntity(
+          {
+            db: await createClient(),
+            orgId: organizationId,
+            actorId: context.user.id,
+            correlationId: randomUUID()
+          },
+          filter.entityId
+        ).catch(() => null)
+      : Promise.resolve(null)
+  ]);
 
-  // Large Cards view only: one extra page-scoped Paperless call for `content` — never mirrored,
-  // never cached (see getPaperlessContentSnippets's own comment).
-  const contentByPaperlessId =
-    view === "largeCards" && documents.length > 0
-      ? Object.fromEntries(
-          await getPaperlessContentSnippets(
+  if (documents.length === 0 && page > 1 && totalPages > 0) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(rawSearch)) {
+      if (Array.isArray(value)) {
+        for (const item of value) params.append(key, item);
+      } else if (value !== undefined) {
+        params.set(key, value);
+      }
+    }
+    params.set("page", String(totalPages));
+    redirect({ href: `/dashboard/documents?${params.toString()}`, locale });
+  }
+
+  const needsTags = visibleFields.includes("tags") && documents.length > 0;
+  const needsConnections = visibleFields.includes("connections") && documents.length > 0;
+  const needsContent = view === "largeCards" && documents.length > 0;
+  const tagById = new Map(tags.map((tg) => [tg.id, tg]));
+
+  const [contentByPaperlessId, tagsByPaperlessId, connectionCountsByDocumentId] = await Promise.all(
+    [
+      needsContent
+        ? getPaperlessContentSnippets(
+            client,
+            documents.map((d) => d.paperless_document_id)
+          ).then((entries) => Object.fromEntries(entries))
+        : Promise.resolve({} as Record<number, string>),
+      needsTags
+        ? getPaperlessDocumentTags(
             client,
             documents.map((d) => d.paperless_document_id)
           )
-        )
-      : {};
+        : Promise.resolve(new Map<number, number[]>()),
+      needsConnections
+        ? countConnectionsForDocuments(
+            organizationId,
+            documents.map((d) => d.id)
+          )
+        : Promise.resolve({} as Record<string, number>)
+    ]
+  );
 
-  // Every view mode: page-scoped tag ids -> resolved {name,color,text_color}, for the per-row/
-  // card colored tag chips. Tags aren't mirrored, so this is always a live call, same
-  // id__in-scoped pattern as the content snippets above.
-  const tagById = new Map(tags.map((tg) => [tg.id, tg]));
-  const tagsByPaperlessId =
-    documents.length > 0
-      ? await getPaperlessDocumentTags(
-          client,
-          documents.map((d) => d.paperless_document_id)
-        )
-      : new Map<number, number[]>();
   const tagsByDocumentId: Record<string, PaperlessTag[]> = Object.fromEntries(
     documents.map((d) => [
       d.id,
@@ -122,10 +146,6 @@ export default async function DocumentsPage({
         .map((tagId) => tagById.get(tagId))
         .filter((tag): tag is PaperlessTag => Boolean(tag))
     ])
-  );
-  const connectionCountsByDocumentId = await countConnectionsForDocuments(
-    organizationId,
-    documents.map((d) => d.id)
   );
 
   const isFiltered = Boolean(
@@ -160,7 +180,7 @@ export default async function DocumentsPage({
 
       {isFiltered ? (
         <div className="flex min-w-0 items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
-          <span>{t("list.filteredView", { count: documents.length })}</span>
+          <span>{t("list.filteredView", { count: totalCount })}</span>
           <Link className="underline underline-offset-4" href="/dashboard/documents">
             {t("list.clearFilters")}
           </Link>
@@ -182,7 +202,12 @@ export default async function DocumentsPage({
             visibleFields={visibleFields}
             viewMode={view}
           />
-          <DocumentsPagination hasCursor={Boolean(filter.cursor)} nextCursor={nextCursor} />
+          <DocumentsPagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            totalPages={totalPages}
+          />
         </>
       )}
     </div>

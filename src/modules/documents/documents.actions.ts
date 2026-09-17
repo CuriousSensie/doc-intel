@@ -32,7 +32,6 @@ import {
   getDocumentHistory,
   getDocumentRow,
   listDocuments,
-  listDocumentIds,
   updateDocument,
   type ListDocumentsOptions
 } from "@/modules/documents/documents.service";
@@ -43,8 +42,8 @@ export async function countDocumentsMatchingFilterAction(filter: ListDocumentsOp
   requireFeature("documents");
   const ctx = await buildRequestContext();
   const parsed = listDocumentsFilterSchema.parse(filter);
-  const ids = await listDocumentIds(ctx.orgId, parsed);
-  return { count: ids.length };
+  const { totalCount } = await listDocuments(ctx.orgId, { ...parsed, page: 1, pageSize: 10 });
+  return { count: totalCount };
 }
 
 export async function listDocumentsAction(options: ListDocumentsOptions = {}) {

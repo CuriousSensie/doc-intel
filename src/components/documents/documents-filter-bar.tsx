@@ -84,10 +84,11 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
   const [isPending, startTransition] = useTransition();
   const [searchValue, setSearchValue] = useState(current.q ?? "");
 
-  function navigate(mutate: (params: URLSearchParams) => void, resetCursor = true) {
+  function navigate(mutate: (params: URLSearchParams) => void, resetPage = true) {
     const params = new URLSearchParams(searchParams.toString());
     mutate(params);
-    if (resetCursor) params.delete("cursor");
+    params.delete("cursor");
+    if (resetPage) params.delete("page");
     startTransition(() => router.push(`${pathname}?${params.toString()}`));
   }
 

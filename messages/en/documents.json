@@ -11,8 +11,12 @@
     "emptyUnfiltered": "You have no documents yet.",
     "uncategorized": "Uncategorized",
     "pagesCount": "{count} pages",
+    "paginationSummary": "Page {page} of {totalPages} · {totalCount} document(s)",
+    "pageSize": "{count} / page",
+    "firstPage": "First page",
     "previousPage": "Previous",
-    "nextPage": "Next"
+    "nextPage": "Next",
+    "lastPage": "Last page"
   },
   "filters": {
     "searchPlaceholder": "Search documents…",

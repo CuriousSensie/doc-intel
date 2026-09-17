@@ -13,6 +13,8 @@ import {
   updatePaperlessDocument
 } from "@/lib/paperless/documents";
 import { paperlessFor } from "@/lib/paperless/client";
+import type { PaperlessListEnvelope } from "@/lib/paperless/types";
+import { getRedisClient } from "@/lib/redis";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -30,6 +32,9 @@ export type Document = Database["public"]["Tables"]["documents"]["Row"];
 
 const RECENT_LIST_LIMIT = 50;
 const DEFAULT_PAGE_SIZE = 25;
+export const DOCUMENT_PAGE_SIZES = [10, 25, 50] as const;
+export type DocumentPageSize = (typeof DOCUMENT_PAGE_SIZES)[number];
+const PAPERLESS_FILTER_CACHE_TTL_SECONDS = 60;
 // specs/05-level-1-structure.md: "Cap the Paperless id set and paginate carefully — this is the
 // one place where naive implementation will not scale past a few thousand documents." — the
 // q/tag search's own page size, a separate concern from the bulk-endpoint id cap below (this
@@ -171,8 +176,19 @@ export type ListDocumentsOptions = {
   hasNoConnections?: boolean;
   sort?: DocumentSort;
   sortDirection?: DocumentSortDirection;
+  page?: number;
+  pageSize?: DocumentPageSize;
   cursor?: string | null;
   limit?: number;
+};
+
+export type ListDocumentsResult = {
+  items: Document[];
+  totalCount: number;
+  page: number;
+  pageSize: DocumentPageSize;
+  totalPages: number;
+  nextCursor: string | null;
 };
 
 const LIST_DOCUMENT_COLUMNS =
@@ -204,19 +220,45 @@ async function resolvePaperlessIdFilter(
 ): Promise<Set<number> | null> {
   if (!options.q && !options.tagIds?.length && !options.correspondentId) return null;
 
+  const normalized = {
+    q: options.q?.trim() || null,
+    titleOnly: Boolean(options.titleOnly),
+    tagIds: [...(options.tagIds ?? [])].sort((a, b) => a - b),
+    correspondentId: options.correspondentId ?? null
+  };
+  const cacheKey = `paperless:documents:filter-ids:v1:${organizationId}:${JSON.stringify(
+    normalized
+  )}`;
+  const redis = getRedisClient();
+  const cached = await redis.get(cacheKey);
+  if (cached !== null) return new Set(JSON.parse(cached) as number[]);
+
   const client = await paperlessFor(organizationId);
   const params = new URLSearchParams({ page_size: String(MAX_PAPERLESS_ID_SET) });
-  if (options.q) {
-    if (options.titleOnly) params.set("title__icontains", options.q);
-    else params.set("query", options.q);
+  if (normalized.q) {
+    if (normalized.titleOnly) params.set("title__icontains", normalized.q);
+    else params.set("query", normalized.q);
   }
-  if (options.tagIds?.length) params.set("tags__id__in", options.tagIds.join(","));
-  if (options.correspondentId) params.set("correspondent__id__in", String(options.correspondentId));
+  if (normalized.tagIds.length) params.set("tags__id__in", normalized.tagIds.join(","));
+  if (normalized.correspondentId) {
+    params.set("correspondent__id__in", String(normalized.correspondentId));
+  }
 
-  const envelope = await client.get<{ results: { id: number }[] }>(
-    `/api/documents/?${params.toString()}`
-  );
-  return new Set(envelope.results.map((r) => r.id));
+  const ids: number[] = [];
+  let path: string | null = `/api/documents/?${params.toString()}`;
+  while (path) {
+    const envelope: PaperlessListEnvelope<{ id: number }> = await client.get(path);
+    ids.push(...envelope.results.map((r) => r.id));
+    path = envelope.next ? toPaperlessRequestPath(envelope.next) : null;
+  }
+
+  await redis.set(cacheKey, JSON.stringify(ids), "EX", PAPERLESS_FILTER_CACHE_TTL_SECONDS);
+  return new Set(ids);
+}
+
+function toPaperlessRequestPath(absoluteUrl: string): string {
+  const parsed = new URL(absoluteUrl);
+  return `${parsed.pathname}${parsed.search}`;
 }
 
 // Local to documents.service.ts rather than a change to the shared `{createdAt, id}` cursor in
@@ -254,8 +296,10 @@ export async function listDocuments(
   organizationId: string,
   options: ListDocumentsOptions = {},
   precomputed: { paperlessIds?: Set<number> | null } = {}
-): Promise<{ items: Document[]; nextCursor: string | null }> {
-  const limit = options.limit ?? DEFAULT_PAGE_SIZE;
+): Promise<ListDocumentsResult> {
+  const isCursorMode = Boolean(options.cursor || options.limit);
+  const pageSize = normalizePageSize(options.pageSize);
+  const limit = isCursorMode ? normalizeLimit(options.limit) : pageSize;
   const sort = options.sort ?? "created";
   const sortColumn = SORT_COLUMNS[sort];
   const ascending = options.sortDirection === "asc";
@@ -265,20 +309,18 @@ export async function listDocuments(
     precomputed.paperlessIds !== undefined
       ? precomputed.paperlessIds
       : await resolvePaperlessIdFilter(organizationId, options);
-  if (paperlessIds && paperlessIds.size === 0) return { items: [], nextCursor: null };
+  if (paperlessIds && paperlessIds.size === 0) {
+    return emptyDocumentsResult(options.page, pageSize);
+  }
 
   // Contradictory by construction (a document "connected to entity X" necessarily has a
   // connection) — never issued as a query, just short-circuited.
   if (options.hasNoConnections && options.entityId) {
-    return { items: [], nextCursor: null };
+    return emptyDocumentsResult(options.page, pageSize);
   }
 
   if (options.hasNoConnections) {
-    // The RPC behind this always orders by created_at/id (see its own comment) — a non-default
-    // sort combined with "no connections" silently falls back to created-at ordering rather
-    // than a second migration to thread a sort column through the SQL function, a narrow,
-    // documented limitation rather than a schema change for a rarely-combined pair of filters.
-    return listDocumentsWithoutConnections(organizationId, options, limit, paperlessIds);
+    return listDocumentsWithoutConnections(organizationId, options, pageSize, limit, paperlessIds);
   }
 
   let entityConnectedDocIds: Set<string> | null = null;
@@ -293,12 +335,12 @@ export async function listDocuments(
     // other side, never the label/entity-type hydration getConnections() also does.
     const others = await listConnectedIds(ctx, "entity", options.entityId);
     entityConnectedDocIds = new Set(others.filter((o) => o.kind === "document").map((o) => o.id));
-    if (entityConnectedDocIds.size === 0) return { items: [], nextCursor: null };
+    if (entityConnectedDocIds.size === 0) return emptyDocumentsResult(options.page, pageSize);
   }
 
   let query = db
     .from("documents")
-    .select(LIST_DOCUMENT_COLUMNS)
+    .select(LIST_DOCUMENT_COLUMNS, options.cursor || options.limit ? undefined : { count: "exact" })
     .eq("organization_id", organizationId)
     .is("deleted_at", null);
 
@@ -319,20 +361,77 @@ export async function listDocuments(
 
   query = query
     .order(sortColumn, NULLABLE_SORTS.has(sort) ? { ascending, nullsFirst: false } : { ascending })
-    .order("id", { ascending })
-    .limit(limit + 1);
+    .order("id", { ascending });
 
-  const { data, error } = await query;
+  if (isCursorMode) {
+    query = query.limit(limit + 1);
+  } else {
+    const page = normalizePage(options.page);
+    const offset = (page - 1) * pageSize;
+    query = query.range(offset, offset + pageSize - 1);
+  }
+
+  const { data, error, count } = await query;
   if (error) throw error;
 
-  return paginate(data as Document[] | null, limit, sortColumn);
+  if (isCursorMode) {
+    return paginateCursor(data as Document[] | null, limit, sortColumn);
+  }
+
+  return paginateNumbered(data as Document[] | null, count ?? 0, options.page, pageSize);
 }
 
-function paginate(
+function normalizePage(value: number | undefined): number {
+  return Number.isInteger(value) && value && value > 0 ? value : 1;
+}
+
+function normalizePageSize(value: number | undefined): DocumentPageSize {
+  return DOCUMENT_PAGE_SIZES.includes(value as DocumentPageSize)
+    ? (value as DocumentPageSize)
+    : DEFAULT_PAGE_SIZE;
+}
+
+function normalizeLimit(value: number | undefined): number {
+  return Number.isInteger(value) && value && value > 0
+    ? Math.min(value, MAX_PAPERLESS_ID_SET)
+    : DEFAULT_PAGE_SIZE;
+}
+
+function emptyDocumentsResult(
+  requestedPage: number | undefined,
+  pageSize: DocumentPageSize
+): ListDocumentsResult {
+  return {
+    items: [],
+    totalCount: 0,
+    page: normalizePage(requestedPage),
+    pageSize,
+    totalPages: 0,
+    nextCursor: null
+  };
+}
+
+function paginateNumbered(
+  data: Document[] | null,
+  totalCount: number,
+  requestedPage: number | undefined,
+  pageSize: DocumentPageSize
+): ListDocumentsResult {
+  return {
+    items: data ?? [],
+    totalCount,
+    page: normalizePage(requestedPage),
+    pageSize,
+    totalPages: totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize),
+    nextCursor: null
+  };
+}
+
+function paginateCursor(
   data: Document[] | null,
   limit: number,
   sortColumn: string
-): { items: Document[]; nextCursor: string | null } {
+): ListDocumentsResult {
   const items = data ?? [];
   const hasMore = items.length > limit;
   const page = hasMore ? items.slice(0, limit) : items;
@@ -340,6 +439,10 @@ function paginate(
 
   return {
     items: page,
+    totalCount: page.length,
+    page: 1,
+    pageSize: normalizePageSize(limit),
+    totalPages: hasMore ? 2 : page.length > 0 ? 1 : 0,
     nextCursor:
       hasMore && last
         ? encodeDocumentCursor({
@@ -360,13 +463,47 @@ function paginate(
 async function listDocumentsWithoutConnections(
   organizationId: string,
   options: ListDocumentsOptions,
+  pageSize: DocumentPageSize,
   limit: number,
   paperlessIds: Set<number> | null
-): Promise<{ items: Document[]; nextCursor: string | null }> {
+): Promise<ListDocumentsResult> {
   const db = await createClient();
-  // Always created_at/id — see this function's own call site comment on why a non-default sort
-  // doesn't reach here.
   const cursor = decodeDocumentCursor(options.cursor);
+  const isCursorMode = Boolean(options.cursor || options.limit);
+
+  if (!isCursorMode) {
+    const page = normalizePage(options.page);
+    const offset = (page - 1) * pageSize;
+    const rpcArgs = {
+      p_organization_id: organizationId,
+      p_document_type_key: options.documentTypeKey ?? null,
+      p_status: options.status ?? null,
+      p_date_from: options.dateFrom ?? null,
+      p_date_to: options.dateTo ?? null,
+      p_paperless_ids: paperlessIds ? [...paperlessIds] : null
+    };
+
+    const [itemsResult, countResult] = await Promise.all([
+      db.rpc("list_documents_without_connections_page", {
+        ...rpcArgs,
+        p_sort: options.sort ?? "created",
+        p_sort_direction: options.sortDirection ?? "desc",
+        p_offset: offset,
+        p_limit: pageSize
+      }),
+      db.rpc("count_documents_without_connections", rpcArgs)
+    ]);
+
+    if (itemsResult.error) throw itemsResult.error;
+    if (countResult.error) throw countResult.error;
+
+    return paginateNumbered(
+      (itemsResult.data ?? []) as Document[],
+      Number(countResult.data ?? 0),
+      options.page,
+      pageSize
+    );
+  }
 
   const { data, error } = await db.rpc("list_documents_without_connections", {
     p_organization_id: organizationId,
@@ -381,7 +518,7 @@ async function listDocumentsWithoutConnections(
   });
   if (error) throw error;
 
-  return paginate(data, limit, "created_at");
+  return paginateCursor(data, limit, "created_at");
 }
 
 // specs/05-level-1-structure.md §Bulk business actions/§Export: "select all matching filter"
@@ -405,12 +542,11 @@ export async function listDocumentIds(
   const pageSize = 200;
 
   while (ids.length < cap) {
-    const { items, nextCursor }: { items: Document[]; nextCursor: string | null } =
-      await listDocuments(
-        organizationId,
-        { ...options, cursor, limit: pageSize },
-        { paperlessIds }
-      );
+    const { items, nextCursor } = await listDocuments(
+      organizationId,
+      { ...options, cursor, limit: pageSize },
+      { paperlessIds }
+    );
     ids.push(...items.map((d) => d.id));
     if (!nextCursor) break;
     cursor = nextCursor;
@@ -426,29 +562,14 @@ export async function countConnectionsForDocuments(
   if (documentIds.length === 0) return {};
 
   const db = await createClient();
-  const [sourceRows, targetRows] = await Promise.all([
-    db
-      .from("connections")
-      .select("source_id")
-      .eq("organization_id", organizationId)
-      .eq("source_kind", "document")
-      .in("source_id", documentIds)
-      .is("deleted_at", null),
-    db
-      .from("connections")
-      .select("target_id")
-      .eq("organization_id", organizationId)
-      .eq("target_kind", "document")
-      .in("target_id", documentIds)
-      .is("deleted_at", null)
-  ]);
-
-  if (sourceRows.error) throw sourceRows.error;
-  if (targetRows.error) throw targetRows.error;
+  const { data, error } = await db.rpc("count_document_connections", {
+    p_organization_id: organizationId,
+    p_document_ids: documentIds
+  });
+  if (error) throw error;
 
   const counts: Record<string, number> = Object.fromEntries(documentIds.map((id) => [id, 0]));
-  for (const row of sourceRows.data ?? []) counts[row.source_id] = (counts[row.source_id] ?? 0) + 1;
-  for (const row of targetRows.data ?? []) counts[row.target_id] = (counts[row.target_id] ?? 0) + 1;
+  for (const row of data ?? []) counts[row.document_id] = Number(row.connection_count);
   return counts;
 }
 

@@ -1166,6 +1166,36 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["documents"]["Row"][];
       };
+      count_document_connections: {
+        Args: { p_organization_id: string; p_document_ids: string[] };
+        Returns: { document_id: string; connection_count: number }[];
+      };
+      count_documents_without_connections: {
+        Args: {
+          p_organization_id: string;
+          p_document_type_key?: string | null;
+          p_status?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_paperless_ids?: number[] | null;
+        };
+        Returns: number;
+      };
+      list_documents_without_connections_page: {
+        Args: {
+          p_organization_id: string;
+          p_document_type_key?: string | null;
+          p_status?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_paperless_ids?: number[] | null;
+          p_sort?: string;
+          p_sort_direction?: string;
+          p_offset?: number;
+          p_limit?: number;
+        };
+        Returns: Database["public"]["Tables"]["documents"]["Row"][];
+      };
       complete_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: undefined;

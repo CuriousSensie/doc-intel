@@ -7,6 +7,7 @@ afterEach(() => {
   vi.doUnmock("@/lib/events");
   vi.doUnmock("@/lib/paperless/client");
   vi.doUnmock("@/lib/paperless/documents");
+  vi.doUnmock("@/lib/redis");
   vi.doUnmock("@/modules/connections/connections.service");
   vi.doUnmock("@/modules/organizations/organizations.service");
   vi.resetModules();
@@ -232,7 +233,12 @@ describe("completeUpload", () => {
 });
 
 describe("getDocument", () => {
-  const DOC_ROW = { id: "doc-1", organization_id: "org-1", paperless_document_id: 42, title: "Invoice" };
+  const DOC_ROW = {
+    id: "doc-1",
+    organization_id: "org-1",
+    paperless_document_id: 42,
+    title: "Invoice"
+  };
 
   it("returns the mirror row with connections and Paperless custom fields", async () => {
     vi.doMock("@/lib/supabase/server", () => ({
@@ -283,7 +289,12 @@ describe("getDocument", () => {
 });
 
 describe("updateDocument", () => {
-  const DOC_ROW = { id: "doc-1", organization_id: "org-1", paperless_document_id: 42, title: "Old title" };
+  const DOC_ROW = {
+    id: "doc-1",
+    organization_id: "org-1",
+    paperless_document_id: 42,
+    title: "Old title"
+  };
 
   it("rejects a read-only member before touching Paperless", async () => {
     vi.doMock("@/lib/supabase/server", () => ({
@@ -423,7 +434,12 @@ describe("updateDocument", () => {
 });
 
 describe("deleteDocument", () => {
-  const DOC_ROW = { id: "doc-1", organization_id: "org-1", paperless_document_id: 42, title: "Invoice" };
+  const DOC_ROW = {
+    id: "doc-1",
+    organization_id: "org-1",
+    paperless_document_id: 42,
+    title: "Invoice"
+  };
 
   it("rejects a read-only member before touching Paperless", async () => {
     vi.doMock("@/lib/supabase/server", () => ({
@@ -498,7 +514,11 @@ describe("getAdjacentDocumentId", () => {
           order(...args);
           return proxy;
         },
-        limit: () => Promise.resolve({ data: [{ id: "doc-prev", created_at: "2026-05-01T00:00:00Z" }], error: null })
+        limit: () =>
+          Promise.resolve({
+            data: [{ id: "doc-prev", created_at: "2026-05-01T00:00:00Z" }],
+            error: null
+          })
       };
       return proxy;
     }
@@ -537,11 +557,25 @@ describe("getAdjacentDocumentId", () => {
 
 describe("listDocuments — hasNoConnections", () => {
   function makeRow(id: string) {
-    return { id, organization_id: "org-1", paperless_document_id: 1, title: "Invoice", created_at: "2026-01-01T00:00:00Z" };
+    return {
+      id,
+      organization_id: "org-1",
+      paperless_document_id: 1,
+      title: "Invoice",
+      created_at: "2026-01-01T00:00:00Z"
+    };
   }
 
-  it("dispatches to the list_documents_without_connections RPC instead of building a NOT IN list", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: [makeRow("doc-1")], error: null });
+  it("dispatches to the paginated no-connections RPCs instead of building a NOT IN list", async () => {
+    const rpc = vi.fn((name: string) => {
+      if (name === "list_documents_without_connections_page") {
+        return Promise.resolve({ data: [makeRow("doc-1")], error: null });
+      }
+      if (name === "count_documents_without_connections") {
+        return Promise.resolve({ data: 1, error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
     const from = vi.fn(() => {
       throw new Error("hasNoConnections must not touch documents/connections via .from()");
     });
@@ -551,10 +585,15 @@ describe("listDocuments — hasNoConnections", () => {
     const result = await listDocuments("org-1", { hasNoConnections: true, status: "ready" });
 
     expect(rpc).toHaveBeenCalledWith(
-      "list_documents_without_connections",
-      expect.objectContaining({ p_organization_id: "org-1", p_status: "ready", p_limit: 26 })
+      "list_documents_without_connections_page",
+      expect.objectContaining({ p_organization_id: "org-1", p_status: "ready", p_limit: 25 })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      "count_documents_without_connections",
+      expect.objectContaining({ p_organization_id: "org-1", p_status: "ready" })
     );
     expect(result.items).toHaveLength(1);
+    expect(result.totalCount).toBe(1);
   });
 
   it("short-circuits to empty when hasNoConnections and entityId are both set (contradictory)", async () => {
@@ -566,7 +605,7 @@ describe("listDocuments — hasNoConnections", () => {
     const { listDocuments } = await import("@/modules/documents/documents.service");
     const result = await listDocuments("org-1", { hasNoConnections: true, entityId: "entity-1" });
 
-    expect(result).toEqual({ items: [], nextCursor: null });
+    expect(result).toMatchObject({ items: [], nextCursor: null, totalCount: 0 });
   });
 });
 
@@ -592,7 +631,8 @@ describe("listDocuments — sort", () => {
         in: () => proxy,
         or: () => proxy,
         order,
-        limit: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null })
+        limit: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null }),
+        range: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null, count: 1 })
       };
       return proxy;
     }
@@ -620,7 +660,8 @@ describe("listDocuments — sort", () => {
           order(...args);
           return proxy;
         },
-        limit: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null })
+        limit: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null }),
+        range: () => Promise.resolve({ data: [makeRow("doc-1", "A")], error: null, count: 1 })
       };
       return proxy;
     }
@@ -639,6 +680,9 @@ describe("resolvePaperlessIdFilter (via listDocumentIds)", () => {
   it("combines q/titleOnly/tagIds/correspondentId into a single Paperless request", async () => {
     const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }] });
     vi.doMock("@/lib/paperless/client", () => ({ paperlessFor: async () => ({ get }) }));
+    vi.doMock("@/lib/redis", () => ({
+      getRedisClient: () => ({ get: vi.fn().mockResolvedValue(null), set: vi.fn() })
+    }));
 
     function chain(): Record<string, unknown> {
       const proxy: Record<string, unknown> = {
@@ -676,6 +720,9 @@ describe("listDocumentIds", () => {
   it("resolves the q/tag Paperless search once across multiple pages, not once per page", async () => {
     const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }, { id: 2 }] });
     vi.doMock("@/lib/paperless/client", () => ({ paperlessFor: async () => ({ get }) }));
+    vi.doMock("@/lib/redis", () => ({
+      getRedisClient: () => ({ get: vi.fn().mockResolvedValue(null), set: vi.fn() })
+    }));
 
     let page = 0;
     function chain(): Record<string, unknown> {

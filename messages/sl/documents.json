@@ -11,8 +11,12 @@
     "emptyUnfiltered": "Nimate še nobenega dokumenta.",
     "uncategorized": "Nekategorizirano",
     "pagesCount": "{count} strani",
+    "paginationSummary": "Stran {page} od {totalPages} · {totalCount} dokument(ov)",
+    "pageSize": "{count} / stran",
+    "firstPage": "Prva stran",
     "previousPage": "Nazaj",
-    "nextPage": "Naprej"
+    "nextPage": "Naprej",
+    "lastPage": "Zadnja stran"
   },
   "filters": {
     "searchPlaceholder": "Iskanje dokumentov…",

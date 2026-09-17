@@ -14,6 +14,7 @@ export const documentStatusSchema = z.enum([
 
 export const documentSortSchema = z.enum(["created", "title", "mimeType", "size", "pages"]);
 export const documentSortDirectionSchema = z.enum(["asc", "desc"]);
+export const documentPageSizeSchema = z.union([z.literal(10), z.literal(25), z.literal(50)]);
 export const documentViewModeSchema = z.enum(["list", "smallCards", "largeCards"]);
 export const documentListFieldSchema = z.enum([
   "title",
@@ -55,6 +56,8 @@ export const listDocumentsFilterSchema = z.object({
   hasNoConnections: z.boolean().optional(),
   sort: documentSortSchema.optional(),
   sortDirection: documentSortDirectionSchema.optional(),
+  page: z.coerce.number().int().min(1).optional().catch(undefined),
+  pageSize: z.coerce.number().pipe(documentPageSizeSchema).optional().catch(undefined),
   cursor: z.string().optional()
 });
 
@@ -98,6 +101,8 @@ export function parseDocumentsSearchParams(
     hasNoConnections: first(raw.hasNoConnections) === "true",
     sort: first(raw.sort),
     sortDirection: first(raw.sortDirection),
+    page: first(raw.page),
+    pageSize: first(raw.pageSize),
     cursor: first(raw.cursor)
   };
 
