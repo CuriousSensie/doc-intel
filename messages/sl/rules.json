@@ -72,8 +72,8 @@
       "disconnect_entity": "Prekini povezavo z entiteto"
     },
     "actionModes": {
-      "attribute": "Dodeli/odstrani atribute",
-      "entity": "Poveži/prekini entitete"
+      "attribute": "Atribute",
+      "entity": "Entitete"
     },
     "attributeOperationLabel": "Operacija atributa",
     "attributeOperations": {

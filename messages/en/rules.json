@@ -72,8 +72,8 @@
       "disconnect_entity": "Disconnect from entity"
     },
     "actionModes": {
-      "attribute": "Assign/remove attributes",
-      "entity": "Connect/disconnect entities"
+      "attribute": "Attributes",
+      "entity": "Entities"
     },
     "attributeOperationLabel": "Attribute operation",
     "attributeOperations": {

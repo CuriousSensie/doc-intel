@@ -6,7 +6,7 @@ export const featureConfig = {
   entities: true,
   // specs/05 Dashboard IA — nav placeholders, invisible until Phase 3/4 build them out.
   imports: true,
-  rules: false,
+  rules: true,
   admin: true,
   notifications: true,
   mfa: true,
