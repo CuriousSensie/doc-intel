@@ -28,7 +28,7 @@
     "manageOnly": "Samo lastnik ali skrbnik organizacije lahko upravlja pravila"
   },
   "form": {
-    "basicsTitle": "Ime in prioriteta",
+    "basicsTitle": "Ime in sprožilec",
     "nameLabel": "Ime",
     "namePlaceholder": "Računi za ABC d.o.o.",
     "priorityLabel": "Prioriteta",
@@ -71,6 +71,26 @@
       "connect_entity": "Poveži z entiteto",
       "disconnect_entity": "Prekini povezavo z entiteto"
     },
+    "actionModes": {
+      "attribute": "Dodeli/odstrani atribute",
+      "entity": "Poveži/prekini entitete"
+    },
+    "attributeOperationLabel": "Operacija atributa",
+    "attributeOperations": {
+      "assign": "Dodeli",
+      "remove": "Odstrani"
+    },
+    "attributeKindLabel": "Atribut",
+    "attributeKinds": {
+      "tag": "Oznake",
+      "correspondent": "Korespondenti",
+      "documentType": "Vrste dokumentov"
+    },
+    "entityOperationLabel": "Operacija entitete",
+    "entityOperations": {
+      "connect": "Poveži",
+      "disconnect": "Prekini"
+    },
     "relations": {
       "belongs_to": "Pripada",
       "issued_to": "Izdano za",
@@ -103,6 +123,7 @@
     },
     "backToRules": "Nazaj na pravila",
     "edit": "Uredi",
+    "trigger": "Sproži",
     "delete": "Izbriši pravilo",
     "confirmDelete": "Izbrišete to pravilo? Zgodovina izvajanja ostane, vendar se pravilo ne bo več izvajalo.",
     "enable": "Omogoči",
