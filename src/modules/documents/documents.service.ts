@@ -25,6 +25,7 @@ import {
   type ConnectionWithOther
 } from "@/modules/connections/connections.service";
 import { getMembership } from "@/modules/organizations/organizations.service";
+import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import type { Database } from "@/types/database";
 
 export type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"];
@@ -865,6 +866,46 @@ export async function updateDocument(
 
     if (updateError) throw updateError;
     updatedRow = data;
+  }
+
+  // specs/07-rules-engine.md: "user edits win over rules always." The spec's own suggested
+  // fallback — check Paperless document history for a human edit — turns out not to work in
+  // this architecture: every write for a tenant, whether triggered by a human through this app
+  // or by a rule running in the worker, goes through the same single tenant service user
+  // (paperlessFor(orgId)), so Paperless's own history `actor` field can never tell those two
+  // apart (confirmed live against the pinned instance this session — every edit through this
+  // codebase shows up as the same Paperless user regardless of who or what triggered it). The
+  // only place that actually knows "a human just edited this field" is this function itself, so
+  // it writes field_provenance directly instead of relying on a Paperless-side signal.
+  const admin = createAdminClient();
+  const provenanceFieldKeys: string[] = [];
+  if (input.documentTypeId !== undefined) provenanceFieldKeys.push("document.type");
+  if (input.correspondentId !== undefined) provenanceFieldKeys.push("document.correspondent");
+  if (input.customFieldValues !== undefined) {
+    const defsCtx: ServiceContext = { db: admin, orgId: organizationId, actorId: userId, correlationId: randomUUID() };
+    const defs = await listCustomFieldDefs(defsCtx);
+    const keyByPaperlessFieldId = new Map(
+      defs.filter((d) => d.paperless_custom_field_id !== null).map((d) => [d.paperless_custom_field_id, d.key])
+    );
+    for (const cfv of input.customFieldValues) {
+      const key = keyByPaperlessFieldId.get(cfv.field);
+      if (key) provenanceFieldKeys.push(`document.custom.${key}`);
+    }
+  }
+
+  if (provenanceFieldKeys.length > 0) {
+    const { error: provenanceError } = await admin.from("field_provenance").upsert(
+      provenanceFieldKeys.map((fieldKey) => ({
+        organization_id: organizationId,
+        document_id: documentId,
+        field_key: fieldKey,
+        updated_by: "user" as const,
+        source_id: userId,
+        updated_at: new Date().toISOString()
+      })),
+      { onConflict: "document_id,field_key" }
+    );
+    if (provenanceError) throw provenanceError;
   }
 
   await logEvent({

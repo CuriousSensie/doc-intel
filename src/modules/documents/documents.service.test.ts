@@ -399,26 +399,37 @@ describe("updateDocument", () => {
     }));
 
     let mirrorUpdatePayload: unknown;
+    let provenanceUpsertPayload: unknown;
     vi.doMock("@/lib/supabase/admin", () => ({
       createAdminClient: () => ({
-        from: () => ({
-          update: (payload: unknown) => {
-            mirrorUpdatePayload = payload;
+        from: (table: string) => {
+          if (table === "field_provenance") {
             return {
-              eq: () => ({
-                eq: () => ({
-                  select: () => ({
-                    single: () =>
-                      Promise.resolve({
-                        data: { ...DOC_ROW, correspondent_name: "Acme Corp" },
-                        error: null
-                      })
-                  })
-                })
-              })
+              upsert: (payload: unknown) => {
+                provenanceUpsertPayload = payload;
+                return Promise.resolve({ error: null });
+              }
             };
           }
-        })
+          return {
+            update: (payload: unknown) => {
+              mirrorUpdatePayload = payload;
+              return {
+                eq: () => ({
+                  eq: () => ({
+                    select: () => ({
+                      single: () =>
+                        Promise.resolve({
+                          data: { ...DOC_ROW, correspondent_name: "Acme Corp" },
+                          error: null
+                        })
+                    })
+                  })
+                })
+              };
+            }
+          };
+        }
       })
     }));
     vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
@@ -430,6 +441,17 @@ describe("updateDocument", () => {
     expect(getPaperlessCorrespondentName).toHaveBeenCalledWith({}, 7);
     expect(mirrorUpdatePayload).toEqual({ correspondent_name: "Acme Corp" });
     expect(result.correspondent_name).toBe("Acme Corp");
+    // specs/07-rules-engine.md "user edits win over rules always" — a human editing a field
+    // through this app marks it in field_provenance, so a later rule run never overwrites it.
+    expect(provenanceUpsertPayload).toEqual([
+      expect.objectContaining({
+        organization_id: "org-1",
+        document_id: "doc-1",
+        field_key: "document.correspondent",
+        updated_by: "user",
+        source_id: "user-1"
+      })
+    ]);
   });
 });
 
