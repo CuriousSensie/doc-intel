@@ -707,13 +707,25 @@ much is built, per this file's own rule (checked only once merged).
       trigger fire in `worker/jobs/run-rule.ts`, shared across every rule evaluated for that
       document; a later rule's write to an already-claimed field records
       `skipped_conflict:<winning-rule-id>` instead of overwriting.
-- [ ] `field_provenance` mechanism — implemented; user-edit-wins is checked via
-      `rules.dispatcher.ts#isUserOwned()` before every Paperless-side field write. The
-      "check Paperless document history for a user edit" half of the spec's own suggested
-      mechanism (reusing the existing `getPaperlessDocumentHistory()` from Phase 2 to mark a field
-      `updated_by: 'user'` after an out-of-band edit) is **not yet wired** — currently only a rule
-      action itself ever writes `field_provenance`, so a raw Paperless-side edit made outside this
-      app isn't yet detected. Tracked as a real, open gap, not silently assumed done.
+- [ ] `field_provenance` mechanism — implemented, including user-edit-wins. **A real correction
+      to the spec's own suggested mechanism**, found and fixed this session: `specs/07` suggests
+      falling back to "check the document's Paperless history for a user edit" for Paperless-side
+      fields — confirmed live against the pinned instance (PATCHing a document, then reading
+      `/api/documents/:id/history/`) that this doesn't actually work in this architecture. Every
+      write for a tenant, whether triggered by a human through this app or by a rule in the
+      worker, goes through the same single tenant service user (`paperlessFor(orgId)`), so
+      Paperless's own history `actor` field is identical either way and can't discriminate them.
+      Fixed by writing `field_provenance` directly from the one place that actually knows a human
+      just edited a field: `documents.service.ts#updateDocument()` (the existing Phase 2 edit-form
+      path) now upserts `updated_by: 'user'` for `document.type`/`document.correspondent`/
+      `document.custom.<key>` whenever those inputs are part of the call. Verified with a new unit
+      test (`documents.service.test.ts`). `rules.dispatcher.ts` checks this batched per document
+      (one query per `dispatchRuleActions()` call, not per action — a perf fix made the same
+      session) before every Paperless-side rule write. **Known remaining gap**: the bulk-edit path
+      (`bulkEditPaperlessDocuments`, proxied straight to Paperless's own `bulk_edit`) does not go
+      through `updateDocument()` and so doesn't mark `field_provenance` — a human bulk-editing
+      document type/correspondent across many documents isn't yet protected from a later rule
+      overwrite. Tracked as open, not silently assumed covered.
 - [ ] `POST /rules/:id/test` — `testRuleAction()` (Server Action per ADR-0009's "rule CRUD"
       allocation), dry run only, no `rule_runs` row written.
 - [ ] `src/lib/safe-regex.ts` — `re2` (RE2 engine, linear-time by construction; added as a new
