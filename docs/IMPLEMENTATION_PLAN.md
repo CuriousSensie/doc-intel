@@ -772,33 +772,65 @@ much is built, per this file's own rule (checked only once merged).
       wall-clock improvement at backfill scale, not a micro-optimization.
 - [ ] Docs updated — this entry; `SPEC_TRACEABILITY.md`/`DATABASE.md`/`MODULES.md`/
       `API_REFERENCE.md`/`ARCHITECTURE.md` **still not updated** for Phase 4 — tracked as open.
-- [ ] `/dashboard/rules` UI — done this session: list (`rules/page.tsx`), create
-      (`rules/new/page.tsx`), detail (`rules/[id]/page.tsx` — edit form, enable/disable toggle,
-      delete with confirm), `RuleTestPanel` (client component, calls `testRuleAction()`, renders
-      the condition trace recursively including `all`/`any` nesting), `RuleBackfillPanel` (preview
-      count → start → poll `GET /api/rule-backfills/[id]` every 2s → pause/resume/cancel/undo).
-      Conditions/actions are authored as raw JSON in a textarea (validated server-side against the
-      same Zod schemas the DSL uses) — a genuine MVP simplification, not a visual condition/action
-      builder; documented here rather than silently presented as more polished than it is.
-      `messages/en/rules.json` + `messages/sl/rules.json` added, registered in
-      `src/i18n/messages.ts` and `global.d.ts`. **The `rules` feature flag stays `false`**
-      (`src/config/features.ts`) — the UI is real and reachable at the route level but not yet
-      linked from anywhere a tenant would find it, per the original plan.
+- [ ] `/dashboard/rules` UI — done this session, then reworked into a guided builder per direct
+      product feedback ("simplified, 3 clear sections: trigger / conditions / actions", matching
+      `/documents`'s visual language). List (`rules/page.tsx`), create (`rules/new/page.tsx`),
+      detail (`rules/[id]/page.tsx` — now tabbed: Rule/Test/Backfill/Runs, mirroring
+      `document-detail-tabs.tsx`'s underline style via the new `RuleDetailTabs`), `RuleTestPanel`,
+      `RuleBackfillPanel` (unchanged from the first pass). Conditions/actions are **no longer raw
+      JSON** — `RuleForm` (`src/components/rules/rule-form.tsx`) is a guided row-builder: each
+      condition is field (file name/content/tags/correspondent/document type) → operator
+      (contains/doesn't contain/is/is not, scoped per field) → value; each action is one of
+      assign/remove tag, assign document type, assign correspondent, or connect/disconnect entity
+      (added after explicit confirmation that entity connections — the engine's actual point —
+      shouldn't be dropped from the simplified UI). Reuses `PaperlessMetaPicker`
+      (`src/components/documents/paperless-meta-picker.tsx`, previously document-detail-only) for
+      every tag/correspondent/document-type value, and a new lighter `EntityPickerField` (a
+      non-connection-creating sibling of `ConnectionPicker`) for entity references. The full DSL
+      (regex, date ranges, custom fields, `any` grouping) still exists server-side; this is a
+      deliberately narrower guided subset over it, not a replacement — documented, not hidden.
+      **The `rules` feature flag stays `false`** in the repo (`src/config/features.ts`) per the
+      original plan — a local `true` toggle was used only for this session's own manual/browser
+      verification and was left uncommitted, not merged in.
+- [ ] **Three real bugs found by an actual browser walkthrough this session, none of which
+      typecheck/lint/the full test suite caught**:
+      1. Trigger labels rendered as the raw untranslated key (`rules.triggers.document.ingested`)
+         instead of "Document ingested" — next-intl splits a `t()` key on `.` for nested-message
+         lookup, so a DSL trigger value containing a literal dot can never be used directly as a
+         message key. This bug predated this session's UI rework (the original list/detail pages
+         had the same `t(\`triggers.${trigger}\`)` pattern) but was never actually seen rendered
+         until now. Fixed with `triggerMessageKey()` (`rules.schemas.ts`, a literal record so
+         next-intl's typed `t()` can check it) and underscore-form JSON keys
+         (`document_ingested`, not `document.ingested`) in both locale files.
+      2. Creating a brand-new tag/document-type/correspondent through `PaperlessMetaPicker`'s
+         inline "create new" flow set the row's `metaId` correctly but never added the new object
+         to `RuleForm`'s own options list (a static prop from the initial server fetch) — so the
+         picker's own selected-chip render came back empty, and worse, submitting the rule would
+         have resolved the action's `value` to an empty string (`nameForMetaId()` couldn't find
+         the new object in the stale list either). Fixed by lifting `metaOptions` into local state
+         and appending `PaperlessMetaPicker`'s `onChange` second argument (the newly-created
+         option) into it.
+      3. `remove_tag` called `findOrCreateTagId()` — removing a tag that doesn't exist would
+         **create** it first, then immediately not-include it in the write (pointless Paperless
+         object churn, and semantically backwards). Fixed with a new `findExistingTagId()` that
+         returns `null` instead of creating, dispatched as `noop_tag_not_found`.
+      Two selects also had no accessible name at all (a real a11y gap, not just a test
+      convenience) — fixed with `aria-label`s across the trigger/condition/action selects.
 - [ ] `e2e/isolation.spec.ts` additions for rules — done as `e2e/isolation-rules.spec.ts` (test
       #10, see the isolation-gap entry above). The full existing 15-test suite
       (`isolation.spec.ts` + `isolation-phase2.spec.ts`) was re-run live after all of this
       session's changes and stayed green (14 real passes + test #6's documented expected
       `test.fail()`) — no regressions from the rules engine or the `documents.service.ts`
       provenance change.
-- [ ] Live verification against Cloud Supabase + real end-to-end document flow — done for the
-      slice that matters most for isolation: `isolation-rules.spec.ts` and the full existing
-      isolation suite both ran against the **real Cloud Supabase project** (not just the local
-      stack) and the real pinned Paperless container this session — real tenant provisioning
-      (group/user creation), a real document uploaded and consumed through Paperless, a real rule
-      evaluated through the actual `rules.dispatcher.ts`/`apply_rule_action()` code path. A full
-      browser-driven walkthrough (create a rule via the `/dashboard/rules` UI, watch it fire on a
-      real upload) was **not** run — the UI itself is untested in a browser this session, only
-      typechecked/linted/built.
+- [ ] Live verification against Cloud Supabase + real end-to-end document flow — done, including
+      the UI: `isolation-rules.spec.ts` and the full existing isolation suite both ran against the
+      **real Cloud Supabase project** (not just the local stack) and the real pinned Paperless
+      container. A real Playwright-driven browser walkthrough was also run against the real dev
+      server + real Cloud Supabase + real Paperless: login → `/dashboard/rules` → create a rule
+      (name, trigger, one condition, one action creating a brand-new tag) → submit → redirected to
+      the detail page → all four tabs render with zero console errors. This is what surfaced the
+      three real bugs listed above — none of them were visible from typecheck, lint, the unit
+      suite, or the production build alone.
 - [ ] 5,000-document backfill scale test — **prepared, not run at full scale**, same honest
       deferral Phase 3 M9 made for its own 10k `--execute` run and for the same reason: the
       expensive part is real Paperless document consumption, not this engine's own claim/cursor/
