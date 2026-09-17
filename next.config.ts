@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   poweredByHeader: false,
   reactStrictMode: true,
+  // re2 (src/lib/safe-regex.ts) ships a native .node binary — webpack tries to parse it as JS
+  // and fails the build unless it's excluded from bundling and left as a real `require()` at
+  // runtime instead (Node resolves native addons directly; nothing to bundle for a
+  // server-only module).
+  serverExternalPackages: ["re2"],
   experimental: {
     // Headroom above avatarConfig.maxSizeBytes (5MB) for multipart/form-data boundary/field
     // overhead — the only server-action file upload left; Documents uploads go direct-to-storage

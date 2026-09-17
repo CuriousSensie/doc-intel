@@ -3,6 +3,10 @@
 FROM node:20-alpine
 WORKDIR /app
 
+# re2 (src/lib/safe-regex.ts, used by worker/jobs/run-rule.ts's rule evaluation) falls back to
+# node-gyp compilation when no prebuilt binary matches musl libc — see Dockerfile's identical
+# comment.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 

@@ -2,6 +2,10 @@
 
 FROM node:20-alpine AS deps
 WORKDIR /app
+# re2 (src/lib/safe-regex.ts) ships prebuilt binaries for common platforms but falls back to
+# compiling from source (node-gyp) when none matches this image's musl libc — alpine's base
+# image has no C++ toolchain by default, so npm ci would fail on that fallback path without this.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 
