@@ -125,3 +125,11 @@ export function addCachedDocumentType(
 ): Promise<void> {
   return updateCachedList(orgId, "document_types", documentType);
 }
+
+export async function invalidateCachedMetadataList(
+  orgId: string,
+  kind: "tags" | "correspondents" | "document_types"
+): Promise<void> {
+  const redis = getRedisClient();
+  await redis.del(`paperless:meta:list:${kind}:${orgId}`);
+}

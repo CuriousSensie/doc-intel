@@ -51,25 +51,32 @@ export function createPaperlessTag(
   client: PaperlessClient,
   name: string,
   ownership: OwnedObjectPermissions,
-  color?: string
-): Promise<{ id: number; name: string; color: string; text_color: string }> {
-  return client.createOwnedObject("/api/tags/", { name, ...(color ? { color } : {}) }, ownership);
+  color?: string,
+  matching?: PaperlessMatchingFields
+): Promise<PaperlessTag> {
+  return client.createOwnedObject(
+    "/api/tags/",
+    { name, ...(color ? { color } : {}), ...matching },
+    ownership
+  );
 }
 
 export function createPaperlessCorrespondent(
   client: PaperlessClient,
   name: string,
-  ownership: OwnedObjectPermissions
-): Promise<{ id: number; name: string }> {
-  return client.createOwnedObject("/api/correspondents/", { name }, ownership);
+  ownership: OwnedObjectPermissions,
+  matching?: PaperlessMatchingFields
+): Promise<PaperlessCorrespondent> {
+  return client.createOwnedObject("/api/correspondents/", { name, ...matching }, ownership);
 }
 
 export function createPaperlessDocumentType(
   client: PaperlessClient,
   name: string,
-  ownership: OwnedObjectPermissions
-): Promise<{ id: number; name: string }> {
-  return client.createOwnedObject("/api/document_types/", { name }, ownership);
+  ownership: OwnedObjectPermissions,
+  matching?: PaperlessMatchingFields
+): Promise<PaperlessDocumentType> {
+  return client.createOwnedObject("/api/document_types/", { name, ...matching }, ownership);
 }
 
 // specs/05-level-1-structure.md §Bulk business actions: "Paperless's [bulk actions]: change
@@ -164,9 +171,29 @@ async function listAllPaginated<T>(client: PaperlessClient, path: string): Promi
   return items;
 }
 
-export type PaperlessTag = { id: number; name: string; color: string; text_color: string };
-export type PaperlessCorrespondent = { id: number; name: string };
-export type PaperlessDocumentType = { id: number; name: string };
+export type PaperlessMatchingFields = {
+  match?: string;
+  matching_algorithm?: number;
+  is_insensitive?: boolean;
+};
+
+export type PaperlessTag = PaperlessMatchingFields & {
+  id: number;
+  name: string;
+  color: string;
+  text_color: string;
+  document_count?: number;
+};
+export type PaperlessCorrespondent = PaperlessMatchingFields & {
+  id: number;
+  name: string;
+  document_count?: number;
+};
+export type PaperlessDocumentType = PaperlessMatchingFields & {
+  id: number;
+  name: string;
+  document_count?: number;
+};
 
 export function listPaperlessTags(client: PaperlessClient): Promise<PaperlessTag[]> {
   return listAllPaginated<PaperlessTag>(client, "/api/tags/?page_size=200");
@@ -182,6 +209,42 @@ export function listPaperlessDocumentTypes(
   client: PaperlessClient
 ): Promise<PaperlessDocumentType[]> {
   return listAllPaginated<PaperlessDocumentType>(client, "/api/document_types/?page_size=200");
+}
+
+export function updatePaperlessTag(
+  client: PaperlessClient,
+  id: number,
+  patch: Partial<Pick<PaperlessTag, "name" | "color" | "match" | "matching_algorithm" | "is_insensitive">>
+): Promise<PaperlessTag> {
+  return client.patch<PaperlessTag>(`/api/tags/${id}/`, patch);
+}
+
+export function updatePaperlessCorrespondent(
+  client: PaperlessClient,
+  id: number,
+  patch: Partial<Pick<PaperlessCorrespondent, "name" | "match" | "matching_algorithm" | "is_insensitive">>
+): Promise<PaperlessCorrespondent> {
+  return client.patch<PaperlessCorrespondent>(`/api/correspondents/${id}/`, patch);
+}
+
+export function updatePaperlessDocumentType(
+  client: PaperlessClient,
+  id: number,
+  patch: Partial<Pick<PaperlessDocumentType, "name" | "match" | "matching_algorithm" | "is_insensitive">>
+): Promise<PaperlessDocumentType> {
+  return client.patch<PaperlessDocumentType>(`/api/document_types/${id}/`, patch);
+}
+
+export function deletePaperlessTag(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/tags/${id}/`);
+}
+
+export function deletePaperlessCorrespondent(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/correspondents/${id}/`);
+}
+
+export function deletePaperlessDocumentType(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/document_types/${id}/`);
 }
 
 // Large-cards view mode only: a page-scoped read of `content` for the ~25 documents currently
