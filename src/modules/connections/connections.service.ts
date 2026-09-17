@@ -1,7 +1,32 @@
 import { ConflictError, NotFoundError, ValidationError, describeError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
+import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import type { ServiceContext } from "@/lib/service-context";
 import type { Database } from "@/types/database";
+
+// specs/07-rules-engine.md §Triggers: document.connected fires when a connection is created —
+// scoped to whichever side is a document (rule conditions/subject context only exist for
+// document/entity subjects, and the spec's own example rules read as document-centric).
+// cascadeDepth starts at 0 for an organically-created connection (manual UI action or bulk
+// connect); a connection created *by* a rule's own connect_entity action is enqueued separately,
+// with depth + 1, from worker/jobs/run-rule.ts — never from here, since this function has no
+// notion of "which rule caused this."
+async function enqueueDocumentConnectedTrigger(
+  ctx: ServiceContext,
+  sourceKind: ConnectableKind,
+  sourceId: string,
+  targetKind: ConnectableKind,
+  targetId: string
+): Promise<void> {
+  const documentId = sourceKind === "document" ? sourceId : targetKind === "document" ? targetId : null;
+  if (!documentId) return;
+  await enqueue(QUEUE_NAMES.runRule, {
+    orgId: ctx.orgId,
+    documentId,
+    trigger: "document.connected",
+    cascadeDepth: 0
+  });
+}
 
 export type Connection = Database["public"]["Tables"]["connections"]["Row"];
 export type ConnectableKind = Connection["source_kind"];
@@ -261,6 +286,8 @@ export async function createConnection(
     }
   });
 
+  await enqueueDocumentConnectedTrigger(ctx, input.sourceKind, input.sourceId, input.targetKind, input.targetId);
+
   return data;
 }
 
@@ -417,6 +444,18 @@ export async function bulkCreateConnections(
     }
   } else {
     createdIds = (inserted ?? []).map((row) => row.id);
+
+    // The fallback per-item loop above already triggers document.connected via createConnection()
+    // itself; this fast batch-insert path bypasses that function entirely, so it fires the
+    // trigger explicitly here — one job per created connection touching a document, matching how
+    // every other per-document rule trigger in this codebase fans out (never a batch payload).
+    if (input.sourceKind === "document" || input.targetKind === "document") {
+      await Promise.all(
+        (inserted ?? []).map((row) =>
+          enqueueDocumentConnectedTrigger(ctx, input.sourceKind, row.source_id, input.targetKind, input.targetId)
+        )
+      );
+    }
   }
 
   if (createdIds.length > 0) {

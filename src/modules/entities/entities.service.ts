@@ -1,6 +1,7 @@
 import { ConflictError, NotFoundError, UnprocessableError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
 import { decodeCursor, encodeCursor } from "@/lib/pagination";
+import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import type { ServiceContext } from "@/lib/service-context";
 import { getEntityType, getVisibleFieldSchema } from "@/modules/entity-types/entity-types.service";
 import { validateEntityData } from "@/modules/entities/field-schema";
@@ -128,6 +129,17 @@ export async function createEntity(
     entityId: entity.id,
     organizationId: ctx.orgId,
     metadata: { entity_type_id: input.entityTypeId }
+  });
+
+  // specs/07-rules-engine.md §Triggers: entity.created — fires for every entity creation
+  // through this one function, including ones auto-created by an import row's on_missing:
+  // "create" path (imports.apply.ts), matching document.ingested's own "every mirror-row
+  // create, not just the UI path" behavior.
+  await enqueue(QUEUE_NAMES.runRule, {
+    orgId: ctx.orgId,
+    entityId: entity.id,
+    trigger: "entity.created",
+    cascadeDepth: 0
   });
 
   return entity;

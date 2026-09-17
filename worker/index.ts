@@ -18,6 +18,9 @@ const RECONCILE_FULL_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // Phase 3 M3: replaces the old blocking in-job poll — same 2s cadence pollPaperlessTask() used
 // to sleep for between attempts, just moved out to its own schedule (docs/adr/0014).
 const POLL_PAPERLESS_TASKS_INTERVAL_MS = 2 * 1000;
+// specs/07-rules-engine.md §Actions: create_reminder's delivery sweep, same cadence as the
+// other global 5-minute sweeps.
+const FIRE_DUE_REMINDERS_INTERVAL_MS = 5 * 60 * 1000;
 
 // Registers this worker's recurring (non-tenant-triggered) jobs via BullMQ v6's JobScheduler —
 // upsertJobScheduler() is keyed by jobSchedulerId, so calling this on every boot (including a
@@ -46,6 +49,12 @@ async function registerSchedules() {
   await getQueue(QUEUE_NAMES.pollPaperlessTasks).upsertJobScheduler(
     QUEUE_NAMES.pollPaperlessTasks,
     { every: POLL_PAPERLESS_TASKS_INTERVAL_MS },
+    { data: { orgId: "system" } }
+  );
+
+  await getQueue(QUEUE_NAMES.fireDueReminders).upsertJobScheduler(
+    QUEUE_NAMES.fireDueReminders,
+    { every: FIRE_DUE_REMINDERS_INTERVAL_MS },
     { data: { orgId: "system" } }
   );
 }

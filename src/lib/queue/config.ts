@@ -1,5 +1,6 @@
 import type { JobsOptions, WorkerOptions } from "bullmq";
 
+import { rulesConfig } from "@/config/rules";
 import { env } from "@/lib/env";
 
 import { QUEUE_NAMES, type QueueName } from "./names";
@@ -13,7 +14,8 @@ const ONE_SECOND_MS = 1_000;
 
 export const QUEUE_PRIORITY = {
   interactiveUpload: 1,
-  importRow: 10
+  importRow: 10,
+  ruleBackfill: 10
 } as const;
 
 export const queueRuntimeConfig: Record<QueueName, QueueRuntimeConfig> = {
@@ -38,8 +40,18 @@ export const queueRuntimeConfig: Record<QueueName, QueueRuntimeConfig> = {
   [QUEUE_NAMES.expireAbandonedUploads]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.reconcileIncremental]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.reconcileFullSweep]: { worker: { concurrency: 1 } },
-  [QUEUE_NAMES.runRule]: { worker: { concurrency: 1 } },
-  [QUEUE_NAMES.backfillRule]: { worker: { concurrency: 1 } },
+  // Fans out one job per (document|entity, trigger) fire from several call sites — needs real
+  // throughput, not "one at a time," the same reasoning as syncPaperlessDocument's own
+  // concurrency (matches WORKER_INGEST_CONCURRENCY since document.ingested/.updated fire at
+  // exactly the same rate as sync-paperless-document.ts's own job volume).
+  [QUEUE_NAMES.runRule]: { worker: { concurrency: env.WORKER_INGEST_CONCURRENCY } },
+  // Self-perpetuating chain (worker/jobs/backfill-rule.ts) — one chunk in flight per running
+  // backfill regardless of this number, same reasoning as runImportChunk's own concurrency.
+  [QUEUE_NAMES.backfillRule]: {
+    worker: { concurrency: rulesConfig.defaultBackfillConcurrencyPerOrganization },
+    defaultJobOptions: { priority: QUEUE_PRIORITY.ruleBackfill }
+  },
+  // One scheduler tick per interval (worker/index.ts) — same reasoning as pollPaperlessTasks.
   [QUEUE_NAMES.fireDueReminders]: { worker: { concurrency: 1 } },
   [QUEUE_NAMES.runImportChunk]: {
     worker: { concurrency: env.WORKER_INGEST_CONCURRENCY },

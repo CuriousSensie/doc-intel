@@ -1034,9 +1034,241 @@ export type Database = {
         };
         Relationships: [];
       };
+      rules: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          enabled: boolean;
+          trigger: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          priority: number;
+          conditions: Json;
+          actions: Json;
+          delegate_to_paperless: boolean;
+          paperless_workflow_id: number | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          enabled?: boolean;
+          trigger: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          priority?: number;
+          conditions: Json;
+          actions: Json;
+          delegate_to_paperless?: boolean;
+          paperless_workflow_id?: number | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          enabled?: boolean;
+          trigger?: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          priority?: number;
+          conditions?: Json;
+          actions?: Json;
+          delegate_to_paperless?: boolean;
+          paperless_workflow_id?: number | null;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      rule_runs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          rule_id: string;
+          document_id: string | null;
+          trigger: string;
+          matched: boolean;
+          conditions_trace: Json;
+          actions_applied: Json;
+          status: "ok" | "skipped_conflict" | "failed" | "timeout";
+          error_message: string | null;
+          cascade_depth: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          rule_id: string;
+          document_id?: string | null;
+          trigger: string;
+          matched: boolean;
+          conditions_trace?: Json;
+          actions_applied?: Json;
+          status?: "ok" | "skipped_conflict" | "failed" | "timeout";
+          error_message?: string | null;
+          cascade_depth?: number;
+          created_at?: string;
+        };
+        Update: {
+          conditions_trace?: Json;
+          actions_applied?: Json;
+          status?: "ok" | "skipped_conflict" | "failed" | "timeout";
+          error_message?: string | null;
+        };
+        Relationships: [];
+      };
+      rule_backfills: {
+        Row: {
+          id: string;
+          organization_id: string;
+          rule_id: string;
+          status: "pending" | "running" | "paused" | "cancelled" | "completed" | "failed";
+          filter: Json;
+          matched_count: number;
+          applied_count: number;
+          cursor_document_id: string | null;
+          created_by: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          rule_id: string;
+          status?: "pending" | "running" | "paused" | "cancelled" | "completed" | "failed";
+          filter?: Json;
+          matched_count?: number;
+          applied_count?: number;
+          cursor_document_id?: string | null;
+          created_by?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: "pending" | "running" | "paused" | "cancelled" | "completed" | "failed";
+          matched_count?: number;
+          applied_count?: number;
+          cursor_document_id?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // rls-coverage: admin-only (no write policy) — written only via apply_rule_action().
+      field_provenance: {
+        Row: {
+          organization_id: string;
+          document_id: string;
+          field_key: string;
+          updated_by: "user" | "rule" | "import" | "ai" | "system";
+          source_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          organization_id: string;
+          document_id: string;
+          field_key: string;
+          updated_by: "user" | "rule" | "import" | "ai" | "system";
+          source_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          updated_by?: "user" | "rule" | "import" | "ai" | "system";
+          source_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // rls-coverage: admin-only (no write policy) — written only by rule actions / worker sweep.
+      reminders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          document_id: string | null;
+          entity_id: string | null;
+          due_date: string;
+          assignee_role: "owner" | "admin" | "member";
+          message: string;
+          rule_id: string | null;
+          fired_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          document_id?: string | null;
+          entity_id?: string | null;
+          due_date: string;
+          assignee_role: "owner" | "admin" | "member";
+          message: string;
+          rule_id?: string | null;
+          fired_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          fired_at?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
+      apply_rule_action: {
+        Args: {
+          p_organization_id: string;
+          p_rule_id: string;
+          p_rule_run_id: string | null;
+          p_action_type: string;
+          p_action: Json;
+          p_source_kind?: string | null;
+          p_source_id?: string | null;
+          p_target_kind?: string | null;
+          p_target_id?: string | null;
+          p_relation?: string | null;
+          p_rule_backfill_id?: string | null;
+          p_document_id?: string | null;
+          p_field_key?: string | null;
+        };
+        Returns: string;
+      };
+      claim_rule_backfill_documents: {
+        Args: {
+          p_rule_backfill_id: string;
+          p_organization_id: string;
+          p_limit?: number;
+          p_document_type_key?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["documents"]["Row"][];
+      };
+      advance_rule_backfill_cursor: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string; p_cursor_document_id: string };
+        Returns: void;
+      };
+      increment_rule_backfill_progress: {
+        Args: {
+          p_rule_backfill_id: string;
+          p_organization_id: string;
+          p_matched_delta: number;
+          p_applied_delta: number;
+        };
+        Returns: void;
+      };
+      complete_rule_backfill: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      fail_rule_backfill: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string; p_reason: string };
+        Returns: boolean;
+      };
+      undo_rule_backfill: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string };
+        Returns: number;
+      };
       create_organization: {
         Args: { org_name: string; org_slug: string };
         Returns: string;

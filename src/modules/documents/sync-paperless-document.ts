@@ -55,6 +55,17 @@ export async function syncPaperlessDocument(
     const checksum =
       doc.versions.find((v) => v.is_root)?.checksum ?? doc.versions[0]?.checksum ?? null;
 
+    // specs/07-rules-engine.md §Triggers: document.ingested fires when the mirror row is
+    // created, document.updated when an existing row's type/date/custom field changed — this
+    // upsert can't tell the two apart on its own, so the existing row (if any) is fetched first.
+    const { data: existingRow, error: existingRowError } = await db
+      .from("documents")
+      .select("id, document_type_key, document_date")
+      .eq("organization_id", orgId)
+      .eq("paperless_document_id", paperlessDocumentId)
+      .maybeSingle();
+    if (existingRowError) throw existingRowError;
+
     let byteSize: number | null = null;
     let createdBy: string | null = null;
     // Import-sourced uploads (document_uploads.import_row_id set) don't get a per-document
@@ -167,13 +178,19 @@ export async function syncPaperlessDocument(
       }
     }
 
-    // Rule engine evaluation isn't built yet (worker/registry.ts's runRule is still a
-    // not-implemented placeholder) — this job's only responsibility is firing the trigger.
-    await enqueue(QUEUE_NAMES.runRule, {
-      orgId,
-      documentId: documentRow.id,
-      trigger: "document.ingested"
-    });
+    const newDocumentDate = doc.created ? doc.created.slice(0, 10) : null;
+    const isNew = !existingRow;
+    const changed =
+      !isNew &&
+      (existingRow.document_type_key !== documentTypeKey || existingRow.document_date !== newDocumentDate);
+
+    if (isNew || changed) {
+      await enqueue(QUEUE_NAMES.runRule, {
+        orgId,
+        documentId: documentRow.id,
+        trigger: isNew ? "document.ingested" : "document.updated"
+      });
+    }
 
     await logEvent({
       actorId: null,

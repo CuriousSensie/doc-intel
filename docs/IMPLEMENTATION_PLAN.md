@@ -658,18 +658,89 @@ exist *because* the live run caught them first.
 
 ## Phase 4 — Rules Engine
 
-- [ ] Migration: `rules`, `rule_runs`, `rule_backfills`
-- [ ] `src/modules/rules/` (DSL validation, evaluator, action dispatcher — `ServiceContext`-based)
-- [ ] Trigger wiring (`document.ingested/.updated/.connected`, `entity.created`), cascade cap
-- [ ] Conflict resolution (first-writer-wins, `skipped_conflict` recorded)
-- [ ] `field_provenance` mechanism (reused later by Level 2)
-- [ ] `POST /rules/:id/test` condition-trace
-- [ ] `src/lib/safe-regex.ts`
-- [ ] `reminders` table + `worker/jobs/fire-due-reminders.ts`
-- [ ] `worker/jobs/backfill-rule.ts` (dry-run-count, chunked, per-execution undo via
-      `rule_backfill_id`)
-- [ ] Docs updated
-- [ ] **Phase 4 exit criteria met**
+Work in progress, not yet merged to `main` — every item below stays unchecked regardless of how
+much is built, per this file's own rule (checked only once merged).
+
+- [ ] Migration: `rules`, `rule_runs`, `rule_backfills`, `field_provenance`, `reminders` — done
+      (`20260918000000_rules_engine.sql`), plus `connections.rule_backfill_id` and
+      `apply_rule_action()`/`claim_rule_backfill_documents()`/`advance_rule_backfill_cursor()`/
+      `increment_rule_backfill_progress()`/`complete_rule_backfill()`/`fail_rule_backfill()`/
+      `undo_rule_backfill()`. All 27 migrations verified to apply cleanly against the local
+      Supabase stack (`supabase db reset --local`); `check-rls-coverage.ts` passes.
+      `apply_rule_action()` (idempotent `connect_entity`, field-write provenance recording, atomic
+      `rule_runs`+`audit_logs` write per ADR-0008) and `undo_rule_backfill()` (scoped strictly to
+      `rule_backfill_id`, never a bare `rule_id`, per ADR-0010) verified live against the local
+      stack: idempotent re-connect confirmed a no-op, cross-org call correctly rejected (404-style,
+      not 403), and undo left a same-rule ongoing-trigger connection untouched while removing only
+      the backfill-tagged one. `claim_rule_backfill_documents()`'s cursor pagination
+      (`documents.id` order, `document_type_key`/date-range filter) verified live to never
+      re-return an already-advanced-past or non-matching row.
+- [ ] `src/modules/rules/` — `rules.schemas.ts` (recursive `all`/`any` DSL, action discriminated
+      union), `rules.service.ts` (CRUD), `rules.context.ts` (document/entity subject builders —
+      document.content/tags/correspondent/custom fields fetched live from Paperless, degrading to
+      `paperlessAvailable: false` rather than throwing), `rules.evaluator.ts` (pure
+      `evaluateConditions()`, full `conditions_trace`), `rules.dispatcher.ts` (action application,
+      field-conflict claims map, user-edit-wins check via `field_provenance`),
+      `rules.delegation.ts`, `rules.actions.ts`. 17 unit tests for the evaluator (every operator,
+      `all`/`any` nesting, trace correctness, a pathological `(a+)+$` regex confirmed non-hanging).
+- [ ] **Real, session-verified correction to the plan as originally written**: delegating an
+      all-Paperless-native rule to a real Paperless workflow (as `specs/07-rules-engine.md`
+      describes) is **not implemented** — `docs/adr/0006-disable-paperless-workflow-delegation.md`
+      already locked this decision before this session started (missed during initial planning,
+      caught by checking the ADR directory properly and independently re-confirmed live this
+      session against the pinned instance's own OpenAPI schema: `Workflow`/`WorkflowTrigger` have
+      no owner/tenant-scoping field at all, so a delegated workflow would fire on every tenant's
+      matching documents, not just the owning tenant's — confirmed by actually creating and
+      inspecting a real workflow object via the API, not just reading docs). `rules.delegation.ts`
+      exists per the ADR's own "remain in the codebase for forward compatibility" wording but
+      always returns `delegated: false` — every rule evaluates locally, unconditionally.
+- [ ] Trigger wiring — `document.ingested`/`document.updated` from
+      `sync-paperless-document.ts` (now distinguishes insert-vs-update via a pre-upsert existence
+      check, firing `updated` only when `document_type_key`/`document_date` actually changed —
+      previously always fired `ingested`, which this session corrected as part of building this);
+      `document.connected` from `connections.service.ts`'s `createConnection()`/
+      `bulkCreateConnections()` (depth 0) and `worker/jobs/run-rule.ts`'s own cascade re-enqueue
+      (depth + 1) after a rule's own `connect_entity` action applies; `entity.created` from
+      `entities.service.ts#createEntity()`. Cascade cap (3, `rulesConfig.maxCascadeDepth`) checked
+      at the top of every `run-rule` job.
+- [ ] Conflict resolution — first-writer-wins via an in-memory claims map built once per
+      trigger fire in `worker/jobs/run-rule.ts`, shared across every rule evaluated for that
+      document; a later rule's write to an already-claimed field records
+      `skipped_conflict:<winning-rule-id>` instead of overwriting.
+- [ ] `field_provenance` mechanism — implemented; user-edit-wins is checked via
+      `rules.dispatcher.ts#isUserOwned()` before every Paperless-side field write. The
+      "check Paperless document history for a user edit" half of the spec's own suggested
+      mechanism (reusing the existing `getPaperlessDocumentHistory()` from Phase 2 to mark a field
+      `updated_by: 'user'` after an out-of-band edit) is **not yet wired** — currently only a rule
+      action itself ever writes `field_provenance`, so a raw Paperless-side edit made outside this
+      app isn't yet detected. Tracked as a real, open gap, not silently assumed done.
+- [ ] `POST /rules/:id/test` — `testRuleAction()` (Server Action per ADR-0009's "rule CRUD"
+      allocation), dry run only, no `rule_runs` row written.
+- [ ] `src/lib/safe-regex.ts` — `re2` (RE2 engine, linear-time by construction; added as a new
+      dependency, npm install verified clean) rather than a `worker_thread` timeout harness, per
+      explicit decision this session. Confirmed live (both in the unit test and a standalone
+      script) that `(a+)+$` against a 40-character pathological string returns in ~3ms, not a
+      hang.
+- [ ] `reminders` table + `worker/jobs/fire-due-reminders.ts` — done, registered as a 5-minute
+      `upsertJobScheduler()` sweep in `worker/index.ts` (same pattern as
+      `expire-abandoned-uploads.ts`). Delivery reuses the existing `createNotification()`, no new
+      task system.
+- [ ] `worker/jobs/backfill-rule.ts` — done: dry-run count (`previewRuleBackfillAction`), chunked
+      via cursor pagination (not a claim-table pattern like imports — see the migration's own
+      comment for why), pausable/resumable/cancelable via
+      `src/lib/rules/backfill-control.ts` (Redis flag, mirrors `src/lib/import/control.ts`),
+      self-perpetuating re-enqueue, undo via `rule_backfill_id` scoping (verified live, see above).
+      `GET /api/rule-backfills/[id]/route.ts` for progress polling (ADR-0009).
+- [ ] Docs updated — this entry; `SPEC_TRACEABILITY.md`/`DATABASE.md`/`MODULES.md`/
+      `API_REFERENCE.md`/`ARCHITECTURE.md` **not yet updated** for Phase 4 — tracked as open.
+- [ ] **Not built this session, tracked as open**: the rules/backfill UI (`/dashboard/rules`,
+      condition-trace viewer, backfill progress/undo controls — `rules` feature flag stays `false`
+      until it exists, so nothing half-built is exposed), `e2e/isolation.spec.ts` additions for
+      rules, a real end-to-end run against the live Paperless + Supabase Cloud stack (everything
+      above was verified against the local Supabase stack + the pinned Paperless container's real
+      schema, not Cloud), and the 5,000-document backfill scale test from the spec's own
+      definition-of-done item 3.
+- [ ] **Phase 4 exit criteria met** — not met; see the open items above.
 
 ## Phase 5 — Hardening
 
