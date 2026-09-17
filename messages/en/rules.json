@@ -1,0 +1,95 @@
+{
+  "list": {
+    "title": "Rules",
+    "description": "Define once, apply automatically. Deterministic conditions and actions — no AI.",
+    "newRule": "New rule",
+    "empty": "No rules yet.",
+    "emptyDescription": "Create a rule to connect documents to entities, set fields, or send reminders automatically.",
+    "trigger": "Trigger: {trigger}",
+    "priority": "Priority {priority}",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "authorization": {
+    "manageOnly": "Only an organization owner or admin can manage rules"
+  },
+  "form": {
+    "nameLabel": "Name",
+    "namePlaceholder": "Invoices to ABC d.o.o.",
+    "triggerLabel": "Trigger",
+    "priorityLabel": "Priority",
+    "priorityHint": "Lower runs first. Ties break by rule id.",
+    "conditionsLabel": "Conditions (JSON)",
+    "conditionsHint": "specs/07-rules-engine.md's condition tree — {\"all\":[...]} / {\"any\":[...]} of leaf conditions like {\"field\":\"document.type\",\"op\":\"eq\",\"value\":\"invoice\"}.",
+    "actionsLabel": "Actions (JSON array)",
+    "actionsHint": "e.g. [{\"type\":\"connect_entity\",\"entity_ref\":{\"by\":\"identifier\",\"kind\":\"vat\",\"value\":\"SI12345678\"},\"relation\":\"issued_to\"}]",
+    "save": "Save rule",
+    "create": "Create rule"
+  },
+  "triggers": {
+    "document.ingested": "Document ingested",
+    "document.updated": "Document updated",
+    "document.connected": "Document connected",
+    "entity.created": "Entity created",
+    "manual": "Manual only"
+  },
+  "detail": {
+    "backToRules": "Back to rules",
+    "edit": "Edit",
+    "delete": "Delete rule",
+    "confirmDelete": "Delete this rule? Its run history is kept, but it will stop evaluating.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "recentRuns": "Recent runs",
+    "noRuns": "No runs yet.",
+    "runMatched": "Matched",
+    "runNotMatched": "Did not match",
+    "runStatus": "Status: {status}"
+  },
+  "test": {
+    "title": "Test against a document",
+    "description": "Dry run only — no actions are applied and nothing is recorded.",
+    "documentIdLabel": "Document ID",
+    "documentIdHint": "Paste a document's id from its detail page URL.",
+    "run": "Run test",
+    "running": "Running…",
+    "matched": "Matched",
+    "notMatched": "Did not match",
+    "trace": "Condition trace",
+    "actions": "Actions that would apply",
+    "error": "Could not run the test"
+  },
+  "backfill": {
+    "title": "Backfill",
+    "description": "Apply this rule to existing documents. Always previews a count first.",
+    "documentTypeLabel": "Document type key (optional)",
+    "dateFromLabel": "From date (optional)",
+    "dateToLabel": "To date (optional)",
+    "preview": "Preview count",
+    "previewing": "Counting…",
+    "matchedCount": "{count} documents match this filter",
+    "start": "Start backfill",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "undo": "Undo",
+    "confirmUndo": "Undo this backfill? This removes only the connections it created.",
+    "status": "Status: {status}",
+    "progress": "{applied} applied / {matched} matched",
+    "recentBackfills": "Recent backfills",
+    "noBackfills": "No backfills yet."
+  },
+  "actions": {
+    "somethingWentWrong": "Something went wrong",
+    "created": "Rule created",
+    "saved": "Rule saved",
+    "deleted": "Rule deleted",
+    "enabled": "Rule enabled",
+    "disabled": "Rule disabled",
+    "backfillStarted": "Backfill started",
+    "backfillPaused": "Backfill paused",
+    "backfillResumed": "Backfill resumed",
+    "backfillCancelled": "Backfill cancelled",
+    "backfillUndone": "Backfill undone"
+  }
+}

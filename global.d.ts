@@ -14,6 +14,7 @@ import type entityTypes from "@/../messages/en/entityTypes.json";
 import type connections from "@/../messages/en/connections.json";
 import type imports from "@/../messages/en/imports.json";
 import type savedViews from "@/../messages/en/savedViews.json";
+import type rules from "@/../messages/en/rules.json";
 
 declare module "next-intl" {
   interface AppConfig {
@@ -34,6 +35,7 @@ declare module "next-intl" {
       connections: typeof connections;
       savedViews: typeof savedViews;
       imports: typeof imports;
+      rules: typeof rules;
     };
     Locale: "en" | "sl";
   }

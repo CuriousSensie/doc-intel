@@ -1,13 +1,17 @@
 "use server";
 
+import { getLocale, getTranslations } from "next-intl/server";
 import { ZodError } from "zod";
 
+import { redirect } from "@/i18n/navigation";
+import type { Locale } from "@/i18n/routing";
 import { toSafeError } from "@/lib/errors";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { QUEUE_PRIORITY } from "@/lib/queue/config";
 import { setRuleBackfillControl } from "@/lib/rules/backfill-control";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
+import { withStatus } from "@/modules/auth/redirects";
 
 import { buildDocumentSubjectContext } from "./rules.context";
 import { evaluateConditions } from "./rules.evaluator";
@@ -184,6 +188,218 @@ export async function undoRuleBackfillAction(ruleBackfillId: string) {
     });
     if (error) throw error;
     return { connectionsRemoved: data as number };
+  });
+}
+
+type Translator = Awaited<ReturnType<typeof getTranslations>>;
+
+function redirectWithError(path: string, error: unknown, t: Translator, locale: Locale): never {
+  const message =
+    error instanceof ZodError
+      ? error.issues.map((issue) => issue.message).join("; ")
+      : error instanceof Error
+        ? error.message
+        : t("actions.somethingWentWrong");
+  return redirect({ href: withStatus(path, "error", message), locale });
+}
+
+// Plain <form action={...}> handlers for the /dashboard/rules UI — same split as
+// entity-types.actions.ts: the typed *Action functions above serve client-side/JSON callers
+// (the test/backfill panels, which need to render a result inline without navigating), these
+// serve server-rendered forms with a redirect-with-status result.
+
+export async function createRuleFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+
+  let ruleId: string;
+  try {
+    const parsed = createRuleSchema.parse({
+      name: formData.get("name"),
+      trigger: formData.get("trigger"),
+      priority: Number(formData.get("priority") ?? 100),
+      conditions: JSON.parse(String(formData.get("conditions"))),
+      actions: JSON.parse(String(formData.get("actions")))
+    });
+    const rule = await createRule(ctx, parsed);
+    ruleId = rule.id;
+  } catch (error) {
+    redirectWithError("/dashboard/rules/new", error, t, locale);
+  }
+
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.created")), locale });
+}
+
+export async function updateRuleFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+
+  try {
+    const parsed = updateRuleSchema.parse({
+      name: formData.get("name"),
+      trigger: formData.get("trigger"),
+      priority: Number(formData.get("priority") ?? 100),
+      conditions: JSON.parse(String(formData.get("conditions"))),
+      actions: JSON.parse(String(formData.get("actions")))
+    });
+    await updateRule(ctx, ruleId, parsed);
+  } catch (error) {
+    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+  }
+
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.saved")), locale });
+}
+
+export async function toggleRuleEnabledFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+  const enabled = formData.get("enabled") === "true";
+
+  try {
+    await updateRule(ctx, ruleId, { enabled });
+  } catch (error) {
+    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+  }
+
+  return redirect({
+    href: withStatus(`/dashboard/rules/${ruleId}`, "message", enabled ? t("actions.enabled") : t("actions.disabled")),
+    locale
+  });
+}
+
+export async function deleteRuleFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+
+  try {
+    await deleteRule(ctx, ruleId);
+  } catch (error) {
+    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+  }
+
+  return redirect({ href: withStatus("/dashboard/rules", "message", t("actions.deleted")), locale });
+}
+
+export async function startRuleBackfillFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+
+  try {
+    const documentTypeKey = formData.get("documentTypeKey");
+    const dateFrom = formData.get("dateFrom");
+    const dateTo = formData.get("dateTo");
+    const parsed = startRuleBackfillSchema.parse({
+      ruleId,
+      filter: {
+        documentTypeKey: documentTypeKey ? String(documentTypeKey) : undefined,
+        dateFrom: dateFrom ? String(dateFrom) : undefined,
+        dateTo: dateTo ? String(dateTo) : undefined
+      }
+    });
+
+    await getRule(ctx, ruleId);
+    const { data, error } = await ctx.db
+      .from("rule_backfills")
+      .insert({
+        organization_id: ctx.orgId,
+        rule_id: parsed.ruleId,
+        filter: parsed.filter,
+        created_by: ctx.actorId
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+
+    await setRuleBackfillControl(data.id, "running");
+    for (let i = 0; i < rulesConfig.defaultBackfillConcurrencyPerOrganization; i++) {
+      await enqueue(
+        QUEUE_NAMES.backfillRule,
+        { orgId: ctx.orgId, ruleBackfillId: data.id },
+        { priority: QUEUE_PRIORITY.ruleBackfill }
+      );
+    }
+  } catch (error) {
+    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+  }
+
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillStarted")), locale });
+}
+
+export async function pauseRuleBackfillFormAction(formData: FormData) {
+  requireFeature("rules");
+  await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+  await setRuleBackfillControl(String(formData.get("ruleBackfillId")), "paused");
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillPaused")), locale });
+}
+
+export async function resumeRuleBackfillFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+  const ruleBackfillId = String(formData.get("ruleBackfillId"));
+  await setRuleBackfillControl(ruleBackfillId, "running");
+  await enqueue(
+    QUEUE_NAMES.backfillRule,
+    { orgId: ctx.orgId, ruleBackfillId },
+    { priority: QUEUE_PRIORITY.ruleBackfill }
+  );
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillResumed")), locale });
+}
+
+export async function cancelRuleBackfillFormAction(formData: FormData) {
+  requireFeature("rules");
+  await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+  await setRuleBackfillControl(String(formData.get("ruleBackfillId")), "cancelled");
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillCancelled")), locale });
+}
+
+export async function undoRuleBackfillFormAction(formData: FormData) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
+  const ruleId = String(formData.get("ruleId"));
+  const ruleBackfillId = String(formData.get("ruleBackfillId"));
+
+  try {
+    const { error } = await ctx.db.rpc("undo_rule_backfill", {
+      p_rule_backfill_id: ruleBackfillId,
+      p_organization_id: ctx.orgId
+    });
+    if (error) throw error;
+  } catch (error) {
+    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
+  }
+
+  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillUndone")), locale });
+}
+
+export async function listRuleBackfillsForRuleAction(ruleId: string) {
+  requireFeature("rules");
+  const ctx = await buildRequestContext();
+  return actionResult(async () => {
+    const { data, error } = await ctx.db
+      .from("rule_backfills")
+      .select("*")
+      .eq("organization_id", ctx.orgId)
+      .eq("rule_id", ruleId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (error) throw error;
+    return data;
   });
 }
 

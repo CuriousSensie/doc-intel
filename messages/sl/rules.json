@@ -1,0 +1,95 @@
+{
+  "list": {
+    "title": "Pravila",
+    "description": "Določi enkrat, uporabi samodejno. Deterministični pogoji in dejanja — brez UI.",
+    "newRule": "Novo pravilo",
+    "empty": "Ni še pravil.",
+    "emptyDescription": "Ustvarite pravilo za samodejno povezovanje dokumentov z entitetami, nastavljanje polj ali pošiljanje opomnikov.",
+    "trigger": "Sprožilec: {trigger}",
+    "priority": "Prioriteta {priority}",
+    "enabled": "Omogočeno",
+    "disabled": "Onemogočeno"
+  },
+  "authorization": {
+    "manageOnly": "Samo lastnik ali skrbnik organizacije lahko upravlja pravila"
+  },
+  "form": {
+    "nameLabel": "Ime",
+    "namePlaceholder": "Računi za ABC d.o.o.",
+    "triggerLabel": "Sprožilec",
+    "priorityLabel": "Prioriteta",
+    "priorityHint": "Nižja vrednost se izvede prej. Enakost razreši id pravila.",
+    "conditionsLabel": "Pogoji (JSON)",
+    "conditionsHint": "Drevo pogojev iz specs/07-rules-engine.md — {\"all\":[...]} / {\"any\":[...]} osnovnih pogojev, npr. {\"field\":\"document.type\",\"op\":\"eq\",\"value\":\"invoice\"}.",
+    "actionsLabel": "Dejanja (JSON seznam)",
+    "actionsHint": "npr. [{\"type\":\"connect_entity\",\"entity_ref\":{\"by\":\"identifier\",\"kind\":\"vat\",\"value\":\"SI12345678\"},\"relation\":\"issued_to\"}]",
+    "save": "Shrani pravilo",
+    "create": "Ustvari pravilo"
+  },
+  "triggers": {
+    "document.ingested": "Dokument uvožen",
+    "document.updated": "Dokument posodobljen",
+    "document.connected": "Dokument povezan",
+    "entity.created": "Entiteta ustvarjena",
+    "manual": "Samo ročno"
+  },
+  "detail": {
+    "backToRules": "Nazaj na pravila",
+    "edit": "Uredi",
+    "delete": "Izbriši pravilo",
+    "confirmDelete": "Izbrišete to pravilo? Zgodovina izvajanja ostane, vendar se pravilo ne bo več izvajalo.",
+    "enable": "Omogoči",
+    "disable": "Onemogoči",
+    "recentRuns": "Zadnja izvajanja",
+    "noRuns": "Ni še izvajanj.",
+    "runMatched": "Ujemanje",
+    "runNotMatched": "Brez ujemanja",
+    "runStatus": "Status: {status}"
+  },
+  "test": {
+    "title": "Preizkus na dokumentu",
+    "description": "Samo suhi tek — nobeno dejanje se ne izvede in nič se ne zabeleži.",
+    "documentIdLabel": "ID dokumenta",
+    "documentIdHint": "Prilepite id dokumenta iz naslova njegove strani.",
+    "run": "Zaženi preizkus",
+    "running": "Poteka …",
+    "matched": "Ujemanje",
+    "notMatched": "Brez ujemanja",
+    "trace": "Sled pogojev",
+    "actions": "Dejanja, ki bi se izvedla",
+    "error": "Preizkusa ni bilo mogoče izvesti"
+  },
+  "backfill": {
+    "title": "Naknadna uporaba",
+    "description": "Uporabi to pravilo na obstoječih dokumentih. Vedno najprej prikaže število.",
+    "documentTypeLabel": "Ključ vrste dokumenta (neobvezno)",
+    "dateFromLabel": "Od datuma (neobvezno)",
+    "dateToLabel": "Do datuma (neobvezno)",
+    "preview": "Predogled števila",
+    "previewing": "Štejem …",
+    "matchedCount": "{count} dokumentov ustreza temu filtru",
+    "start": "Zaženi naknadno uporabo",
+    "pause": "Premor",
+    "resume": "Nadaljuj",
+    "cancel": "Prekliči",
+    "undo": "Razveljavi",
+    "confirmUndo": "Razveljavite to naknadno uporabo? Odstranjene bodo samo povezave, ki jih je ustvarila.",
+    "status": "Status: {status}",
+    "progress": "{applied} uporabljenih / {matched} ujemanj",
+    "recentBackfills": "Zadnje naknadne uporabe",
+    "noBackfills": "Ni še naknadnih uporab."
+  },
+  "actions": {
+    "somethingWentWrong": "Nekaj je šlo narobe",
+    "created": "Pravilo ustvarjeno",
+    "saved": "Pravilo shranjeno",
+    "deleted": "Pravilo izbrisano",
+    "enabled": "Pravilo omogočeno",
+    "disabled": "Pravilo onemogočeno",
+    "backfillStarted": "Naknadna uporaba zagnana",
+    "backfillPaused": "Naknadna uporaba v premoru",
+    "backfillResumed": "Naknadna uporaba nadaljevana",
+    "backfillCancelled": "Naknadna uporaba preklicana",
+    "backfillUndone": "Naknadna uporaba razveljavljena"
+  }
+}

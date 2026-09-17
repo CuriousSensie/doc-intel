@@ -17,7 +17,8 @@ const namespaces = [
   "entityTypes",
   "connections",
   "savedViews",
-  "imports"
+  "imports",
+  "rules"
 ] as const;
 
 export async function loadMessages(locale: Locale) {
