@@ -10,7 +10,7 @@ describe("authorization helpers", () => {
   });
 
   it("resolves plan features and limits", () => {
-    expect(hasFeature("pro", "projects")).toBe(true);
+    expect(hasFeature("pro", "storageMb")).toBe(true);
     expect(getLimit("free", "teamMembers")).toBe(1);
   });
 });

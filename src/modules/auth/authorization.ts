@@ -45,8 +45,7 @@ export function can(role: "owner" | "admin" | "member" | "read-only", permission
     admin: [
       "organization.billing.manage",
       "organization.members.invite",
-      "organization.settings.manage",
-      "organization.files.manage"
+      "organization.settings.manage"
     ],
     member: ["organization.read"],
     // Read like member, never write — has_organization_write_access() is the real boundary.

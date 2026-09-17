@@ -90,6 +90,15 @@ export class ScanUnavailableError extends AppError {
   }
 }
 
+// Errors bubbled up via this codebase's own `if (error) throw error;` convention (and
+// Supabase's client errors generally) are plain objects with a `message`, not Error
+// instances — `error.message`/String(error) on those gives "[object Object]".
+export function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String(error.message);
+  return String(error);
+}
+
 export function toSafeError(error: unknown): SafeErrorShape {
   if (error instanceof AppError) {
     return {

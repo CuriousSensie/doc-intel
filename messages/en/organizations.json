@@ -1,0 +1,47 @@
+{
+  "list": {
+    "title": "Your organizations",
+    "create": "Create organization",
+    "empty": "You are not a member of any organization yet.",
+    "active": "Active",
+    "leave": "Leave"
+  },
+  "new": {
+    "backToOrganizations": "Back to organizations",
+    "title": "Create organization",
+    "description": "You will be the owner and can invite teammates once it is created.",
+    "nameLabel": "Organization name",
+    "slugLabel": "URL slug (optional)",
+    "slugHint": "Lowercase letters, numbers, and hyphens. Leave blank to generate one automatically.",
+    "submit": "Create organization"
+  },
+  "actions": {
+    "somethingWentWrong": "Something went wrong",
+    "noPermission": "You do not have permission to manage this organization",
+    "invitationReady": "Invitation ready. Share the link below.",
+    "invitationSent": "Invitation sent.",
+    "invitationCreatedEmailFailed": "Invitation created, but the email could not be sent. Share the link below.",
+    "missingOrganization": "Missing organization",
+    "organizationCreated": "Organization created.",
+    "organizationUpdated": "Organization updated.",
+    "missingInvitationDetails": "Missing invitation details",
+    "missingInvitation": "Missing invitation",
+    "invitationRevoked": "Invitation revoked.",
+    "invalidRoleUpdate": "Invalid role update",
+    "memberRoleUpdated": "Member role updated.",
+    "missingMember": "Missing member",
+    "memberRemoved": "Member removed.",
+    "youLeftOrganization": "You left the organization.",
+    "invalidTransferRequest": "Invalid transfer request",
+    "ownershipTransferred": "Ownership transferred.",
+    "organizationDeleted": "Organization deleted.",
+    "notAMember": "You are not a member of that organization",
+    "missingInvitationToken": "Missing invitation token",
+    "invitationAccepted": "Invitation accepted.",
+    "teamMemberFallback": "A team member",
+    "newMemberNotificationTitle": "New team member",
+    "newMemberNotificationMessage": "{name} joined {organization}.",
+    "yourOrganizationFallback": "your organization",
+    "someoneFallback": "Someone"
+  }
+}

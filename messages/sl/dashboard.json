@@ -1,0 +1,42 @@
+{
+  "home": {
+    "welcomeBackWithName": "Dobrodošli nazaj, {name}",
+    "welcomeBack": "Dobrodošli nazaj",
+    "signedInAs": "Prijavljeni ste kot {name}.",
+    "notInOrganization": "Niste še del nobene organizacije.",
+    "documents": "Dokumenti",
+    "ready": "Pripravljeno",
+    "processing": "V obdelavi",
+    "failed": "Neuspešno",
+    "noConnections": "Brez povezav",
+    "entities": "Entitete",
+    "team": "Ekipa",
+    "pendingInvites": "Čakajoča povabila",
+    "provisioningStatus": "Status vzpostavitve najemnika:",
+    "needsAttention": "Zahteva pozornost",
+    "recentUploads": "Vaša nedavna nalaganja",
+    "noUploadsYet": "Ni še nalaganj.",
+    "uploadADocument": "Naloži dokument",
+    "maxSizePerFile": "Do {size} na datoteko. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
+    "noDocumentsYet": "Ni še dokumentov."
+  },
+  "layout": {
+    "accountFallback": "Račun"
+  },
+  "common": {
+    "somethingWentWrong": "Nekaj je šlo narobe"
+  },
+  "notifications": {
+    "title": "Obvestila",
+    "unreadCount": "{count} neprebranih",
+    "caughtUp": "Vse imate prebrano.",
+    "markAllAsRead": "Označi vse kot prebrano",
+    "markRead": "Označi kot prebrano",
+    "new": "Novo",
+    "empty": "Nimate še nobenega obvestila.",
+    "nextPage": "Naslednja stran",
+    "errors": {
+      "missingNotification": "Manjka obvestilo"
+    }
+  }
+}

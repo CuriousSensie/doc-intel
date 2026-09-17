@@ -1,7 +1,10 @@
+import { Agent } from "undici";
+
 import { OrgNotProvisionedError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { requireOrgToken } from "@/lib/ratelimit/token-bucket";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireEnv } from "@/lib/env";
+import { env, requireEnv } from "@/lib/env";
 
 import { mapPaperlessError, isRetryablePaperlessError } from "./errors";
 import { decryptPaperlessToken } from "./token-crypto";
@@ -10,6 +13,7 @@ import type { PaperlessSetPermissions } from "./types";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 3;
+const ADMIN_ORG_ID = "__admin__";
 
 type RequestOptions = {
   method?: string;
@@ -21,6 +25,20 @@ type RequestOptions = {
 };
 
 type PaperlessCredentials = { baseUrl: string; token: string };
+
+let paperlessAgent: Agent | null = null;
+
+function getPaperlessAgent(): Agent {
+  if (!paperlessAgent) {
+    paperlessAgent = new Agent({
+      connections: env.PAPERLESS_HTTP_CONNECTIONS,
+      keepAliveTimeout: 10_000,
+      keepAliveMaxTimeout: 60_000
+    });
+  }
+
+  return paperlessAgent;
+}
 
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,6 +104,14 @@ export class PaperlessClient {
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (this.orgId !== ADMIN_ORG_ID) {
+        if (form && path === "/api/documents/post_document/") {
+          await requireOrgToken(this.orgId, "paperless:upload");
+        } else if (method === "GET") {
+          await requireOrgToken(this.orgId, "paperless:read");
+        }
+      }
+
       const start = Date.now();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -98,8 +124,9 @@ export class PaperlessClient {
           method,
           headers,
           body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
-          signal: controller.signal
-        });
+          signal: controller.signal,
+          dispatcher: getPaperlessAgent()
+        } as RequestInit & { dispatcher: Agent });
 
         const durationMs = Date.now() - start;
         logger.info("paperless.request", {
@@ -184,6 +211,69 @@ export class PaperlessClient {
 
   postForm<T>(path: string, form: FormData): Promise<T> {
     return this.request<T>(path, { method: "POST", form, timeoutMs: UPLOAD_TIMEOUT_MS });
+  }
+
+  // For binary responses (document preview/download) that request()'s JSON/text decoding would
+  // mangle — returns the raw Response so the caller can stream `.body` straight through to the
+  // browser. ADR-0009: our Route Handler is what the browser talks to, authenticated by our own
+  // session cookie; the real Paperless token never reaches the client, unlike a redirect would.
+  // No retry here (interactive request, not idempotent-safe to replay a partially-read stream).
+  async getStream(path: string): Promise<Response> {
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), env.PAPERLESS_STREAM_TIMEOUT_MS);
+
+    if (this.orgId !== ADMIN_ORG_ID) {
+      await requireOrgToken(this.orgId, "paperless:read");
+    }
+
+    const res = await fetch(`${this.creds.baseUrl}${path}`, {
+      headers: { Authorization: `Token ${this.creds.token}` },
+      signal: controller.signal,
+      dispatcher: getPaperlessAgent()
+    } as RequestInit & { dispatcher: Agent });
+
+    logger.info("paperless.request", {
+      orgId: this.orgId,
+      method: "GET",
+      path,
+      status: res.status,
+      durationMs: Date.now() - start
+    });
+
+    if (!res.ok) {
+      clearTimeout(timeout);
+      throw await mapPaperlessError(res, { orgId: this.orgId, path });
+    }
+
+    return res;
+  }
+
+  // A real HTTP HEAD, not a GET with the body discarded — confirmed live (2026-09-16) that
+  // the pinned instance's download/preview routes both advertise and honor HEAD (`allow: GET,
+  // HEAD, OPTIONS`), returning Content-Length with no body on the wire. Used for the document
+  // detail page's file-size fallback (documents.byte_size is only ever populated on the upload
+  // path — see sync-paperless-document.ts's own comment — so anything synced another way needs
+  // this instead of downloading the whole file just to measure it).
+  async headContentLength(path: string): Promise<number | null> {
+    if (this.orgId !== ADMIN_ORG_ID) {
+      await requireOrgToken(this.orgId, "paperless:read");
+    }
+
+    // Explicitly uncompressed — confirmed live: undici's default `Accept-Encoding: gzip` makes
+    // Django's GZipMiddleware advertise gzip on the (bodyless) HEAD response too, and it drops
+    // Content-Length entirely once it does (it can't know the compressed length without a body
+    // to compress). `identity` keeps Content-Length meaningful, which is this method's entire
+    // point.
+    const res = await fetch(`${this.creds.baseUrl}${path}`, {
+      method: "HEAD",
+      headers: { Authorization: `Token ${this.creds.token}`, "Accept-Encoding": "identity" },
+      dispatcher: getPaperlessAgent()
+    } as RequestInit & { dispatcher: Agent });
+
+    if (!res.ok) return null;
+    const length = res.headers.get("content-length");
+    return length ? Number(length) : null;
   }
 
   // Shared by createOwnedObject() and setOwnedObjectPermissions() — the one guard that makes
@@ -295,8 +385,9 @@ async function getAdminToken(): Promise<string> {
     body: JSON.stringify({
       username: requireEnv("PAPERLESS_ADMIN_USER"),
       password: requireEnv("PAPERLESS_ADMIN_PASSWORD")
-    })
-  });
+    }),
+    dispatcher: getPaperlessAgent()
+  } as RequestInit & { dispatcher: Agent });
 
   if (!res.ok) {
     throw new Error(`Failed to obtain Paperless admin token: ${res.status} ${await res.text()}`);
@@ -312,7 +403,7 @@ async function getAdminToken(): Promise<string> {
 export async function paperlessAdminClient(): Promise<PaperlessClient> {
   const token = await getAdminToken();
   return new PaperlessClient(
-    "__admin__",
+    ADMIN_ORG_ID,
     { baseUrl: requireEnv("PAPERLESS_ADMIN_URL"), token },
     null
   );

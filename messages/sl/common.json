@@ -1,0 +1,123 @@
+{
+  "skipToContent": "Preskoči na vsebino",
+  "topbar": {
+    "openNavigation": "Odpri navigacijo",
+    "notifications": "Obvestila",
+    "unreadNotifications": "{count} neprebranih obvestil"
+  },
+  "navUserMenu": {
+    "openAccountMenu": "Odpri meni računa",
+    "settings": "Nastavitve",
+    "admin": "Skrbništvo",
+    "logOut": "Odjava"
+  },
+  "sidebar": {
+    "primaryNav": "Glavna navigacija",
+    "expandSidebar": "Razširi stransko vrstico",
+    "collapseSidebar": "Strni stransko vrstico",
+    "navigation": "Navigacija"
+  },
+  "localeSwitcher": {
+    "label": "Jezik"
+  },
+  "themeToggle": {
+    "switchToLight": "Preklopi na svetli način",
+    "switchToDark": "Preklopi na temni način",
+    "toggleTheme": "Preklopi temo"
+  },
+  "settingsTabs": {
+    "ariaLabel": "Razdelki nastavitev"
+  },
+  "nav": {
+    "pricing": "Cenik",
+    "login": "Prijava",
+    "dashboard": "Nadzorna plošča",
+    "notifications": "Obvestila",
+    "documents": "Dokumenti",
+    "attributes": "Atributi",
+    "tags": "Oznake",
+    "correspondents": "Korespondenti",
+    "documentTypes": "Vrste dokumentov",
+    "customFields": "Polja po meri",
+    "entities": "Entitete",
+    "views": "Pogledi",
+    "imports": "Uvozi",
+    "rules": "Pravila",
+    "billing": "Obračunavanje",
+    "organization": "Organizacija",
+    "organizations": "Organizacije",
+    "team": "Ekipa",
+    "settings": "Nastavitve",
+    "admin": "Skrbništvo",
+    "users": "Uporabniki",
+    "auditLog": "Dnevnik revizije",
+    "backToDashboard": "Nazaj na nadzorno ploščo",
+    "profile": "Profil",
+    "security": "Varnost"
+  },
+  "attributes": {
+    "description": "Upravljajte metapodatke, ki jih Paperless uporablja za organiziranje in ujemanje dokumentov.",
+    "tagsTitle": "Oznake",
+    "correspondentsTitle": "Korespondenti",
+    "documentTypesTitle": "Vrste dokumentov",
+    "customFieldsTitle": "Polja po meri",
+    "createTitle": "Ustvari {kind}",
+    "formDescription": "Ustvarite in uredite pravila ujemanja za ta atribut.",
+    "customFieldFormDescription": "Ustvarite in uredite lokalne definicije polj po meri.",
+    "emptyTitle": "Ni atributov",
+    "emptyDescription": "Ustvarite prvi atribut zgoraj.",
+    "viewDocuments": "Prikaži dokumente",
+    "openActions": "Odpri dejanja atributa",
+    "edit": "Uredi",
+    "delete": "Izbriši",
+    "confirmDelete": "Izbrišem {name}?",
+    "columns": {
+      "name": "Ime",
+      "matching": "Ujemanje",
+      "documents": "Dokumenti",
+      "viewDocuments": "Prikaži dokumente",
+      "actions": "Dejanja"
+    },
+    "form": {
+      "name": "Ime",
+      "color": "Barva",
+      "matchingAlgorithm": "Algoritem ujemanja",
+      "match": "Besedilo za ujemanje",
+      "create": "Ustvari atribut",
+      "save": "Shrani spremembe",
+      "cancel": "Prekliči"
+    },
+    "matching": {
+      "none": {
+        "label": "Brez",
+        "option": "Brez: onemogoči ujemanje."
+      },
+      "any": {
+        "label": "Katerakoli",
+        "option": "Katerakoli: dokument vsebuje katerokoli od teh besed"
+      },
+      "all": {
+        "label": "Vse",
+        "option": "Vse: dokument vsebuje vse te besede"
+      },
+      "exact": {
+        "label": "Točno",
+        "option": "Točno: dokument vsebuje ta niz"
+      },
+      "regex": {
+        "label": "Regularni izraz",
+        "option": "Regularni izraz: dokument ustreza temu izrazu"
+      },
+      "fuzzy": {
+        "label": "Približno",
+        "option": "Približno: dokument vsebuje podobno besedo"
+      }
+    },
+    "actions": {
+      "created": "Atribut je ustvarjen.",
+      "saved": "Atribut je shranjen.",
+      "deleted": "Atribut je izbrisan.",
+      "somethingWentWrong": "Nekaj je šlo narobe."
+    }
+  }
+}

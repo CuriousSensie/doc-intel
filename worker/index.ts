@@ -1,10 +1,13 @@
-import { Worker } from "bullmq";
-import IORedis from "ioredis";
+import { DelayedError, type Job, type Processor, Worker } from "bullmq";
 
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { getQueueRuntimeConfig } from "@/lib/queue/config";
 import { getQueue, QUEUE_NAMES } from "@/lib/queue";
+import { OrgRateLimitExceededError } from "@/lib/ratelimit/token-bucket";
+import { getRedisClient } from "@/lib/redis";
 
+import type { JobPayload } from "./context";
 import { jobRegistry } from "./registry";
 
 const EXPIRE_ABANDONED_UPLOADS_INTERVAL_MS = 5 * 60 * 1000;
@@ -12,6 +15,12 @@ const EXPIRE_ABANDONED_UPLOADS_INTERVAL_MS = 5 * 60 * 1000;
 const RECONCILE_INCREMENTAL_INTERVAL_MS = 5 * 60 * 1000;
 // docs/IMPLEMENTATION_PLAN.md: the full sweep (deletion detection) runs daily.
 const RECONCILE_FULL_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Phase 3 M3: replaces the old blocking in-job poll — same 2s cadence pollPaperlessTask() used
+// to sleep for between attempts, just moved out to its own schedule (docs/adr/0014).
+const POLL_PAPERLESS_TASKS_INTERVAL_MS = 2 * 1000;
+// specs/07-rules-engine.md §Actions: create_reminder's delivery sweep, same cadence as the
+// other global 5-minute sweeps.
+const FIRE_DUE_REMINDERS_INTERVAL_MS = 5 * 60 * 1000;
 
 // Registers this worker's recurring (non-tenant-triggered) jobs via BullMQ v6's JobScheduler —
 // upsertJobScheduler() is keyed by jobSchedulerId, so calling this on every boot (including a
@@ -36,15 +45,51 @@ async function registerSchedules() {
     { every: RECONCILE_FULL_SWEEP_INTERVAL_MS },
     { data: { orgId: "system" } }
   );
+
+  await getQueue(QUEUE_NAMES.pollPaperlessTasks).upsertJobScheduler(
+    QUEUE_NAMES.pollPaperlessTasks,
+    { every: POLL_PAPERLESS_TASKS_INTERVAL_MS },
+    { data: { orgId: "system" } }
+  );
+
+  await getQueue(QUEUE_NAMES.fireDueReminders).upsertJobScheduler(
+    QUEUE_NAMES.fireDueReminders,
+    { every: FIRE_DUE_REMINDERS_INTERVAL_MS },
+    { data: { orgId: "system" } }
+  );
+}
+
+function delayAwareProcessor(processor: Processor<JobPayload>): Processor<JobPayload> {
+  return async (job: Job<JobPayload>) => {
+    try {
+      return await processor(job);
+    } catch (err) {
+      if (err instanceof OrgRateLimitExceededError) {
+        await job.moveToDelayed(Date.now() + err.retryAfterMs, job.token);
+        logger.info("worker.job_delayed_for_org_rate_limit", {
+          queue: job.queueName,
+          jobId: job.id,
+          orgId: err.orgId,
+          bucket: err.bucket,
+          retryAfterMs: err.retryAfterMs
+        });
+        throw new DelayedError();
+      }
+
+      throw err;
+    }
+  };
 }
 
 // Entrypoint for the `worker` container (Dockerfile.worker). Boots one BullMQ Worker per queue.
 function main() {
   const workers = Object.values(QUEUE_NAMES).map((name) => {
-    // Own connection per Worker, per BullMQ's recommendation (unlike Queue producers, shared).
-    const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+    const config = getQueueRuntimeConfig(name);
 
-    const worker = new Worker(name, jobRegistry[name], { connection });
+    const worker = new Worker(name, delayAwareProcessor(jobRegistry[name]), {
+      connection: getRedisClient(),
+      ...config.worker
+    });
 
     worker.on("completed", (job) => {
       logger.info("worker.job_completed", { queue: name, jobId: job.id, orgId: job.data.orgId });
@@ -62,7 +107,11 @@ function main() {
     return worker;
   });
 
-  logger.info("worker.started", { queues: Object.values(QUEUE_NAMES).join(",") });
+  logger.info("worker.started", {
+    queues: Object.values(QUEUE_NAMES).join(","),
+    ingestConcurrency: env.WORKER_INGEST_CONCURRENCY,
+    paperlessIngestRatePerSecond: env.PAPERLESS_INGEST_RATE_PER_SECOND
+  });
 
   const shutdown = async (signal: string) => {
     logger.info("worker.shutting_down", { signal });

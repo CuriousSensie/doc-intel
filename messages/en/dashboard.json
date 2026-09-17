@@ -1,0 +1,42 @@
+{
+  "home": {
+    "welcomeBackWithName": "Welcome back, {name}",
+    "welcomeBack": "Welcome back",
+    "signedInAs": "Signed in as {name}.",
+    "notInOrganization": "You are not part of an organization yet.",
+    "documents": "Documents",
+    "ready": "Ready",
+    "processing": "Processing",
+    "failed": "Failed",
+    "noConnections": "No connections",
+    "entities": "Entities",
+    "team": "Team",
+    "pendingInvites": "Pending invites",
+    "provisioningStatus": "Tenant provisioning status:",
+    "needsAttention": "Needs attention",
+    "recentUploads": "Your recent uploads",
+    "noUploadsYet": "No uploads yet.",
+    "uploadADocument": "Upload a document",
+    "maxSizePerFile": "Up to {size} per file. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
+    "noDocumentsYet": "No documents yet."
+  },
+  "layout": {
+    "accountFallback": "Account"
+  },
+  "common": {
+    "somethingWentWrong": "Something went wrong"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unreadCount": "{count} unread",
+    "caughtUp": "You're all caught up.",
+    "markAllAsRead": "Mark all as read",
+    "markRead": "Mark read",
+    "new": "New",
+    "empty": "You have no notifications yet.",
+    "nextPage": "Next page",
+    "errors": {
+      "missingNotification": "Missing notification"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "common": {
+    "somethingWentWrong": "Nekaj je šlo narobe"
+  },
+  "errors": {
+    "noPermission": "Nimate dovoljenja za upravljanje obračunavanja za to organizacijo",
+    "invalidPlanSelection": "Neveljavna izbira paketa",
+    "planNotAvailable": "Ta paket še ni na voljo za nakup",
+    "noBillingAccount": "Račun za obračunavanje še ni najden",
+    "invalidCreditPackSelection": "Neveljavna izbira paketa dobropisov",
+    "creditPackNotAvailable": "Ta paket dobropisov še ni na voljo za nakup"
+  },
+  "messages": {
+    "subscriptionUpdated": "Naročnina je posodobljena.",
+    "creditsPurchased": "Dobropisi so kupljeni."
+  }
+}

@@ -1,9 +1,9 @@
-// Pomočnik document uploads — separate from src/config/files.ts's generic "files" module.
-// Direct-to-storage (specs/01-architecture.md §Upload), not server-buffered like uploadFile().
+// Pomočnik document uploads. Direct-to-storage (specs/01-architecture.md §Upload), not
+// server-buffered like avatar upload.
 export const documentsConfig = {
   bucket: "document-uploads",
-  // No spec'd number — Paperless/Tesseract handle large multi-page scans, so this is far above
-  // the generic files module's 20MB. Tune from real usage once there is any.
+  // No spec'd number — Paperless/Tesseract handle large multi-page scans. Tune from real usage
+  // once there is any.
   maxSizeBytes: 100 * 1024 * 1024,
   allowedMimeTypes: <string[]>[
     "application/pdf",

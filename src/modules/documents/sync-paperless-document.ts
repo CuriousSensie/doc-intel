@@ -1,15 +1,16 @@
-import {
-  getPaperlessCorrespondentName,
-  getPaperlessDocument,
-  getPaperlessDocumentTypeName,
-  toDocumentTypeKey
-} from "@/lib/paperless/documents";
+import { randomUUID } from "node:crypto";
+
+import { getPaperlessDocument, toDocumentTypeKey } from "@/lib/paperless/documents";
+import { getCachedCorrespondentName, getCachedDocumentTypeName } from "@/lib/paperless/metadata-cache";
 import { logEvent } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { paperlessFor } from "@/lib/paperless/client";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
+import type { ServiceContext } from "@/lib/service-context";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/modules/notifications/notifications.service";
+import { applyEntityLinks, applyFieldWrites, buildCustomFieldIdByKey } from "@/modules/imports/imports.apply";
+import type { ResolvedEntityLink, ResolvedFieldWrite } from "@/modules/imports/imports.matching";
 
 /**
  * specs/01-architecture.md §Upload steps 7-9, and the shared landing point for all three
@@ -40,10 +41,10 @@ export async function syncPaperlessDocument(
 
     const [documentTypeKey, correspondentName] = await Promise.all([
       doc.document_type != null
-        ? getPaperlessDocumentTypeName(paperless, doc.document_type).then(toDocumentTypeKey)
+        ? getCachedDocumentTypeName(paperless, orgId, doc.document_type).then(toDocumentTypeKey)
         : Promise.resolve(null),
       doc.correspondent != null
-        ? getPaperlessCorrespondentName(paperless, doc.correspondent)
+        ? getCachedCorrespondentName(paperless, orgId, doc.correspondent)
         : Promise.resolve(null)
     ]);
 
@@ -54,19 +55,60 @@ export async function syncPaperlessDocument(
     const checksum =
       doc.versions.find((v) => v.is_root)?.checksum ?? doc.versions[0]?.checksum ?? null;
 
+    // specs/07-rules-engine.md §Triggers: document.ingested fires when the mirror row is
+    // created, document.updated when an existing row's type/date/custom field changed — this
+    // upsert can't tell the two apart on its own, so the existing row (if any) is fetched first.
+    const { data: existingRow, error: existingRowError } = await db
+      .from("documents")
+      .select("id, document_type_key, document_date")
+      .eq("organization_id", orgId)
+      .eq("paperless_document_id", paperlessDocumentId)
+      .maybeSingle();
+    if (existingRowError) throw existingRowError;
+
     let byteSize: number | null = null;
     let createdBy: string | null = null;
+    // Import-sourced uploads (document_uploads.import_row_id set) don't get a per-document
+    // notification — a 10,000-document import would otherwise spam 10,000 of them. The import
+    // job's own completion notification summarizes instead.
+    let isFromImport = false;
+    let importJobId: string | null = null;
+    let pendingEntityLinks: ResolvedEntityLink[] = [];
+    let pendingFieldWrites: ResolvedFieldWrite[] = [];
 
     if (uploadId) {
       const { data: upload, error: uploadError } = await db
         .from("document_uploads")
-        .select("size_bytes, created_by")
+        .select("size_bytes, created_by, import_row_id")
         .eq("id", uploadId)
         .eq("organization_id", orgId)
         .single();
       if (uploadError) throw uploadError;
       byteSize = upload.size_bytes;
       createdBy = upload.created_by;
+      isFromImport = upload.import_row_id !== null;
+
+      // A "documents" kind row (worker/modules/imports/run-import-chunk.ts's create_document
+      // action) can't apply its entity links/field writes at chunk-processing time — the
+      // document doesn't exist in our mirror until right now. Its plan was persisted onto the
+      // row's own result for exactly this moment.
+      if (upload.import_row_id !== null) {
+        const { data: importRow, error: importRowError } = await db
+          .from("import_rows")
+          .select("import_job_id, result")
+          .eq("id", upload.import_row_id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (importRowError) throw importRowError;
+        if (importRow) {
+          importJobId = importRow.import_job_id;
+          const result = importRow.result as
+            | { pendingEntityLinks?: ResolvedEntityLink[]; pendingFieldWrites?: ResolvedFieldWrite[] }
+            | null;
+          pendingEntityLinks = result?.pendingEntityLinks ?? [];
+          pendingFieldWrites = result?.pendingFieldWrites ?? [];
+        }
+      }
     }
 
     const { data: documentRow, error: upsertError } = await db
@@ -84,6 +126,8 @@ export async function syncPaperlessDocument(
           mime_type: doc.mime_type,
           checksum,
           status: "ready",
+          source: isFromImport ? "import" : "upload",
+          import_job_id: importJobId,
           created_by: createdBy,
           synced_at: new Date().toISOString()
         },
@@ -104,13 +148,49 @@ export async function syncPaperlessDocument(
       if (completeError) throw completeError;
     }
 
-    // Rule engine evaluation isn't built yet (worker/registry.ts's runRule is still a
-    // not-implemented placeholder) — this job's only responsibility is firing the trigger.
-    await enqueue(QUEUE_NAMES.runRule, {
-      orgId,
-      documentId: documentRow.id,
-      trigger: "document.ingested"
-    });
+    if (pendingEntityLinks.length > 0 || pendingFieldWrites.length > 0) {
+      // Best-effort, deliberately outside the main try/catch's retry semantics: the document
+      // itself already synced successfully (documents.upsert above committed), so a failure
+      // applying its import row's connections/field writes must never make this whole job
+      // retry — a retry would just redundantly re-upsert an already-synced document. Logged
+      // loudly instead; docs/PHASE3_HANDOFF.md documents this as the one known gap (no
+      // automatic re-attempt for a deferred apply that fails, since retry-failed only
+      // re-queues rows already at status='failed', and this row is already 'ok').
+      try {
+        const importCtx: ServiceContext = { db, orgId, actorId: null, correlationId: randomUUID() };
+        const links =
+          pendingEntityLinks.length > 0 ? await applyEntityLinks(importCtx, documentRow.id, pendingEntityLinks) : [];
+        if (pendingFieldWrites.length > 0) {
+          const customFieldIdByKey = await buildCustomFieldIdByKey(importCtx);
+          await applyFieldWrites(importCtx, paperlessDocumentId, pendingFieldWrites, customFieldIdByKey);
+        }
+        logger.info("documents.sync.deferred_import_apply_completed", {
+          orgId,
+          documentId: documentRow.id,
+          linkCount: links.length
+        });
+      } catch (err) {
+        logger.error("documents.sync.deferred_import_apply_failed", {
+          orgId,
+          documentId: documentRow.id,
+          errorMessage: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
+
+    const newDocumentDate = doc.created ? doc.created.slice(0, 10) : null;
+    const isNew = !existingRow;
+    const changed =
+      !isNew &&
+      (existingRow.document_type_key !== documentTypeKey || existingRow.document_date !== newDocumentDate);
+
+    if (isNew || changed) {
+      await enqueue(QUEUE_NAMES.runRule, {
+        orgId,
+        documentId: documentRow.id,
+        trigger: isNew ? "document.ingested" : "document.updated"
+      });
+    }
 
     await logEvent({
       actorId: null,
@@ -122,7 +202,7 @@ export async function syncPaperlessDocument(
       metadata: { paperlessDocumentId }
     });
 
-    if (createdBy) {
+    if (createdBy && !isFromImport) {
       await createNotification(createdBy, {
         type: "document.ingested",
         title: "Document ready",

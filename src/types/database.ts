@@ -430,34 +430,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      files: {
-        Row: {
-          id: string;
-          owner_id: string;
-          organization_id: string | null;
-          bucket: string;
-          path: string;
-          filename: string;
-          mime_type: string;
-          size: number;
-          metadata: Json;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          owner_id: string;
-          organization_id?: string | null;
-          bucket: string;
-          path: string;
-          filename: string;
-          mime_type: string;
-          size: number;
-          metadata?: Json;
-          created_at?: string;
-        };
-        Update: Record<string, never>;
-        Relationships: [];
-      };
       audit_logs: {
         Row: {
           id: string;
@@ -605,6 +577,8 @@ export type Database = {
             | "expired";
           error_message: string | null;
           paperless_task_id: string | null;
+          import_row_id: number | null;
+          source_archive_key: string | null;
           document_id: string | null;
           created_by: string | null;
           created_at: string;
@@ -630,6 +604,8 @@ export type Database = {
             | "expired";
           error_message?: string | null;
           paperless_task_id?: string | null;
+          import_row_id?: number | null;
+          source_archive_key?: string | null;
           document_id?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -649,14 +625,652 @@ export type Database = {
             | "expired";
           error_message?: string | null;
           paperless_task_id?: string | null;
+          import_row_id?: number | null;
+          source_archive_key?: string | null;
           document_id?: string | null;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Pomočnik Level 1 Phase 3 — import job, materialized rows, reusable mappings.
+      import_jobs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          status:
+            | "draft"
+            | "mapping"
+            | "validating"
+            | "ready"
+            | "running"
+            | "paused"
+            | "completed"
+            | "completed_with_errors"
+            | "failed"
+            | "cancelled";
+          kind: "documents" | "entities" | "metadata_only";
+          source_filename: string | null;
+          storage_key: string | null;
+          total_rows: number;
+          processed_rows: number;
+          succeeded_rows: number;
+          failed_rows: number;
+          skipped_rows: number;
+          mapping: Json;
+          options: Json;
+          error: string | null;
+          created_by: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          status?:
+            | "draft"
+            | "mapping"
+            | "validating"
+            | "ready"
+            | "running"
+            | "paused"
+            | "completed"
+            | "completed_with_errors"
+            | "failed"
+            | "cancelled";
+          kind: "documents" | "entities" | "metadata_only";
+          source_filename?: string | null;
+          storage_key?: string | null;
+          total_rows?: number;
+          processed_rows?: number;
+          succeeded_rows?: number;
+          failed_rows?: number;
+          skipped_rows?: number;
+          mapping?: Json;
+          options?: Json;
+          error?: string | null;
+          created_by?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?:
+            | "draft"
+            | "mapping"
+            | "validating"
+            | "ready"
+            | "running"
+            | "paused"
+            | "completed"
+            | "completed_with_errors"
+            | "failed"
+            | "cancelled";
+          source_filename?: string | null;
+          storage_key?: string | null;
+          total_rows?: number;
+          processed_rows?: number;
+          succeeded_rows?: number;
+          failed_rows?: number;
+          skipped_rows?: number;
+          mapping?: Json;
+          options?: Json;
+          error?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      import_rows: {
+        Row: {
+          id: number;
+          organization_id: string;
+          import_job_id: string;
+          row_number: number;
+          raw: Json;
+          status: "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
+          result: Json | null;
+          error_code: string | null;
+          error_message: string | null;
+          attempts: number;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: number;
+          organization_id: string;
+          import_job_id: string;
+          row_number: number;
+          raw: Json;
+          status?:
+            "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
+          result?: Json | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          attempts?: number;
+          processed_at?: string | null;
+        };
+        Update: {
+          status?:
+            "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
+          result?: Json | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          attempts?: number;
+          processed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      import_mappings: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          kind: "documents" | "entities" | "metadata_only";
+          mapping: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          kind: "documents" | "entities" | "metadata_only";
+          mapping?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          kind?: "documents" | "entities" | "metadata_only";
+          mapping?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Pomočnik Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md).
+      entities: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entity_type_id: string;
+          display_name: string;
+          status: "active" | "archived";
+          data: Json;
+          search_tsv: unknown;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entity_type_id: string;
+          display_name: string;
+          status?: "active" | "archived";
+          data?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          display_name?: string;
+          status?: "active" | "archived";
+          data?: Json;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // The import matching key — normalized is what makes "SI 1234 5678"/"si12345678" collide.
+      entity_identifiers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entity_id: string;
+          kind: string;
+          value: string;
+          normalized: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entity_id: string;
+          kind: string;
+          value: string;
+          normalized: string;
+          created_at?: string;
+        };
+        Update: {
+          value?: string;
+          normalized?: string;
+        };
+        Relationships: [];
+      };
+      // The core primitive — one row, read from either direction via
+      // src/modules/connections/connections.service.ts's getConnections(). No FK on
+      // source_id/target_id: polymorphic (document | entity), app-layer enforced by design.
+      connections: {
+        Row: {
+          id: string;
+          organization_id: string;
+          source_kind: "document" | "entity";
+          source_id: string;
+          target_kind: "document" | "entity";
+          target_id: string;
+          relation: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
+          metadata: Json;
+          created_by: string | null;
+          created_via: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
+          rule_id: string | null;
+          rule_backfill_id: string | null;
+          created_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          source_kind: "document" | "entity";
+          source_id: string;
+          target_kind: "document" | "entity";
+          target_id: string;
+          relation?: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
+          metadata?: Json;
+          created_by?: string | null;
+          created_via?: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
+          rule_id?: string | null;
+          rule_backfill_id?: string | null;
+          created_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // Mirror of Paperless custom field *definitions* only — never read from Paperless's
+      // /api/custom_fields/ directly (cross-tenant leak, docs/spike-findings.md §1 #6).
+      custom_field_defs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          key: string;
+          label: string;
+          data_type:
+            | "string"
+            | "integer"
+            | "float"
+            | "monetary"
+            | "date"
+            | "boolean"
+            | "select"
+            | "documentlink"
+            | "url";
+          options: Json | null;
+          applies_to: string[];
+          paperless_custom_field_id: number | null;
+          is_required: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          key: string;
+          label: string;
+          data_type:
+            | "string"
+            | "integer"
+            | "float"
+            | "monetary"
+            | "date"
+            | "boolean"
+            | "select"
+            | "documentlink"
+            | "url";
+          options?: Json | null;
+          applies_to?: string[];
+          paperless_custom_field_id?: number | null;
+          is_required?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          label?: string;
+          options?: Json | null;
+          applies_to?: string[];
+          is_required?: boolean;
+        };
+        Relationships: [];
+      };
+      saved_views: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          scope: "documents" | "entities";
+          entity_type_id: string | null;
+          filters: Json;
+          columns: Json;
+          sort: Json | null;
+          is_shared: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          scope: "documents" | "entities";
+          entity_type_id?: string | null;
+          filters?: Json;
+          columns?: Json;
+          sort?: Json | null;
+          is_shared?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          filters?: Json;
+          columns?: Json;
+          sort?: Json | null;
+          is_shared?: boolean;
+        };
+        Relationships: [];
+      };
+      // Pomočnik Level 1 Milestone 7 (specs/05-level-1-structure.md §Bulk business actions/§Export).
+      background_operations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          kind: "bulk_connect" | "bulk_paperless_edit" | "export";
+          status: "pending" | "processing" | "completed" | "failed";
+          params: Json;
+          total_count: number | null;
+          processed_count: number;
+          success_count: number;
+          failure_count: number;
+          failures: Json;
+          result: Json | null;
+          error_message: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          kind: "bulk_connect" | "bulk_paperless_edit" | "export";
+          status?: "pending" | "processing" | "completed" | "failed";
+          params?: Json;
+          total_count?: number | null;
+          processed_count?: number;
+          success_count?: number;
+          failure_count?: number;
+          failures?: Json;
+          result?: Json | null;
+          error_message?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          status?: "pending" | "processing" | "completed" | "failed";
+          total_count?: number | null;
+          processed_count?: number;
+          success_count?: number;
+          failure_count?: number;
+          failures?: Json;
+          result?: Json | null;
+          error_message?: string | null;
+          updated_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      rules: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          enabled: boolean;
+          trigger: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          priority: number;
+          conditions: Json;
+          actions: Json;
+          delegate_to_paperless: boolean;
+          paperless_workflow_id: number | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          enabled?: boolean;
+          trigger: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          priority?: number;
+          conditions: Json;
+          actions: Json;
+          delegate_to_paperless?: boolean;
+          paperless_workflow_id?: number | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          enabled?: boolean;
+          trigger?: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          priority?: number;
+          conditions?: Json;
+          actions?: Json;
+          delegate_to_paperless?: boolean;
+          paperless_workflow_id?: number | null;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      rule_runs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          rule_id: string;
+          document_id: string | null;
+          trigger: string;
+          matched: boolean;
+          conditions_trace: Json;
+          actions_applied: Json;
+          status: "ok" | "skipped_conflict" | "failed" | "timeout";
+          error_message: string | null;
+          cascade_depth: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          rule_id: string;
+          document_id?: string | null;
+          trigger: string;
+          matched: boolean;
+          conditions_trace?: Json;
+          actions_applied?: Json;
+          status?: "ok" | "skipped_conflict" | "failed" | "timeout";
+          error_message?: string | null;
+          cascade_depth?: number;
+          created_at?: string;
+        };
+        Update: {
+          conditions_trace?: Json;
+          actions_applied?: Json;
+          status?: "ok" | "skipped_conflict" | "failed" | "timeout";
+          error_message?: string | null;
+        };
+        Relationships: [];
+      };
+      rule_backfills: {
+        Row: {
+          id: string;
+          organization_id: string;
+          rule_id: string;
+          status: "pending" | "running" | "paused" | "cancelled" | "completed" | "failed";
+          filter: Json;
+          matched_count: number;
+          applied_count: number;
+          cursor_document_id: string | null;
+          created_by: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          rule_id: string;
+          status?: "pending" | "running" | "paused" | "cancelled" | "completed" | "failed";
+          filter?: Json;
+          matched_count?: number;
+          applied_count?: number;
+          cursor_document_id?: string | null;
+          created_by?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: "pending" | "running" | "paused" | "cancelled" | "completed" | "failed";
+          matched_count?: number;
+          applied_count?: number;
+          cursor_document_id?: string | null;
+          started_at?: string | null;
+          finished_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // rls-coverage: admin-only (no write policy) — written only via apply_rule_action().
+      field_provenance: {
+        Row: {
+          organization_id: string;
+          document_id: string;
+          field_key: string;
+          updated_by: "user" | "rule" | "import" | "ai" | "system";
+          source_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          organization_id: string;
+          document_id: string;
+          field_key: string;
+          updated_by: "user" | "rule" | "import" | "ai" | "system";
+          source_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          updated_by?: "user" | "rule" | "import" | "ai" | "system";
+          source_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // rls-coverage: admin-only (no write policy) — written only by rule actions / worker sweep.
+      reminders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          document_id: string | null;
+          entity_id: string | null;
+          due_date: string;
+          assignee_role: "owner" | "admin" | "member";
+          message: string;
+          rule_id: string | null;
+          fired_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          document_id?: string | null;
+          entity_id?: string | null;
+          due_date: string;
+          assignee_role: "owner" | "admin" | "member";
+          message: string;
+          rule_id?: string | null;
+          fired_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          fired_at?: string | null;
         };
         Relationships: [];
       };
     };
     Views: Record<string, never>;
     Functions: {
+      apply_rule_action: {
+        Args: {
+          p_organization_id: string;
+          p_rule_id: string;
+          p_rule_run_id: string | null;
+          p_action_type: string;
+          p_action: Json;
+          p_source_kind?: string | null;
+          p_source_id?: string | null;
+          p_target_kind?: string | null;
+          p_target_id?: string | null;
+          p_relation?: string | null;
+          p_rule_backfill_id?: string | null;
+          p_document_id?: string | null;
+          p_field_key?: string | null;
+        };
+        Returns: string;
+      };
+      claim_rule_backfill_documents: {
+        Args: {
+          p_rule_backfill_id: string;
+          p_organization_id: string;
+          p_limit?: number;
+          p_document_type_key?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["documents"]["Row"][];
+      };
+      advance_rule_backfill_cursor: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string; p_cursor_document_id: string };
+        Returns: void;
+      };
+      increment_rule_backfill_progress: {
+        Args: {
+          p_rule_backfill_id: string;
+          p_organization_id: string;
+          p_matched_delta: number;
+          p_applied_delta: number;
+        };
+        Returns: void;
+      };
+      complete_rule_backfill: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      fail_rule_backfill: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string; p_reason: string };
+        Returns: boolean;
+      };
+      undo_rule_backfill: {
+        Args: { p_rule_backfill_id: string; p_organization_id: string };
+        Returns: number;
+      };
       create_organization: {
         Args: { org_name: string; org_slug: string };
         Returns: string;
@@ -745,12 +1359,87 @@ export type Database = {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: boolean;
       };
+      claim_import_chunk: {
+        Args: { p_import_job_id: string; p_organization_id: string; p_limit?: number };
+        Returns: Database["public"]["Tables"]["import_rows"]["Row"][];
+      };
+      complete_import_job: {
+        Args: { p_import_job_id: string; p_organization_id: string };
+        Returns: boolean;
+      };
+      fail_import_job: {
+        Args: { p_import_job_id: string; p_organization_id: string; p_reason: string };
+        Returns: boolean;
+      };
+      bulk_update_import_rows: {
+        Args: { p_import_job_id: string; p_organization_id: string; p_rows: Json };
+        Returns: undefined;
+      };
+      increment_import_job_progress: {
+        Args: {
+          p_import_job_id: string;
+          p_organization_id: string;
+          p_processed_delta: number;
+          p_succeeded_delta: number;
+          p_failed_delta: number;
+          p_skipped_delta: number;
+        };
+        Returns: undefined;
+      };
+      list_documents_without_connections: {
+        Args: {
+          p_organization_id: string;
+          p_document_type_key?: string | null;
+          p_status?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_paperless_ids?: number[] | null;
+          p_cursor_created_at?: string | null;
+          p_cursor_id?: string | null;
+          p_limit?: number;
+        };
+        Returns: Database["public"]["Tables"]["documents"]["Row"][];
+      };
+      count_document_connections: {
+        Args: { p_organization_id: string; p_document_ids: string[] };
+        Returns: { document_id: string; connection_count: number }[];
+      };
+      count_documents_without_connections: {
+        Args: {
+          p_organization_id: string;
+          p_document_type_key?: string | null;
+          p_status?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_paperless_ids?: number[] | null;
+        };
+        Returns: number;
+      };
+      list_documents_without_connections_page: {
+        Args: {
+          p_organization_id: string;
+          p_document_type_key?: string | null;
+          p_status?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_paperless_ids?: number[] | null;
+          p_sort?: string;
+          p_sort_direction?: string;
+          p_offset?: number;
+          p_limit?: number;
+        };
+        Returns: Database["public"]["Tables"]["documents"]["Row"][];
+      };
       complete_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: undefined;
       };
       fail_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      merge_entities: {
+        Args: { p_keep_id: string; p_merge_id: string };
         Returns: undefined;
       };
     };

@@ -1,17 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { Route } from "next";
+import { useTranslations } from "next-intl";
 
-import type { NavigationItem } from "@/config/navigation";
+import { Link, usePathname } from "@/i18n/navigation";
+import type { NavigationLinkItem } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 
-export function SettingsTabs({ items }: { items: NavigationItem[] }) {
+export function SettingsTabs({ items }: { items: NavigationLinkItem[] }) {
   const pathname = usePathname();
+  const t = useTranslations("common");
 
   return (
-    <nav aria-label="Settings sections" className="border-b border-border">
+    <nav aria-label={t("settingsTabs.ariaLabel")} className="border-b border-border">
       <div className="mx-auto flex max-w-3xl gap-1 overflow-x-auto">
         {items.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
@@ -24,10 +24,10 @@ export function SettingsTabs({ items }: { items: NavigationItem[] }) {
                   ? "border-foreground text-foreground"
                   : "border-transparent text-muted hover:text-foreground"
               )}
-              href={item.href as Route}
+              href={item.href}
               key={item.href}
             >
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           );
         })}

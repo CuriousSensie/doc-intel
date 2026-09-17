@@ -1,5 +1,4 @@
 import { ValidationError } from "@/lib/errors";
-import { type FileCategory, filesConfig } from "@/config/files";
 
 const SIGNATURES: { mimeType: string; bytes: number[] }[] = [
   { mimeType: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47] },
@@ -78,11 +77,4 @@ export function validateFileAgainstConfig(
   }
 
   return resolvedMimeType;
-}
-
-export function validateFile(
-  input: { buffer: Buffer; declaredMimeType: string; size: number },
-  category: FileCategory
-): string {
-  return validateFileAgainstConfig(input, filesConfig.categories[category]);
 }

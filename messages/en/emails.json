@@ -1,0 +1,11 @@
+{
+  "footerPrefix": "{appName} · Questions? Contact",
+  "organizationInvitation": {
+    "subject": "You're invited to join {organizationName}",
+    "heading": "Join {organizationName}",
+    "previewText": "{inviterName} invited you to join {organizationName}",
+    "body": "{inviterName} invited you to join <name>{organizationName}</name> as a {role}.",
+    "acceptButton": "Accept invitation",
+    "copyLink": "Or copy this link:"
+  }
+}

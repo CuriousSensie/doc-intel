@@ -149,32 +149,19 @@ attacker cannot fabricate notifications (e.g. phishing-style "your password was 
 here") by calling the table directly; only trusted server code decides what a user sees in their
 inbox.
 
-## Files
+## Avatar upload
 
-All Storage writes (upload, delete, signed-URL minting) go through the service-role admin client
-(`src/lib/supabase/admin.ts`), never a user-scoped client — the `files` table's RLS only grants
-select/insert/delete (no update), and no `storage.objects` RLS policies exist at all, because
-nothing ever talks to Storage directly from the browser.
-
-Uploaded content is never trusted at face value (temp.md §34's "never trust filename
-extensions"): `src/lib/files/validate.ts` sniffs the actual file type from its magic bytes for
-every format we recognize (PNG/JPEG/GIF/WEBP/PDF) and rejects the upload outright if that
-disagrees with the declared MIME type, in addition to enforcing each category's size cap and
-MIME allowlist (`src/config/files.ts`). Formats with no fixed signature (e.g. `text/csv`) still
-go through the size/allowlist check.
-
-The `files` bucket is **private** — every download goes through
-`src/app/api/files/[id]/download/route.ts`, which confirms the row is visible to the requesting
-user via the RLS-scoped client before minting a short-lived signed URL through the admin client;
-a file id alone is never sufficient to download it. The `avatars` bucket is deliberately
-**public** (profile pictures aren't sensitive and are meant to be displayed inline without a
-signed-URL round trip on every page load).
-
-Deleting a file is gated by an application-level check (`canManageFile` in
-`files.service.ts`) — the file's owner, or an org owner/admin via
-`can(role, "organization.files.manage")` — run before the admin client performs the storage
-object removal and row delete together, so a file can never end up deleted from Storage but not
-the database (or vice versa) due to a bypassable RLS check.
+The boilerplate's generic Files module (a `files` table + private `files` bucket) was removed
+entirely — see `supabase/migrations/20260913120000_drop_files_and_projects.sql` and
+[MODULES.md](MODULES.md). The one thing it did that's still needed, profile avatar upload, lives
+in `src/modules/profile/avatar.service.ts` and keeps the same guarantees: all Storage writes go
+through the service-role admin client (`src/lib/supabase/admin.ts`), never a user-scoped client,
+and content is never trusted at face value — `src/lib/files/validate.ts`'s
+`validateFileAgainstConfig()` sniffs the actual file type from its magic bytes and rejects a
+mismatch against the declared MIME type, in addition to enforcing `src/config/avatar.ts`'s size
+cap and MIME allowlist. The `avatars` bucket is deliberately **public** (profile pictures aren't
+sensitive and are meant to be displayed inline without a signed-URL round trip on every page
+load).
 
 ## Documents (Paperless integration) — Pomočnik
 
@@ -182,7 +169,7 @@ Three separate defenses apply before a tenant's uploaded file ever reaches Paper
 independent of the others:
 
 - **MIME re-sniff**, same "never trust filename extensions or a client-declared type" rule as
-  [Files](#files) above, generalized in `src/lib/files/validate.ts`'s
+  [Avatar upload](#avatar-upload) above, generalized in `src/lib/files/validate.ts`'s
   `validateFileAgainstConfig()` to cover TIFF and zip-based OOXML/ODT formats in addition to the
   original PNG/JPEG/GIF/WEBP/PDF signature set (`documentsConfig.allowedMimeTypes`,
   `src/config/documents.ts`).
@@ -245,7 +232,7 @@ warning.
 organization's `suspended_at` is read by `is_organization_member()` and `has_organization_role()`
 — the two SECURITY DEFINER helpers essentially every org-scoped RLS policy is built on
 (`organizations`, `organization_members`, `organization_invitations`, `stripe_customers`,
-`subscriptions`, `credit_transactions`, `usage_counters`, `files`, `audit_logs`). The moment an
+`subscriptions`, `credit_transactions`, `usage_counters`, `audit_logs`). The moment an
 org is suspended, every one of those policies stops granting access to its non-admin members —
 there is no per-route guard to remember, and no way to bypass it short of going through
 `is_app_admin()` (which every policy also allows, so admins can still un-suspend it).

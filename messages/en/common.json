@@ -1,0 +1,123 @@
+{
+  "skipToContent": "Skip to content",
+  "topbar": {
+    "openNavigation": "Open navigation",
+    "notifications": "Notifications",
+    "unreadNotifications": "{count} unread notifications"
+  },
+  "navUserMenu": {
+    "openAccountMenu": "Open account menu",
+    "settings": "Settings",
+    "admin": "Admin",
+    "logOut": "Log out"
+  },
+  "sidebar": {
+    "primaryNav": "Primary",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "navigation": "Navigation"
+  },
+  "localeSwitcher": {
+    "label": "Language"
+  },
+  "themeToggle": {
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode",
+    "toggleTheme": "Toggle theme"
+  },
+  "settingsTabs": {
+    "ariaLabel": "Settings sections"
+  },
+  "nav": {
+    "pricing": "Pricing",
+    "login": "Login",
+    "dashboard": "Dashboard",
+    "notifications": "Notifications",
+    "documents": "Documents",
+    "attributes": "Attributes",
+    "tags": "Tags",
+    "correspondents": "Correspondents",
+    "documentTypes": "Document types",
+    "customFields": "Custom fields",
+    "entities": "Entities",
+    "views": "Views",
+    "imports": "Imports",
+    "rules": "Rules",
+    "billing": "Billing",
+    "organization": "Organization",
+    "organizations": "Organizations",
+    "team": "Team",
+    "settings": "Settings",
+    "admin": "Admin",
+    "users": "Users",
+    "auditLog": "Audit Log",
+    "backToDashboard": "Back to dashboard",
+    "profile": "Profile",
+    "security": "Security"
+  },
+  "attributes": {
+    "description": "Manage the metadata Paperless uses to organize and match documents.",
+    "tagsTitle": "Tags",
+    "correspondentsTitle": "Correspondents",
+    "documentTypesTitle": "Document types",
+    "customFieldsTitle": "Custom fields",
+    "createTitle": "Create {kind}",
+    "formDescription": "Create and edit matching rules for this attribute.",
+    "customFieldFormDescription": "Create and edit local custom field definitions.",
+    "emptyTitle": "No attributes yet",
+    "emptyDescription": "Create the first attribute above.",
+    "viewDocuments": "View documents",
+    "openActions": "Open attribute actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Delete {name}?",
+    "columns": {
+      "name": "Name",
+      "matching": "Matching",
+      "documents": "Documents",
+      "viewDocuments": "View documents",
+      "actions": "Actions"
+    },
+    "form": {
+      "name": "Name",
+      "color": "Color",
+      "matchingAlgorithm": "Matching algorithm",
+      "match": "Matching text",
+      "create": "Create attribute",
+      "save": "Save changes",
+      "cancel": "Cancel"
+    },
+    "matching": {
+      "none": {
+        "label": "None",
+        "option": "None: Disable matching."
+      },
+      "any": {
+        "label": "Any",
+        "option": "Any: Document contains any of these words"
+      },
+      "all": {
+        "label": "All",
+        "option": "All: Document contains all of these words"
+      },
+      "exact": {
+        "label": "Exact",
+        "option": "Exact: Document contains this string"
+      },
+      "regex": {
+        "label": "Regular expression",
+        "option": "Regular expression: Document matches this expression"
+      },
+      "fuzzy": {
+        "label": "Fuzzy",
+        "option": "Fuzzy: Document contains a similar word"
+      }
+    },
+    "actions": {
+      "created": "Attribute created.",
+      "saved": "Attribute saved.",
+      "deleted": "Attribute deleted.",
+      "somethingWentWrong": "Something went wrong."
+    }
+  }
+}

@@ -9,17 +9,26 @@ export type PaperlessListEnvelope<T> = {
 };
 
 // results (paginated), lowercase status, related_document_ids as a list — all confirmed live.
+// Phase 3 M3 re-verified this shape live: the field is `result_data` (an object, e.g.
+// `{ document_id: N }` on success — never confirmed for a real failure, so treated as
+// `unknown`), not `result` as this type previously claimed — that was a real, latent bug
+// (submit-upload-to-paperless.ts's failure message read `task.result`, always undefined).
+// `status` also passes through an intermediate `"started"` value before success/failure.
+// `owner` is the Paperless user id that submitted the task (the tenant service user for
+// post_document/) — see docs/adr/0014-paperless-task-poller-isolation.md for why this matters:
+// GET /api/tasks/ unfiltered returns every tenant's tasks (confirmed live, a real isolation
+// gap), but GET /api/tasks/?task_id=<id> is correctly scoped to the caller's own tasks.
 export type PaperlessTask = {
   id: number;
   task_id: string;
   task_type: string;
-  status: "success" | "failure" | "pending" | string;
+  status: "success" | "failure" | "started" | "pending" | string;
   date_created: string;
   date_started: string | null;
   date_done: string | null;
   duration_seconds: number | null;
   related_document_ids: number[] | null;
-  result?: string;
+  result_data?: unknown;
   owner: number | null;
 };
 
@@ -27,7 +36,8 @@ export type PaperlessTask = {
 // (2026-09-12) — page_count and mime_type are direct fields; there is no byte_size field
 // anywhere on this response (checked both the list and detail shapes), so that still has to
 // come from document_uploads on the upload path only. checksum lives on the root entry of
-// `versions`, not as a top-level field.
+// `versions`, not as a top-level field. custom_fields confirmed live (2026-09-13): a flat
+// `{field, value}[]` array embedded directly on the document object, no separate endpoint.
 export type PaperlessDocument = {
   id: number;
   title: string;
@@ -43,6 +53,9 @@ export type PaperlessDocument = {
   owner: number | null;
   page_count: number | null;
   mime_type: string | null;
+  // Confirmed live (2026-09-16): present on both list and detail shapes.
+  original_file_name: string;
+  custom_fields: Array<{ field: number; value: unknown }>;
   versions: Array<{
     id: number;
     added: string;
@@ -50,6 +63,18 @@ export type PaperlessDocument = {
     checksum: string;
     is_root: boolean;
   }>;
+};
+
+// Confirmed live (2026-09-13) against GET /api/documents/:id/history/ — not paginated on this
+// version (a plain array, no PaperlessListEnvelope). `actor` is null for system-initiated
+// changes (e.g. the initial post_document/ create), populated for a PATCH made under a real
+// tenant service-user token.
+export type PaperlessDocumentHistoryEntry = {
+  id: number;
+  timestamp: string;
+  action: "create" | "update" | "delete" | string;
+  changes: Record<string, unknown>;
+  actor: { id: number; username: string } | null;
 };
 
 // Per-object owner/ACL payload. Field is `set_permissions` on this pinned version, not

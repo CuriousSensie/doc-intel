@@ -1,11 +1,111 @@
-import type { PaperlessClient } from "./client";
-import type { PaperlessDocument, PaperlessListEnvelope } from "./types";
+import type { OwnedObjectPermissions, PaperlessClient } from "./client";
+import type {
+  PaperlessDocument,
+  PaperlessDocumentHistoryEntry,
+  PaperlessListEnvelope
+} from "./types";
 
 export function getPaperlessDocument(
   client: PaperlessClient,
   paperlessDocumentId: number
 ): Promise<PaperlessDocument> {
   return client.get<PaperlessDocument>(`/api/documents/${paperlessDocumentId}/`);
+}
+
+// specs/03-api.md's PATCH /documents/:id — title/date/type/custom-field writes always go
+// through here, never mirror-only (specs/02-data-model.md: "Paperless wins on conflict", we
+// never write a mirrored field in our DB without also writing it through to Paperless in the
+// same operation). Returns Paperless's own post-write representation so the caller mirrors
+// exactly what Paperless actually stored, not what was requested.
+export function updatePaperlessDocument(
+  client: PaperlessClient,
+  paperlessDocumentId: number,
+  patch: {
+    title?: string;
+    created?: string;
+    document_type?: number | null;
+    correspondent?: number | null;
+    tags?: number[];
+    custom_fields?: Array<{ field: number; value: unknown }>;
+  }
+): Promise<PaperlessDocument> {
+  return client.patch<PaperlessDocument>(`/api/documents/${paperlessDocumentId}/`, patch);
+}
+
+// specs/03-api.md DELETE /documents/:id — soft-delete locally, delete in Paperless.
+export function deletePaperlessDocument(
+  client: PaperlessClient,
+  paperlessDocumentId: number
+): Promise<void> {
+  return client.delete(`/api/documents/${paperlessDocumentId}/`);
+}
+
+// specs/12-agent-rules.md rule 4: never create a Paperless object without explicit owner/group
+// permissions — same createOwnedObject() path provision-tenant.ts already uses for document
+// types/storage paths, now reused for the document detail page's inline "create tag/
+// correspondent/document type" pickers. Paperless itself enforces name uniqueness per model;
+// a duplicate name surfaces as a normal mapped Paperless error, not something checked here.
+// `color` accepted on create, confirmed live (2026-09-16) — Paperless derives `text_color`
+// itself from the contrast, never sent by us.
+export function createPaperlessTag(
+  client: PaperlessClient,
+  name: string,
+  ownership: OwnedObjectPermissions,
+  color?: string,
+  matching?: PaperlessMatchingFields
+): Promise<PaperlessTag> {
+  return client.createOwnedObject(
+    "/api/tags/",
+    { name, ...(color ? { color } : {}), ...matching },
+    ownership
+  );
+}
+
+export function createPaperlessCorrespondent(
+  client: PaperlessClient,
+  name: string,
+  ownership: OwnedObjectPermissions,
+  matching?: PaperlessMatchingFields
+): Promise<PaperlessCorrespondent> {
+  return client.createOwnedObject("/api/correspondents/", { name, ...matching }, ownership);
+}
+
+export function createPaperlessDocumentType(
+  client: PaperlessClient,
+  name: string,
+  ownership: OwnedObjectPermissions,
+  matching?: PaperlessMatchingFields
+): Promise<PaperlessDocumentType> {
+  return client.createOwnedObject("/api/document_types/", { name, ...matching }, ownership);
+}
+
+// specs/05-level-1-structure.md §Bulk business actions: "Paperless's [bulk actions]: change
+// document type, tags, correspondent, custom field values, reprocess, delete — proxied to
+// Paperless bulk_edit, not reimplemented." Paperless applies these atomically server-side
+// (its own task queue), so this is a single synchronous proxy call, not a worker job.
+export function bulkEditPaperlessDocuments(
+  client: PaperlessClient,
+  input: {
+    documentIds: number[];
+    method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess";
+    parameters?: Record<string, unknown>;
+  }
+): Promise<{ result: string }> {
+  return client.post<{ result: string }>("/api/documents/bulk_edit/", {
+    documents: input.documentIds,
+    method: input.method,
+    parameters: input.parameters ?? {}
+  });
+}
+
+// Confirmed live (2026-09-13): not paginated on this version, a plain array.
+export function getPaperlessDocumentHistory(
+  client: PaperlessClient,
+  paperlessDocumentId: number
+): Promise<PaperlessDocumentHistoryEntry[]> {
+  return client.get<PaperlessDocumentHistoryEntry[]>(
+    `/api/documents/${paperlessDocumentId}/history/`
+  );
 }
 
 export function getPaperlessDocumentTypeName(
@@ -55,6 +155,139 @@ export async function listAllPaperlessDocumentIds(
   }
 
   return ids;
+}
+
+// Full option lists for the documents filter bar (tags/correspondents/document types) — always
+// small (tens to low hundreds of rows for a real tenant), so one page is enough; still follows
+// the `next`-pagination pattern in case a tenant genuinely has more than page_size.
+async function listAllPaginated<T>(client: PaperlessClient, path: string): Promise<T[]> {
+  const items: T[] = [];
+  let next: string | null = path;
+  while (next) {
+    const envelope: PaperlessListEnvelope<T> = await client.get(next);
+    items.push(...envelope.results);
+    next = envelope.next ? toRequestPath(envelope.next) : null;
+  }
+  return items;
+}
+
+export type PaperlessMatchingFields = {
+  match?: string;
+  matching_algorithm?: number;
+  is_insensitive?: boolean;
+};
+
+export type PaperlessTag = PaperlessMatchingFields & {
+  id: number;
+  name: string;
+  color: string;
+  text_color: string;
+  document_count?: number;
+};
+export type PaperlessCorrespondent = PaperlessMatchingFields & {
+  id: number;
+  name: string;
+  document_count?: number;
+};
+export type PaperlessDocumentType = PaperlessMatchingFields & {
+  id: number;
+  name: string;
+  document_count?: number;
+};
+
+export function listPaperlessTags(client: PaperlessClient): Promise<PaperlessTag[]> {
+  return listAllPaginated<PaperlessTag>(client, "/api/tags/?page_size=200");
+}
+
+export function listPaperlessCorrespondents(
+  client: PaperlessClient
+): Promise<PaperlessCorrespondent[]> {
+  return listAllPaginated<PaperlessCorrespondent>(client, "/api/correspondents/?page_size=200");
+}
+
+export function listPaperlessDocumentTypes(
+  client: PaperlessClient
+): Promise<PaperlessDocumentType[]> {
+  return listAllPaginated<PaperlessDocumentType>(client, "/api/document_types/?page_size=200");
+}
+
+export function updatePaperlessTag(
+  client: PaperlessClient,
+  id: number,
+  patch: Partial<Pick<PaperlessTag, "name" | "color" | "match" | "matching_algorithm" | "is_insensitive">>
+): Promise<PaperlessTag> {
+  return client.patch<PaperlessTag>(`/api/tags/${id}/`, patch);
+}
+
+export function updatePaperlessCorrespondent(
+  client: PaperlessClient,
+  id: number,
+  patch: Partial<Pick<PaperlessCorrespondent, "name" | "match" | "matching_algorithm" | "is_insensitive">>
+): Promise<PaperlessCorrespondent> {
+  return client.patch<PaperlessCorrespondent>(`/api/correspondents/${id}/`, patch);
+}
+
+export function updatePaperlessDocumentType(
+  client: PaperlessClient,
+  id: number,
+  patch: Partial<Pick<PaperlessDocumentType, "name" | "match" | "matching_algorithm" | "is_insensitive">>
+): Promise<PaperlessDocumentType> {
+  return client.patch<PaperlessDocumentType>(`/api/document_types/${id}/`, patch);
+}
+
+export function deletePaperlessTag(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/tags/${id}/`);
+}
+
+export function deletePaperlessCorrespondent(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/correspondents/${id}/`);
+}
+
+export function deletePaperlessDocumentType(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/document_types/${id}/`);
+}
+
+// Large-cards view mode only: a page-scoped read of `content` for the ~25 documents currently
+// on screen. Confirmed live against the pinned instance (2026-09-16) that the list endpoint
+// already returns full `content` per row (not a detail-only field) and that `id__in=` filters
+// correctly — no sparse-fieldset support exists on this version, so the full document body
+// comes back regardless, but capped to one page's worth of ids this is still cheap. Never
+// cached, never written anywhere — specs/02-data-model.md's "we do not mirror OCR text" applies
+// exactly as much to an in-memory cache as to a database column.
+export async function getPaperlessContentSnippets(
+  client: PaperlessClient,
+  paperlessDocumentIds: number[]
+): Promise<Map<number, string>> {
+  if (paperlessDocumentIds.length === 0) return new Map();
+
+  const params = new URLSearchParams({
+    id__in: paperlessDocumentIds.join(","),
+    page_size: String(paperlessDocumentIds.length)
+  });
+  const envelope = await client.get<PaperlessListEnvelope<{ id: number; content: string }>>(
+    `/api/documents/?${params.toString()}`
+  );
+  return new Map(envelope.results.map((r) => [r.id, r.content]));
+}
+
+// Documents list page (all three view modes): a page-scoped read of `tags` for the ~25
+// documents currently on screen, used to render each row/card's tag-color ribbon. Same
+// id__in-scoped pattern as getPaperlessContentSnippets — tags aren't mirrored locally (only
+// Paperless-native), so this is always a live, page-scoped call, never cached across pages.
+export async function getPaperlessDocumentTags(
+  client: PaperlessClient,
+  paperlessDocumentIds: number[]
+): Promise<Map<number, number[]>> {
+  if (paperlessDocumentIds.length === 0) return new Map();
+
+  const params = new URLSearchParams({
+    id__in: paperlessDocumentIds.join(","),
+    page_size: String(paperlessDocumentIds.length)
+  });
+  const envelope = await client.get<PaperlessListEnvelope<{ id: number; tags: number[] }>>(
+    `/api/documents/?${params.toString()}`
+  );
+  return new Map(envelope.results.map((r) => [r.id, r.tags]));
 }
 
 // documents.document_type_key has no canonical source (specs/02-data-model.md gives it as a

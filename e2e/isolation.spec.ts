@@ -5,6 +5,8 @@ import { expect, test } from "@playwright/test";
 import { paperlessFor } from "@/lib/paperless/client";
 import { parsePostDocumentTaskId, pollPaperlessTask } from "@/lib/paperless/tasks";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeIdentifier } from "@/modules/entities/identifier-normalization";
+import { validateImportJob } from "@/modules/imports/imports.service";
 import { upsertDocumentObjectMap } from "@/modules/documents/sync-paperless-document";
 
 import {
@@ -41,6 +43,7 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
   let correspondentId: number;
   let storagePathId: number;
   let customFieldId: number;
+  let customFieldValue: string;
   const uniqueName = `isolation_${Date.now()}`;
   const secretString = `SECRET_TENANT_A_${uniqueName}`;
 
@@ -117,6 +120,15 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
     // post_document/ doesn't itself grant the tenant group view/change (docs/spike-findings.md)
     // — the same PATCH submit-upload-to-paperless.ts does in production.
     await paperlessA.setOwnedObjectPermissions(`/api/documents/${documentId}/`, ownershipA);
+
+    // A real custom field VALUE on A's document — test #7 (below) is the still-open question
+    // docs/spike-findings.md §1 flagged: definitions leak (#6, confirmed), but do values leak
+    // too? Unlike definitions we don't mirror values locally, so if this leaks it's a deeper,
+    // unmitigated hole.
+    customFieldValue = `secret_value_${uniqueName}`;
+    await paperlessA.patch(`/api/documents/${documentId}/`, {
+      custom_fields: [{ field: customFieldId, value: customFieldValue }]
+    });
   });
 
   test.afterAll(async () => {
@@ -171,6 +183,29 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
     const paperlessB = await paperlessFor(orgB);
     const data = await paperlessB.get<{ results: Array<{ id: number }> }>("/api/custom_fields/");
     expect(data.results.some((o) => o.id === customFieldId)).toBe(false);
+  });
+
+  test("#7 B reads a custom field value on A's document — 404", async () => {
+    // specs/10-nonfunctional.md test #7 — docs/spike-findings.md §1 flagged this as
+    // high-priority for Phase 2's first pass: #6 confirmed definitions leak, but values are
+    // riskier since we never mirror them locally and rely entirely on Paperless's own
+    // per-document ACL. Two angles, since Paperless embeds values inline on the document
+    // object rather than exposing a separate value endpoint:
+    const paperlessB = await paperlessFor(orgB);
+
+    // (a) the same per-document 404 test #3 already exercises, now with a real value attached
+    // — proving a populated custom_fields array creates no alternate access path.
+    await expect(paperlessB.get(`/api/documents/${documentId}/`)).rejects.toThrow();
+
+    // (b) B knows customFieldId is a real field (the leaked list from #6) — filtering the
+    // document list by that field's value must not surface A's document either, which is the
+    // "deeper leak" the spike explicitly worried about: a curious tenant using a definition id
+    // leaked via #6 to go fishing for values across tenants.
+    const query = encodeURIComponent(JSON.stringify([customFieldId, "exact", customFieldValue]));
+    const data = await paperlessB.get<{ results: Array<{ id: number }> }>(
+      `/api/documents/?custom_field_query=${query}`
+    );
+    expect(data.results.some((d) => d.id === documentId)).toBe(false);
   });
 
   test("#8 B downloads A's document by direct URL — denied", async () => {
@@ -228,6 +263,132 @@ test.describe("tenant isolation (specs/10-nonfunctional.md, tests 1-8 & 17-20)",
       .delete()
       .eq("object_type", "document")
       .eq("paperless_id", fakePaperlessId);
+  });
+
+  test("#11 A's import cannot map to B's entity identifier", async () => {
+    const admin = createAdminClient();
+    const [customerTypeA, customerTypeB] = await Promise.all(
+      [orgA, orgB].map(async (organizationId) => {
+        const { data, error } = await admin
+          .from("entity_types")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("key", "customer")
+          .single();
+        if (error) throw error;
+        return data;
+      })
+    );
+
+    const leakedVat = `SI${Date.now().toString().slice(-8)}`;
+    const { data: entityB, error: entityError } = await admin
+      .from("entities")
+      .insert({
+        organization_id: orgB,
+        entity_type_id: customerTypeB.id,
+        display_name: `Tenant B Customer ${uniqueName}`,
+        data: { vat: leakedVat },
+        created_by: userB.userId
+      })
+      .select("id")
+      .single();
+    if (entityError) throw entityError;
+
+    const { error: identifierError } = await admin.from("entity_identifiers").insert({
+      organization_id: orgB,
+      entity_id: entityB.id,
+      kind: "vat",
+      value: leakedVat,
+      normalized: normalizeIdentifier("vat", leakedVat)
+    });
+    if (identifierError) throw identifierError;
+
+    const { data: documentA, error: documentError } = await admin
+      .from("documents")
+      .insert({
+        organization_id: orgA,
+        paperless_document_id: -Math.floor(Date.now() / 1000),
+        title: `tenant-a-import-target-${uniqueName}`,
+        status: "ready",
+        source: "import",
+        created_by: userA.userId
+      })
+      .select("id,title")
+      .single();
+    if (documentError) throw documentError;
+
+    const { data: importJob, error: jobError } = await admin
+      .from("import_jobs")
+      .insert({
+        organization_id: orgA,
+        kind: "metadata_only",
+        created_by: userA.userId,
+        status: "mapping",
+        source_filename: "tenant-a-metadata.csv",
+        mapping: {
+          documentBy: { strategy: "filename", column: 0 },
+          fields: [],
+          entityLinks: [
+            {
+              entityTypeKey: "customer",
+              matchBy: "identifier",
+              identifierKind: "vat",
+              column: 1,
+              relation: "issued_to",
+              onMissing: "fail_row"
+            }
+          ]
+        }
+      })
+      .select("id")
+      .single();
+    if (jobError) throw jobError;
+
+    const { error: rowError } = await admin.from("import_rows").insert({
+      organization_id: orgA,
+      import_job_id: importJob.id,
+      row_number: 1,
+      raw: [documentA.title, leakedVat]
+    });
+    if (rowError) throw rowError;
+
+    const userAClient = await createUserClient(userA);
+    const summary = await validateImportJob(
+      {
+        db: userAClient,
+        orgId: orgA,
+        actorId: userA.userId,
+        correlationId: `iso-11-${uniqueName}`
+      },
+      importJob.id
+    );
+    expect(summary).toEqual({
+      ok: 0,
+      skippedDuplicate: 0,
+      needsReview: 0,
+      failed: 1,
+      unmatched: 1
+    });
+
+    const { data: row, error: validatedRowError } = await admin
+      .from("import_rows")
+      .select("status, error_code")
+      .eq("import_job_id", importJob.id)
+      .single();
+    if (validatedRowError) throw validatedRowError;
+    expect(row).toEqual({ status: "failed", error_code: "ENTITY_NOT_FOUND" });
+
+    const { count, error: connectionError } = await admin
+      .from("connections")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgA)
+      .eq("source_kind", "document")
+      .eq("source_id", documentA.id)
+      .eq("target_kind", "entity")
+      .eq("target_id", entityB.id);
+    if (connectionError) throw connectionError;
+    expect(count).toBe(0);
+    expect(customerTypeA.id).not.toBe(customerTypeB.id);
   });
 
   test("#20 creating a Paperless object without matching permissions is refused", async () => {

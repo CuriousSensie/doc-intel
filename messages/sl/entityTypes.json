@@ -1,0 +1,32 @@
+{
+  "admin": {
+    "title": "Tipi entitet",
+    "description": "Shema polj za vsak tip entitete, ki ga uporablja vaša organizacija.",
+    "system": "sistemsko",
+    "keyLabel": "ključ: {key}"
+  },
+  "fields": {
+    "title": "Polja",
+    "empty": "Ni še polj.",
+    "hidden": "skrito",
+    "identifier": "identifikator: {kind}",
+    "keyAndType": "ključ: {key} · tip: {type}",
+    "required": " · obvezno",
+    "hide": "Skrij",
+    "addField": "Dodaj polje",
+    "keyLabel": "Ključ",
+    "keyHint": "male črke, snake_case",
+    "labelLabel": "Oznaka",
+    "typeLabel": "Tip",
+    "requiredLabel": "Obvezno"
+  },
+  "authorization": {
+    "manageOnly": "Samo lastnik ali skrbnik organizacije lahko upravlja tipe entitet"
+  },
+  "actions": {
+    "somethingWentWrong": "Nekaj je šlo narobe",
+    "created": "Ustvarjeno",
+    "fieldAdded": "Polje dodano",
+    "fieldHidden": "Polje skrito"
+  }
+}

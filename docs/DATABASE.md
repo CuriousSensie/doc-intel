@@ -134,19 +134,6 @@ erDiagram
     timestamptz created_at
   }
 
-  FILES {
-    uuid id PK
-    uuid owner_id FK "auth.users"
-    uuid organization_id FK "nullable"
-    text bucket
-    text path
-    text filename
-    text mime_type
-    bigint size "> 0"
-    jsonb metadata
-    timestamptz created_at
-  }
-
   AUDIT_LOGS {
     uuid id PK
     uuid actor_id FK "auth.users, set null, nullable = system-initiated"
@@ -170,16 +157,6 @@ erDiagram
     jsonb payload
     text error
     timestamptz processed_at
-    timestamptz created_at
-    timestamptz updated_at
-  }
-
-  PROJECTS {
-    uuid id PK
-    uuid owner_id FK "auth.users"
-    uuid organization_id FK "nullable"
-    text name
-    text description
     timestamptz created_at
     timestamptz updated_at
   }
@@ -257,11 +234,105 @@ erDiagram
     timestamptz expires_at
   }
 
+  ENTITIES {
+    uuid id PK
+    uuid organization_id FK
+    uuid entity_type_id FK
+    text display_name
+    text status "active|archived"
+    jsonb data "per-entity-type field values, keyed by field_schema key"
+    tsvector search_tsv "generated from display_name"
+    uuid created_by FK "profiles, nullable"
+    timestamptz created_at
+    timestamptz updated_at
+    timestamptz deleted_at "nullable — soft delete (merge target)"
+  }
+
+  ENTITY_IDENTIFIERS {
+    uuid id PK
+    uuid organization_id FK
+    uuid entity_id FK
+    text kind "e.g. 'vat', 'company_reg' — from field_schema's identifier_kind"
+    text value "as entered"
+    text normalized "unique with (organization_id, kind) — import matching key"
+    timestamptz created_at
+  }
+
+  CONNECTIONS {
+    uuid id PK
+    uuid organization_id FK
+    text source_kind "document|entity — polymorphic, no FK"
+    uuid source_id "polymorphic, no FK by design"
+    text target_kind "document|entity — polymorphic, no FK"
+    uuid target_id "polymorphic, no FK by design"
+    text relation "belongs_to|issued_to|assigned_to|part_of|related"
+    jsonb metadata
+    uuid created_by FK "profiles, nullable"
+    text created_via "manual|rule|import|template|ai_accepted|bulk"
+    uuid rule_id "nullable, no FK yet — Phase 4"
+    timestamptz created_at
+    timestamptz deleted_at "nullable — soft delete"
+  }
+
+  CUSTOM_FIELD_DEFS {
+    uuid id PK
+    uuid organization_id FK
+    text key
+    text label
+    text data_type
+    jsonb options "nullable — e.g. select choices"
+    text applies_to_array "text[] — document|entity kinds this field applies to"
+    int paperless_custom_field_id "nullable — mirror link, never queried live from Paperless"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+
+  SAVED_VIEWS {
+    uuid id PK
+    uuid organization_id FK
+    text name
+    text scope "documents|entities"
+    uuid entity_type_id FK "nullable"
+    jsonb filters
+    jsonb columns
+    jsonb sort "nullable"
+    boolean is_shared
+    uuid created_by FK "profiles, nullable"
+    timestamptz created_at
+  }
+
+  BACKGROUND_OPERATIONS {
+    uuid id PK
+    uuid organization_id FK
+    text kind "bulk_connect|bulk_paperless_edit|export"
+    text status "pending|processing|completed|failed"
+    jsonb params
+    int total_count "nullable"
+    int processed_count
+    int success_count
+    int failure_count
+    jsonb failures "per-item {id, error}[]"
+    jsonb result "nullable — e.g. {connectionIds} or {storagePath, rowCount}"
+    text error_message "nullable"
+    uuid created_by FK "auth.users, set null"
+    timestamptz created_at
+    timestamptz updated_at
+    timestamptz completed_at "nullable"
+  }
+
   PROFILES ||--o{ ORGANIZATION_MEMBERS : "is a member via"
   ORGANIZATIONS ||--o{ DOCUMENTS : "has (Pomočnik)"
   ORGANIZATIONS ||--o{ DOCUMENT_UPLOADS : "has (Pomočnik)"
   DOCUMENTS ||--o{ DOCUMENT_UPLOADS : "resolved from (Pomočnik)"
   ORGANIZATIONS ||--o{ ENTITY_TYPES : "has (Pomočnik)"
+  ORGANIZATIONS ||--o{ ENTITIES : "has (Pomočnik Level 1)"
+  ENTITY_TYPES ||--o{ ENTITIES : "typed by (Pomočnik Level 1)"
+  ENTITIES ||--o{ ENTITY_IDENTIFIERS : "has (Pomočnik Level 1)"
+  ORGANIZATIONS ||--o{ CONNECTIONS : "has (Pomočnik Level 1, polymorphic source/target)"
+  ORGANIZATIONS ||--o{ CUSTOM_FIELD_DEFS : "has (Pomočnik Level 1)"
+  ORGANIZATIONS ||--o{ SAVED_VIEWS : "has (Pomočnik Level 1)"
+  ENTITY_TYPES ||--o{ SAVED_VIEWS : "scopes (optional, Pomočnik Level 1)"
+  ORGANIZATIONS ||--o{ BACKGROUND_OPERATIONS : "has (Pomočnik Level 1)"
   ORGANIZATIONS ||--|| TENANT_PAPERLESS_CONFIG : "has (Pomočnik)"
   ORGANIZATIONS ||--o{ PAPERLESS_OBJECT_MAP : "owns (Pomočnik)"
   ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : "has"
@@ -276,12 +347,8 @@ erDiagram
   PROFILES ||--o{ USAGE_COUNTERS : "owns (user mode)"
   ORGANIZATIONS ||--o{ USAGE_COUNTERS : "owns (org mode)"
   PROFILES ||--o{ NOTIFICATIONS : "receives"
-  PROFILES ||--o{ FILES : "owns"
-  ORGANIZATIONS ||--o{ FILES : "scopes (optional)"
   PROFILES ||--o{ AUDIT_LOGS : "acts (optional — null = system)"
   ORGANIZATIONS ||--o{ AUDIT_LOGS : "scopes (optional)"
-  PROFILES ||--o{ PROJECTS : "owns"
-  ORGANIZATIONS ||--o{ PROJECTS : "scopes (optional)"
 ```
 
 `stripe_customers`, `subscriptions`, `credit_transactions`, and `usage_counters` all share the
@@ -313,7 +380,7 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | `is_app_admin()` | `true` if the current session's user has `profiles.is_app_admin = true` and isn't suspended. Used in nearly every RLS policy as the admin-bypass clause. |
 | `is_organization_member(target_organization_id)` | `true` if the current session's user is a member of the org **and** the org isn't suspended. The suspension check lives here, not in application code — see [SECURITY.md](SECURITY.md#admin). |
 | `has_organization_role(target_organization_id, allowed_roles)` | Same as above, plus a role check. |
-| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Pomočnik. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `files_insert_owner`). |
+| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Pomočnik. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `document_uploads_insert_member`). |
 | `protect_system_columns()` | Trigger function on `organizations` — rejects a non-`service_role` write to `provisioning_status` or `ai_enabled` (system-managed; set only by the tenant-provisioning job and the AI opt-in flow). RLS is row-level, not column-level, so this is the enforcement point — Pomočnik. |
 | `create_organization(org_name, org_slug)` | Creates an org and the creator's `owner` membership in one transaction (the creator has no RLS access to insert their own membership otherwise — see [SECURITY.md](SECURITY.md#organizations)). |
 | `get_organization_invitation(p_token)` | Looks up an invitation by its token hash — the invitee isn't a member yet, so this can't be a plain RLS-scoped select. |
@@ -331,18 +398,125 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | `claim_upload_validation(p_upload_id, p_organization_id)` | Conditional `UPDATE ... WHERE status IN ('uploaded','validating')`, returns whether *this* call claimed it — Pomočnik, `worker/jobs/validate-upload.ts`. The `validating` arm (not just `uploaded`) exists so a BullMQ retry of the *same* job can reclaim its own prior attempt's row after a transient failure; without it, a retry landing after the row was already claimed would lose the claim race against itself and silently no-op. Unlike `claim_provisioning()`, explicitly rejects any caller whose `auth.role() <> 'service_role'` — `document_uploads` has no update RLS policy at all, so an unguarded SECURITY DEFINER function here would otherwise let any authenticated member flip another tenant's upload status via RPC. |
 | `complete_upload_validation(p_upload_id, p_organization_id)` | Service-role-only (same guard as above), sets `status = 'validated'` — Pomočnik. |
 | `fail_upload_validation(p_upload_id, p_organization_id, p_reason)` | Service-role-only, sets `status = 'failed'` + `error_message` — Pomočnik. |
+| `merge_entities(p_keep_id, p_merge_id)` | **Pomočnik Level 1.** Re-points `connections`/`entity_identifiers` from the merged entity onto the kept one (dropping any that would collide with an existing row on the kept entity), soft-deletes the merged entity (`status = 'archived'`, `deleted_at = now()`), writes one `entity.merged` audit row — all atomically (ADR-0008). Checks `auth.uid()`/`has_organization_write_access()` itself (unlike the provisioning/upload trios, this one is meant to be called from a real request-context client, not the admin client — there is no worker-triggered merge path). Rejects self-merge, cross-org merge, and an unauthenticated/unauthorized caller by raising, not silently no-op'ing. |
+| `claim_import_chunk(job_id, organization_id, limit)` | **Phase 3 milestone 1.** Service-role-only claim of up to 50 pending rows with `FOR UPDATE SKIP LOCKED`; changes a ready job to running and returns the claimed rows. Paused/terminal jobs claim nothing. |
+| `complete_import_job(job_id, organization_id)` | Service-role-only conditional completion after no pending/processing rows remain; sets completed or completed_with_errors and writes the import-completion audit row atomically (ADR-0008). Returns false on a repeat or invalid transition. |
+| `fail_import_job(job_id, organization_id, reason)` | Service-role-only conditional failure from nonterminal states; writes the failure audit row atomically and returns false on a repeat. |
+| `bulk_update_import_rows(job_id, organization_id, rows jsonb)` | **Phase 3 milestone 5/6.** Service-role-only. One `UPDATE ... FROM jsonb_to_recordset(rows)` statement writing a different `status`/`result`/`error_code`/`error_message` per row — the batched-write primitive specs/06-importer.md's "batch the updates, don't hammer the DB at 10k rows" calls for, shared by `validateImportJob()`'s dry run and `run-import-chunk.ts`'s real execution. |
+| `increment_import_job_progress(job_id, organization_id, processed_delta, succeeded_delta, failed_delta, skipped_delta)` | Service-role-only atomic increment (not read-modify-write) on `import_jobs`' four row counters — correct under the concurrent chunk chains a single job runs (`importsConfig.defaultConcurrencyPerOrganization`, default 4). |
+| `list_documents_without_connections(organization_id, document_type_key, status, date_from, date_to, paperless_ids, cursor_created_at, cursor_id, limit)` | **Phase 3 milestone 7.** `security invoker` (not definer) — runs under the caller's own RLS same as a direct query. Replaces `listDocuments()`'s old "pull every connection row into memory, build a `NOT IN (...)` list" path with one indexed statement: the same filter set plus `NOT EXISTS` against `connections`, using that table's existing `(organization_id, source_kind, source_id)`/`(organization_id, target_kind, target_id)` partial indexes. Granted to `authenticated`, not just `service_role` — `listDocuments()` calls it under the caller's own RLS-scoped client. |
 
 ## Storage buckets
 
 | Bucket | Visibility | Size limit | Used by |
 | --- | --- | --- | --- |
 | `avatars` | Public | 5 MB | `uploadAvatar()` — served via `getPublicUrl`, no signed URL needed |
-| `files` | Private | 20 MB | `uploadFile()` / `getFileDownloadUrl()` — every read is a short-lived signed URL |
-| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Pomočnik. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other two buckets use); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
+| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Pomočnik. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other bucket uses); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
+| `exports` | Private | 100 MB | **Pomočnik Level 1.** `worker/jobs/export.ts` uploads the generated CSV/XLSX via the admin client; `GET /api/exports/[id]/download` issues a 5-minute signed URL and redirects — no `storage.objects` RLS policies, same convention as `document-uploads`. |
+| `import-sources` | Private | 100 MB | **Phase 3 milestone 1.** Signed source uploads for CSV/TSV/XLSX/ZIP; bucket MIME restrictions and `src/config/imports.ts` define accepted types. Dashboard import routes and signed-upload Server Actions are implemented (M8). |
 
-No `storage.objects` RLS policies exist for either bucket — every read/write goes through the
-service-role admin client from trusted server code. See
-[MODULES.md#files](MODULES.md#files).
+No `storage.objects` RLS policies exist for these private buckets — every read/write goes through the
+service-role admin client from trusted server code. The boilerplate's private `files` bucket was
+dropped along with the Files module — see
+`supabase/migrations/20260913120000_drop_files_and_projects.sql`.
+
+## Phase 3 import persistence (milestone 1)
+
+```mermaid
+erDiagram
+  ORGANIZATIONS ||--o{ IMPORT_JOBS : owns
+  ORGANIZATIONS ||--o{ IMPORT_MAPPINGS : owns
+  IMPORT_JOBS ||--o{ IMPORT_ROWS : materializes
+  IMPORT_JOBS |o--o{ DOCUMENTS : originated
+  IMPORT_ROWS |o--o{ DOCUMENT_UPLOADS : ingests
+```
+
+`import_jobs` stores the source filename/key, kind, confirmed mapping/options, ten status
+values, five row counters, error, actor, and start/finish timestamps. `total_rows` is limited
+to 50,000. `import_rows` stores each numbered source row as JSON, its status, result/error,
+attempt count, and processing timestamp. Its `processing` status is the claim checkpoint in
+addition to the spec's listed terminal outcomes. `import_mappings` stores a named, reusable
+mapping per organization and kind. Names are unique inside one organization.
+
+The composite foreign keys from `import_rows` to `import_jobs`, from `documents.import_job_id`
+to `import_jobs`, and from `document_uploads.import_row_id` to `import_rows` include
+`organization_id`. This stops a worker or request bug from attaching a valid foreign-tenant ID
+to a local row. `document_uploads.source_archive_key` records the source ZIP key for the shared
+ingest path built in milestone 3. Import counters live on `import_jobs`; the
+`background_operations` kind constraint is unchanged.
+
+## Phase 3 importer runtime (milestone 2)
+
+Queue runtime settings now live in `src/lib/queue/config.ts`. Ingest-related queues run at
+`WORKER_INGEST_CONCURRENCY` (default 8), while reconciliation, sweeps, exports, and placeholder
+jobs remain single-concurrency. `submit-upload-to-paperless` has a global BullMQ limiter
+(`PAPERLESS_INGEST_RATE_PER_SECOND`) and default priority `1`; future import row jobs default
+to priority `10`, so interactive uploads stay ahead of bulk import work when they share the
+Paperless submission budget.
+
+`src/lib/redis/index.ts` owns the shared Redis client used by BullMQ producers/workers and the
+per-org token bucket in `src/lib/ratelimit/token-bucket.ts`. The token bucket enforces
+`PAPERLESS_UPLOADS_PER_ORG_PER_MINUTE` and `PAPERLESS_READS_PER_ORG_PER_MINUTE` using one Lua
+script. In workers, exhaustion delays the active BullMQ job instead of consuming a retry
+attempt. The Paperless client also uses a bounded Undici agent and applies
+`PAPERLESS_STREAM_TIMEOUT_MS` to stream requests.
+
+## Phase 3 importer execution (milestones 5–7)
+
+`import_rows.status='pending'` is the only status `claim_import_chunk()` claims — every plan
+resolution function (`src/modules/imports/imports.matching.ts`) is shared verbatim between
+`validateImportJob()`'s dry run and `run-import-chunk.ts`'s real execution, and executable plans stay pending until the real run. Validation may mark genuinely
+invalid rows `failed`/`needs_review`; it must never mark an executable row `ok`/`skipped_duplicate`.
+A genuine bug found by live verification, not by any unit test: an earlier version of
+`validateImportJob()` wrote the plan's real terminal status during the dry run itself, which
+silently starved every import — nothing was ever left `pending` for the real run to find. See
+`docs/PHASE3_HANDOFF.md` for the full account.
+
+`run-import-chunk.ts` is a self-perpetuating job chain, not a fixed worker pool: each chunk
+re-enqueues itself on completion (checking the Redis control flag in `src/lib/import/control.ts`
+first — `"paused"`/`"cancelled"` stop the chain instead of rescheduling), and
+`startImportJob()` bounds per-org concurrency by starting exactly
+`importsConfig.defaultConcurrencyPerOrganization` (default 4) initial chains. A brand-new
+document (the `"documents"` kind, matched by archive filename) can't have its entity
+links/custom-field writes applied at chunk-processing time — the document doesn't exist in our
+`documents` mirror until `sync-paperless-document.ts` processes it, which happens on its own
+async schedule after Paperless actually consumes the file. That row's resolved plan
+(`pendingEntityLinks`/`pendingFieldWrites`) is persisted onto `import_rows.result` and applied
+by a hook in `sync-paperless-document.ts` once the document lands — `documents.import_job_id`
+and `.source='import'` are set in that same upsert. `src/modules/imports/imports.apply.ts` is
+the one implementation of "apply this row's entity links"/"apply this row's field writes",
+shared between the synchronous (documents/metadata_only matched to something that already
+exists) and deferred (newly-created documents) paths, so the two can't quietly diverge.
+
+## Phase 3 UI persistence (milestone 8)
+
+No schema migration is needed. `import_jobs.options.analysis` holds the bounded column preview,
+row count, encoding and delimiter. `options.validation` holds the dry-run summary; `unmatched`
+when present is a subset of `failed`, not an additional error count. Mapping changes/reanalysis
+invalidate the saved review. A failed validation returns to `mapping` for recovery.
+
+Dry-run terminal failures initialize `processed_rows` and `failed_rows` before execution. The
+worker adds only the rows it actually claims; retries subtract the failed rows' prior counter
+contribution before re-queuing them. This preserves accurate final totals for partial imports.
+Document/OCR progress is counted independently from `document_uploads`, joined to `import_rows`
+by the existing composite tenant-safe FK. All status counts remain organization-scoped and
+use the requesting user's RLS client.
+
+## Phase 3 scale/isolation closeout (milestone 9)
+
+No schema migration was needed. The runtime fix is in the shared planner: an entity link mapped
+with `on_missing:"fail_row"` now becomes a terminal `ENTITY_NOT_FOUND` row during validation
+instead of reaching execution as an "ok row with a failed link result"; `skip_connection`
+remains executable but carries `needs_review` through validation and final execution status.
+This is the importer-specific isolation test #11: tenant A cannot map to tenant B's identifier,
+and no cross-tenant connection is created.
+
+`scripts/verify-phase3-m9.ts` is the reproducible scale harness. It creates a disposable org,
+builds a ZIP with an XLSX manifest and N valid PDFs, uploads the source to `import-sources`,
+then runs the real analyze/mapping/validate services. `--execute` starts the real worker-backed
+chunk chain; the default validate-only mode intentionally avoids enqueuing thousands of
+Paperless OCR tasks. Live M9 validation run: 10,000 manifest rows, 16.6s analyze, 27.0s
+validate, 0 row errors.
 
 ## Tables reference
 
@@ -360,15 +534,22 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `credit_transactions` | select only (owner or admin) — **no insert policy**, admin client only. | `(user_id)`, `(organization_id)` |
 | `usage_counters` | select only (owner or admin) — **no insert/update policy**, admin client only. | partial unique `(owner_type,user_id,feature,period) where organization_id is null`; partial unique `(owner_type,organization_id,feature,period) where user_id is null` |
 | `notifications` | select-own, update-own — **no insert policy**, admin client only. | `notifications_user_created_idx (user_id, created_at desc)` |
-| `files` | select: owner, org member, or admin. insert: owner (and org member **with write access** if org-scoped — `has_organization_write_access()`, so a `read-only` member cannot upload, per Pomočnik's migration). delete: owner, org owner/admin, or admin. **No update policy.** | `files_owner_created_idx`, `files_organization_created_idx` (both `created_at desc, id desc`, for cursor pagination) |
 | `audit_logs` | select: admin, or org owner/admin for their own org's rows. **No insert policy at all** — `logEvent()`'s `auditLogSink` (admin client) is the only writer. | `audit_logs_actor_idx (actor_id, created_at desc)` |
 | `webhook_events` | No policies read in application code (admin-client only, used solely by the Stripe webhook handler for idempotency). | unique `(provider, event_id)` |
-| `projects` | Scaffolded in the initial schema; no module currently reads/writes it. | — |
 | `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` — Pomočnik. | PK is `organization_id` itself (1:1) |
 | `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Pomočnik. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
 | `entity_types` | select: org member or admin. write (insert/update/delete): org member **with write access** or admin — `has_organization_write_access()`, so `read-only` can't create/edit entity types either. Seeded (4 system rows per org) by `complete_provisioning()`, not application code — Pomočnik. | `(organization_id)` |
-| `documents` | select: org member or admin. **No insert/update/delete policy** — only the sync worker (admin client, `worker/jobs/sync-paperless-document.ts`) writes this table — Pomočnik. | `(organization_id, document_type_key)`, `(organization_id, document_date desc)`, `(organization_id, checksum)`, all `where deleted_at is null` (first two) |
+| `documents` | select: org member or admin. **No insert/update/delete policy** — only the sync worker (admin client, `worker/jobs/sync-paperless-document.ts`) writes this table — Pomočnik. | `(organization_id, document_type_key)`, `(organization_id, document_date desc)`, `(organization_id, checksum)`, all `where deleted_at is null` (first three); **Phase 3 M7**: `(organization_id, created_at desc, id desc) where deleted_at is null` (backs `listDocuments()`'s keyset cursor — previously unindexed) and `(organization_id, status, created_at desc) where deleted_at is null` (every saved view except "All documents" filters by status) |
 | `document_uploads` | select: org member or admin. insert: creator **with write access** (`created_by = auth.uid() and has_organization_write_access()`). **No update/delete policy** — every status transition after the initial insert runs via the admin client from a worker job — Pomočnik. | `(organization_id, created_at desc)`; partial `(expires_at) where status in ('pending','uploaded')` for `expire-abandoned-uploads.ts`'s sweep |
+| `entities` | select: org member or admin. write (all): write-access member or admin — `has_organization_write_access()`. | `(organization_id, entity_type_id) where deleted_at is null`; GIN on `search_tsv`; GIN `jsonb_path_ops` on `data` |
+| `entity_identifiers` | select: org member or admin. write (all): write-access member or admin. | `(organization_id, normalized)`; `(entity_id)`; unique `(organization_id, kind, normalized)` |
+| `connections` | select: org member or admin. write (all): write-access member or admin. Application-level guard (not RLS, since `source_id`/`target_id` are polymorphic with no FK): `connections.service.ts#createConnection()`'s `assertBelongsToOrg()` rejects a source/target id that doesn't resolve to a row in the caller's own org — this closed isolation test #9 (a cross-org connection could otherwise be created silently). | unique `connections_unique_pair` on `(organization_id, least(source_id,target_id), greatest(source_id,target_id), relation) where deleted_at is null` — makes a duplicate connection a DB-level impossibility regardless of which side is passed first |
+| `custom_field_defs` | select: org member or admin. write (all): write-access member or admin. Application-level guard: `custom-field-defs.service.ts` is the only code path allowed to read/write this table — product code must never call Paperless's `GET /api/custom_fields/` directly (confirmed cross-tenant leak, `docs/spike-findings.md` §1 #6). | `(organization_id)` |
+| `saved_views` | select: org member or admin (shared views or the creator's own). write: creator or admin. | `(organization_id)` |
+| `background_operations` | select: org member or admin. insert: creator **with write access**. **No update/delete policy** — every progress/status update after the initial insert runs via the admin client from a worker job (`worker/jobs/bulk-action.ts`, `worker/jobs/export.ts`) — same convention as `document_uploads`. | `(organization_id, created_at desc)` |
+| `import_jobs` | select: org member or admin. insert: creator with write access, draft only. No user update/delete policy; worker transitions are service-role-only. | `(organization_id, created_at desc)`, `(organization_id, status)`; unique `(id, organization_id)` for same-tenant composite FKs |
+| `import_rows` | select: org member or admin. Worker materializes/mutates rows via service role; no user write policy. | `(import_job_id, status)`, `(organization_id, import_job_id)`; unique `(import_job_id, row_number)` and `(id, organization_id)` |
+| `import_mappings` | select: org member or admin. write: org member with write access or admin. | unique `(organization_id, name)`; `(organization_id, created_at desc)` |
 
 ## Migration history
 
@@ -392,6 +573,13 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260912125436_document_upload_validation_functions.sql` | **Pomočnik Level 0.** Adds `claim_upload_validation()`/`complete_upload_validation()`/`fail_upload_validation()` for `worker/jobs/validate-upload.ts`, following the provisioning trio's claim/complete/fail pattern but explicitly service-role-only (see the Functions table above for why). First migration this session pushed to the real, live Supabase Cloud project rather than a throwaway container — see the previous two `pomocnik_orgs_extension`/`pomocnik_write_access_function` rows for the bug that surfaced doing so. |
 | `20260912195634_transactional_membership_audit.sql` | **Pomočnik.** Adds `update_member_role()`, `remove_member()`, `leave_organization()`, and augments `transfer_organization_ownership()` so organization permission-change audit rows are written in the same transaction as the mutation (ADR-0008) — see the Functions table above. Verified live: each function called unauthenticated against the real project correctly raises `P0001: Authentication required` from inside the right function body (not a generic SQL error), confirming argument types and column references resolve correctly. |
 | `20260913061540_relax_upload_claim_for_retries.sql` | **Pomočnik.** Widens `claim_upload_validation()`'s claimable source statuses from `uploaded` only to `uploaded` or `validating` — a bug enabling BullMQ retries surfaced live: a same-job retry landing after a transient failure left the row at `validating`, and the claim could never re-match it, permanently stranding the upload with no error. |
+| `20260913120000_drop_files_and_projects.sql` | **Pomočnik Level 1.** Drops the boilerplate's `files` and `projects` tables (with their policies/indexes) and the `files` Storage bucket entirely — neither is part of the product; Documents/Paperless and the `project` entity type supersede them. `has_organization_write_access()` is kept (load-bearing elsewhere by now). Avatar upload was extracted out of the files module first — see `src/modules/profile/avatar.service.ts`. |
+| `20260914000000_entities_connections_fields_views.sql` | **Pomočnik Level 1.** Adds `entities`, `entity_identifiers`, `connections` (with `connections_unique_pair`), `custom_field_defs`, `saved_views`, and `merge_entities()`. Verified against a throwaway Postgres container: all migrations apply cleanly in order; the three unique constraints correctly reject duplicates; `merge_entities()` moves identifiers/connections, archives the merged entity, writes one audit row, and rejects unauthenticated/cross-org/self-merge calls; RLS itself (as a real non-superuser role) blocks a cross-tenant read and write. |
+| `20260914120000_background_operations.sql` | **Pomočnik Level 1 (Milestone 7).** Adds `background_operations` (progress tracking for bulk actions + export, mirroring `document_uploads`'s select+creator-insert-only RLS shape) and creates the `exports` Storage bucket. |
+| `20260915112736_phase3_import_foundation.sql` | **Phase 3 milestone 1.** Adds `import_jobs`/`import_rows`/`import_mappings` with RLS and indexes, tenant-safe composite FKs from `documents`/`document_uploads`, service-role-only claim/completion/failure RPCs, atomic audit, and the private `import-sources` bucket. Pushed to the live Supabase Cloud project. |
+| `20260914120500_connections_created_via_bulk.sql` | **Pomočnik Level 1 (Milestone 7).** Widens `connections.created_via`'s check constraint to allow `'bulk'`, so a 500-document bulk-connect is tagged distinctly from 500 individual manual clicks in history/audit. |
+| `20260916090000_import_bulk_write_functions.sql` | **Phase 3 milestones 5/6.** Adds `bulk_update_import_rows()` and `increment_import_job_progress()` — see the Functions table above. Verified live: called directly against the real project, correctly rejects a non-service-role caller and applies a real batched update/increment. |
+| `20260916140000_documents_query_perf.sql` | **Phase 3 milestone 7.** Adds `(organization_id, created_at desc, id desc)` and `(organization_id, status, created_at desc)` indexes on `documents` (both `where deleted_at is null`), and `list_documents_without_connections()` — see the Functions table above. Verified live against the real project: the RPC returns correct results scoped to a real org. |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

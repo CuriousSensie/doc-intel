@@ -1,25 +1,36 @@
 import { Button, Text } from "@react-email/components";
 
-import { EmailLayout } from "@/emails/layout";
+import { EmailLayout, getEmailTranslator } from "@/emails/layout";
+import { routing, type Locale } from "@/i18n/routing";
 
 export function OrganizationInvitationEmail({
   organizationName,
   inviterName,
   role,
-  acceptUrl
+  acceptUrl,
+  locale = routing.defaultLocale
 }: {
   organizationName: string;
   inviterName: string;
   role: string;
   acceptUrl: string;
+  locale?: Locale;
 }) {
+  const t = getEmailTranslator(locale);
+
   return (
     <EmailLayout
-      heading={`Join ${organizationName}`}
-      previewText={`${inviterName} invited you to join ${organizationName}`}
+      heading={t("emails.organizationInvitation.heading", { organizationName })}
+      previewText={t("emails.organizationInvitation.previewText", { inviterName, organizationName })}
+      locale={locale}
     >
       <Text style={{ fontSize: "15px", lineHeight: "24px", color: "#111827" }}>
-        {inviterName} invited you to join <strong>{organizationName}</strong> as a {role}.
+        {t.rich("emails.organizationInvitation.body", {
+          inviterName,
+          organizationName,
+          role,
+          name: (chunks) => <strong>{chunks}</strong>
+        })}
       </Text>
       <Button
         href={acceptUrl}
@@ -33,10 +44,10 @@ export function OrganizationInvitationEmail({
           textDecoration: "none"
         }}
       >
-        Accept invitation
+        {t("emails.organizationInvitation.acceptButton")}
       </Button>
       <Text style={{ fontSize: "13px", color: "#6b7280", marginTop: "16px", wordBreak: "break-all" }}>
-        Or copy this link: {acceptUrl}
+        {t("emails.organizationInvitation.copyLink")} {acceptUrl}
       </Text>
     </EmailLayout>
   );

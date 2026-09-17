@@ -1,0 +1,47 @@
+{
+  "list": {
+    "title": "Vaše organizacije",
+    "create": "Ustvari organizacijo",
+    "empty": "Niste še član nobene organizacije.",
+    "active": "Aktivna",
+    "leave": "Zapusti"
+  },
+  "new": {
+    "backToOrganizations": "Nazaj na organizacije",
+    "title": "Ustvari organizacijo",
+    "description": "Postali boste lastnik in boste lahko povabili sodelavce, ko bo ustvarjena.",
+    "nameLabel": "Ime organizacije",
+    "slugLabel": "URL naslov (neobvezno)",
+    "slugHint": "Male črke, številke in vezaji. Pustite prazno za samodejno ustvarjanje.",
+    "submit": "Ustvari organizacijo"
+  },
+  "actions": {
+    "somethingWentWrong": "Nekaj je šlo narobe",
+    "noPermission": "Nimate dovoljenja za upravljanje te organizacije",
+    "invitationReady": "Povabilo je pripravljeno. Spodaj si delite povezavo.",
+    "invitationSent": "Povabilo je poslano.",
+    "invitationCreatedEmailFailed": "Povabilo je ustvarjeno, vendar e-pošte ni bilo mogoče poslati. Spodaj si delite povezavo.",
+    "missingOrganization": "Manjka organizacija",
+    "organizationCreated": "Organizacija je ustvarjena.",
+    "organizationUpdated": "Organizacija je posodobljena.",
+    "missingInvitationDetails": "Manjkajo podatki o povabilu",
+    "missingInvitation": "Manjka povabilo",
+    "invitationRevoked": "Povabilo je preklicano.",
+    "invalidRoleUpdate": "Neveljavna posodobitev vloge",
+    "memberRoleUpdated": "Vloga člana je posodobljena.",
+    "missingMember": "Manjka član",
+    "memberRemoved": "Član je odstranjen.",
+    "youLeftOrganization": "Zapustili ste organizacijo.",
+    "invalidTransferRequest": "Neveljavna zahteva za prenos",
+    "ownershipTransferred": "Lastništvo je preneseno.",
+    "organizationDeleted": "Organizacija je izbrisana.",
+    "notAMember": "Niste član te organizacije",
+    "missingInvitationToken": "Manjka žeton povabila",
+    "invitationAccepted": "Povabilo je sprejeto.",
+    "teamMemberFallback": "Član ekipe",
+    "newMemberNotificationTitle": "Nov član ekipe",
+    "newMemberNotificationMessage": "{name} se je pridružil(a) organizaciji {organization}.",
+    "yourOrganizationFallback": "vaši organizaciji",
+    "someoneFallback": "Nekdo"
+  }
+}

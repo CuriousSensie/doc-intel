@@ -1,0 +1,17 @@
+{
+  "common": {
+    "somethingWentWrong": "Something went wrong"
+  },
+  "errors": {
+    "noPermission": "You do not have permission to manage billing for this organization",
+    "invalidPlanSelection": "Invalid plan selection",
+    "planNotAvailable": "This plan is not available for checkout yet",
+    "noBillingAccount": "No billing account found yet",
+    "invalidCreditPackSelection": "Invalid credit pack selection",
+    "creditPackNotAvailable": "This credit pack is not available for purchase yet"
+  },
+  "messages": {
+    "subscriptionUpdated": "Subscription updated.",
+    "creditsPurchased": "Credits purchased."
+  }
+}

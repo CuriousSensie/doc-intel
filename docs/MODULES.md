@@ -13,8 +13,8 @@ those functions read/write, see [DATABASE.md](DATABASE.md).
 | RBAC | Optional | Organizations |
 | Billing | Optional | Stripe |
 | Credits | Optional | Billing |
-| Files | Optional | Supabase Storage |
 | Documents | Optional | Organizations, Supabase Storage, Paperless — Pomočnik |
+| Imports | Optional | Organizations, Documents, Entities, Supabase Storage, Paperless, worker — Pomočnik |
 | Notifications | Optional | Auth |
 | Admin | Optional | Auth |
 | Audit Logs | Recommended | Auth (the write side, `src/lib/events/`, has no dependency on Admin — only the `/admin/audit-log` read UI does) |
@@ -188,36 +188,12 @@ consider centralizing into a small event-dispatch module (`event type -> channel
 point — not before, per temp.md §109's guidance against abstraction layers with only one real
 caller.
 
-## Files
-
-**Purpose**: Supabase Storage-backed file uploads with ownership, ownership-based access, MIME/size
-validation, and signed downloads — a generic `/dashboard/files` list plus the concrete avatar
-upload workflow on `/settings/profile`.
-
-**Dependency**: Supabase Storage. Uses the `files` table from the initial schema (select-own/select-org-member/select-admin,
-insert-owner, delete-owner-or-org-admin RLS — no update policy) plus the `avatars` (public) and
-`files` (private) Storage buckets created in
-`supabase/migrations/20260822090000_files_storage.sql`.
-
-**Configuration**: gated by `features.files`. Per-category size caps and MIME allowlists
-(`avatar`, `document`) live in `src/config/files.ts`, along with the signed-URL expiry used for
-private downloads.
-
-**How to enable**: set `FEATURE_FILES=true` (default). `/dashboard/files` and the avatar section
-on `/settings/profile` appear automatically once enabled.
-
-**How to extend**: `src/modules/files/files.service.ts` holds all Storage/DB access —
-`uploadFile`/`uploadAvatar` (validate via `src/lib/files/validate.ts`'s magic-byte sniffing, then
-write through the admin client), `listFiles` (cursor-paginated, reusing `src/lib/pagination.ts`
-through the user-scoped client so RLS does the visibility filtering), `deleteFile` (an
-app-level ownership/org-admin check via `canManageFile` before an atomic storage-object + row
-delete through the admin client), and `getFileDownloadUrl` (confirms visibility via the
-user-scoped client, then mints a signed URL through the admin client — see
-`src/app/api/files/[id]/download/route.ts`). Uploads are automatically scoped to the uploader's
-active organization when organizations are enabled (no per-upload "share with org" toggle exists
-yet — add one only once a real need for private-within-org files shows up). Deleting an
-org-scoped file as an org admin (not just the file's owner) reuses `can(role, "organization.files.manage")`
-from the Organizations module's RBAC, the same pattern as billing's permission checks.
+**Note**: the boilerplate's original generic "Files" module (a `/dashboard/files` list backed by
+a `public.files` table and a private `files` Storage bucket) has been removed entirely — not
+deprecated — in favor of the Documents module below. Avatar upload, the one thing that lived
+inside that module and is still needed, was extracted to `src/modules/profile/avatar.service.ts`
++ `src/config/avatar.ts` (still uses the `avatars` Storage bucket, which was never Files-specific).
+See `supabase/migrations/20260913120000_drop_files_and_projects.sql`.
 
 ## Documents — Pomočnik
 
@@ -232,8 +208,8 @@ reached via `src/lib/paperless/client.ts`'s `paperlessFor(orgId)`), and a runnin
 process — uploads do nothing without one.
 
 **Configuration**: gated by `features.documents`. Size cap and MIME allowlist in
-`src/config/documents.ts` (separate from the generic Files module's `src/config/files.ts` — a
-100MB cap and PDF/image/office-doc allowlist, not the generic module's smaller/simpler one).
+`src/config/documents.ts` — a 100MB cap and PDF/image/office-doc allowlist, distinct from
+`src/config/avatar.ts`'s much smaller image-only config.
 
 **How to enable**: set `FEATURE_DOCUMENTS=true` (default). The "Documents" nav entry
 (`src/config/navigation.ts`) and `/dashboard/documents` appear automatically once enabled.
@@ -279,13 +255,180 @@ actual recurring schedule (BullMQ v6 `Queue.upsertJobScheduler()`, `worker/index
 enqueued on demand — the same pattern `worker/jobs/expire-abandoned-uploads.ts` (a global,
 non-tenant-scoped sweep for stuck `document_uploads` rows) already established.
 
-**How to extend**: `documents.service.ts`'s `listDocuments()`/`listRecentUploads()` back the
-current UI — deliberately unfiltered/unpaginated-by-filter (recency-ordered, capped at 50); the
-full mixed-filter `listDocuments()` (`type`/`date`/`entity`/`status`/full-text `q` passthrough to
-Paperless) is Phase 2 scope, not built yet. `listRecentUploads()` exists specifically to surface
+**How to extend**: `documents.service.ts`'s `listRecentUploads()` exists specifically to surface
 `document_uploads` rows with no `documents` row yet — without it, an upload is invisible in the
 UI for the entire window between "upload-complete returned" and "sync-paperless-document.ts
-finishes."
+finishes." `listDocuments()` now supports the full mixed-filter query (Milestone 5):
+`type`/`date`/`status` served straight from our own mirror, `q`/`tag` delegated to Paperless
+(never mirrored, per D1's "no second search engine"), and `entityId`/`hasNoConnections` resolved
+entirely from our own connections table. `listDocumentIds()` (Milestone 7) loops this same
+function's cursor to resolve a filter into a capped id set — the "select all matching filter"
+primitive bulk actions and export both build on, capped at `MAX_PAPERLESS_ID_SET` (2000) per
+specs/05's own scaling note.
+
+## Entities & Entity Types — Pomočnik Level 1
+
+**Purpose**: the business-object layer documents connect to — customers, projects, contracts,
+employees (the four system types, Slovenian-labeled per D7) plus any tenant-defined type.
+`src/modules/entities/` (CRUD, identifier normalization, per-entity-type dynamic field
+validation) and `src/modules/entity-types/` (field-schema evolution: adding a field is always
+allowed, renaming a `label` is always allowed, changing a `key` is rejected outright, changing
+`type` is allowed only for the one documented lossless case, removing a field hides it from the
+UI without deleting its `data` key).
+
+**Dependency**: Organizations only — no Paperless dependency (`entities`/`entity_types` are
+pure-Pomočnik tables, not mirrored from anywhere).
+
+**Configuration**: gated by `features.entities`. Field schemas live in
+`entity_types.field_schema` (jsonb array), not a separate migration per type — a tenant (or
+`complete_provisioning()` for the four system types) defines fields at runtime.
+
+**Identifiers**: `identifier-normalization.ts` implements the per-kind normalization table
+(`vat`, `company_reg`, `erp_id`, `email`, generic) that makes "SI 1234 5678" / "si12345678" /
+"SI-12345678" collide as the same identifier — the foundation Phase 3's importer matches rows
+against. A field with an `identifier_kind` in its schema is auto-promoted into
+`entity_identifiers` on save; there is no separate identifiers UI.
+
+**How to extend**: `entity-types.actions.ts#createEntityTypeFormAction`/`addFieldFormAction`/
+`removeFieldFormAction` are the admin-only field-schema editor's Server Actions
+(`/dashboard/entity-types`), gated by role (owner/admin only), not just `features.entities`.
+`countEntitiesByType()` backs the entities index page's per-type counts.
+
+## Connections — Pomočnik Level 1
+
+**Purpose**: the polymorphic document↔entity and entity↔entity link — specs/05's own framing:
+"if adding a connection takes more than two interactions, the product fails at its core
+promise." `connections.service.ts#getConnections()` is the **one** required helper (a union
+query over both `source`/`target` directions, hydrated with the other side's display info) —
+no feature code is allowed to hand-roll direction logic.
+
+**Dependency**: Entities and Documents (a connection references one or both).
+
+**Schema note**: `connections.source_id`/`target_id` are polymorphic with **no FK** (by explicit
+spec design — `specs/02-data-model.md`'s "do not fix this" note). This is why
+`createConnection()` runs an application-level `assertBelongsToOrg()` check before every insert
+— without it, nothing stopped a request from creating a connection naming another tenant's
+entity/document id (this was a real gap, found and fixed via isolation test #9,
+`e2e/isolation-phase2.spec.ts`).
+
+**Entity merge**: `entity-merge.service.ts` is a thin wrapper over the `merge_entities()`
+Postgres function (`docs/DATABASE.md`'s Functions table) — it does the real work (re-pointing
+connections/identifiers, archiving the merged entity, one audit row, atomically). The RPC checks
+`auth.uid()` itself, so this only works with a request-context client, never the admin client —
+there is no worker-triggered merge path.
+
+**How to extend**: `bulkCreateConnections()` (Milestone 7) is the bulk primitive — loops
+`createConnection()` per item (so single and bulk paths never diverge on the unique-pair/self-
+connection/cross-org rules), collecting per-item successes/skips (already-connected)/failures
+rather than failing the whole batch on one bad id.
+
+## Saved Views — Pomočnik Level 1
+
+**Purpose**: persisted filter/column/sort combinations, optionally shared org-wide
+(`saved_views`). `ensureStarterViews()` lazily seeds the five spec-required views (All
+documents, Documents with no connections, Invoices this year, Open contracts, Recently added)
+the first time a tenant visits `/dashboard/views` — not at provisioning time, matching
+`complete_provisioning()`'s own "seed system rows, but only what's actually needed" instinct
+without adding another step to the provisioning transaction.
+
+**Dependency**: Documents (scope `documents`) or Entities (scope `entities`, optionally
+`entity_type_id`-scoped).
+
+**How to extend**: `hrefFor(view)` (`dashboard/views/page.tsx`) is the one place a saved view's
+`filters` jsonb is translated into an actual URL — either `/dashboard/entities/:typeKey` or
+`/dashboard/documents?<query>`. A new filterable field needs a matching case here as well as in
+`listDocuments()`'s options.
+
+## Bulk Actions & Background Operations — Pomočnik Level 1
+
+**Purpose**: "ours" bulk actions (connect/disconnect an entity across many documents) and
+"Paperless's" bulk actions (type/tag/correspondent/custom-field/reprocess/delete, proxied to
+Paperless's own `bulk_edit` endpoint, never reimplemented) — specs/05's explicit split.
+`background_operations` (`docs/DATABASE.md`) is the shared progress-tracking table both bulk
+actions and export write to, mirroring `document_uploads`'s select+creator-insert-only RLS
+shape (every status/progress update after the initial insert runs via the admin client from a
+worker job).
+
+**Dependency**: Connections (bulk-connect), Paperless (bulk-edit proxy), a running `worker`
+process for anything async.
+
+**The threshold**: `bulkConnectDocumentsAction` (`connections.actions.ts`) resolves the target
+document id set (explicit selection, or "select all matching filter" via `listDocumentIds()`),
+then runs **synchronously** at ≤50 items (immediate result, no poll needed) or enqueues
+`worker/jobs/bulk-action.ts` above that (specs/05's own stated threshold), which updates
+`background_operations.processed_count` every 25 items so the UI's poll loop shows live
+progress. `undoBulkConnectAction` reverses a bulk-connect within the same session by soft-
+deleting the connection ids recorded in that operation's `result.connectionIds` — there is no
+persisted "undone" flag; a second undo call on the same operation tolerates
+already-deleted connections rather than erroring.
+
+**Paperless's bulk edit**: `bulkEditDocumentsAction` (`documents.actions.ts`) is a single
+synchronous proxy call (Paperless applies these atomically server-side via its own task queue,
+so no worker job is needed) — `bulkEditPaperlessDocuments()`
+(`src/lib/paperless/documents.ts`) posts to `/api/documents/bulk_edit/`. Verified live
+(isolation test #14) that Paperless's own object-level ACL rejects a cross-tenant attempt with
+403 — this codebase adds no additional cross-tenant guard of its own for this path, deliberately
+relying on Paperless's D2 isolation model rather than duplicating it.
+
+**How to extend**: `getBackgroundOperationAction` is the one read used for polling (a Server
+Action, not a Route Handler — the frontend already has a `buildRequestContext()`-scoped client
+via other actions on the same page, so a dedicated fetch endpoint wasn't needed here the way
+exports' download route was).
+
+## Exports — Pomočnik Level 1
+
+**Purpose**: filtered/selected document rows to CSV or XLSX, with connected-entity columns
+resolved through connections (specs/05: "the latter is what makes the export worth having").
+`resolveExportData()` (`exports.service.ts`) batches this — one connections query per direction,
+one entities query, one entity_types query, regardless of how many documents are being
+exported, not a per-document round trip.
+
+**Dependency**: Documents, Connections, Entities, Supabase Storage (`exports` private bucket), a
+running `worker` process (always async — `worker/jobs/export.ts`).
+
+**Locale**: `file-builders.ts#buildCsv()` uses `;` delimiters and a UTF-8 BOM
+(`specs/00-overview.md` D7 / `specs/05`'s explicit note that comma-delimited CSV with Slovenian
+decimals is a recurring corrupted-open-in-Excel complaint); dates are formatted `dd.mm.yyyy`.
+`buildXlsx()` streams via `exceljs`.
+
+**Delivery**: `GET /api/exports/[id]/download` (ADR-0009 — a fetch/redirect target) issues a
+5-minute signed URL against the private `exports` bucket and 307-redirects to it — the same
+private-bucket-plus-signed-URL pattern `document-uploads` already established, not a new one.
+
+**Not built**: the spec's optional "original files as a ZIP, worker-generated, expiring link"
+add-on. Only row export (CSV/XLSX) exists. See `PHASE2_HANDOFF.md` for the reasoning and what
+isolation test 16 (which needs this feature to test) currently looks like as a result.
+
+## Imports — Pomočnik Level 1
+
+**Purpose**: guided migration of legacy data into Pomočnik: entities from CSV/XLSX,
+documents from ZIP archives with optional CSV/XLSX manifests, and metadata-only updates against
+existing documents. The UI is `/dashboard/imports`; the core code lives in
+`src/modules/imports/` and `src/components/imports/`.
+
+**Dependency**: Organizations, Supabase Storage (`import-sources`), Documents, Entities,
+Connections, Paperless, Redis/BullMQ, and the worker process for real execution.
+
+**Pipeline**: `createImportJob()` creates a draft and signed source upload URL; `analyzeImportJob()`
+parses headers/sample rows and materializes every source row; `updateImportMapping()` stores the
+user-confirmed mapping; `validateImportJob()` dry-runs all rows using the same planner as the
+worker; `startImportJob()` starts a bounded self-perpetuating chunk chain; reports stream from
+`import_rows` as CSV. The UI makes validate/review mandatory before the run button becomes
+available.
+
+**Scale and isolation**: executable dry-run rows stay `pending`, because `claim_import_chunk()`
+claims only pending rows. Permanent validation failures are terminal and count toward progress
+before execution. `on_missing:"fail_row"` entity links become `ENTITY_NOT_FOUND` rows during
+planning, so a tenant cannot map an import to another tenant's identifier; `on_missing:"skip_connection"`
+still lets the document row execute but records `needs_review`. Milestone 9
+adds `scripts/verify-phase3-m9.ts`, which generated a 10,000-document ZIP with XLSX manifest and
+verified analyze + validate live in 43.5 seconds (16.6s analyze, 27.0s validate) without starting
+10,000 OCR jobs.
+
+**How to extend**: all matching behavior belongs in `imports.matching.ts`; all writes belong in
+`imports.apply.ts` or `run-import-chunk.ts`. Keep validation and execution on the same planner.
+The deliberately deferred `custom_field` document-matching strategy remains rejected at the
+schema layer until there is a live-verified batched custom-field-value lookup.
 
 ## Admin
 
@@ -355,11 +498,11 @@ see `docs/SECURITY.md` for the retention mechanism.
 **How to extend**: call `logEvent({ actorId, action, entityType?, entityId?, organizationId?,
 metadata? })` from any real mutation worth an audit trail — action names are dot-namespaced
 (`auth.login`, `organization.member.removed`, `admin.user.suspended`, `billing.subscription.updated`,
-`file.deleted`, etc.). Current callers: every admin-issued mutation in this module, plus the most
+`avatar.uploaded`, etc.). Current callers: every admin-issued mutation in this module, plus the most
 security/state-changing existing flows in auth (`auth.actions.ts`), organizations
 (`organizations.actions.ts` — for everything *except* the four permission-change actions below),
-the Stripe webhook handler (actor is `null` for these — system/Stripe-initiated), and files
-(`files.service.ts`). Read-only
+the Stripe webhook handler (actor is `null` for these — system/Stripe-initiated), and profile
+avatar uploads (`avatar.service.ts`). Read-only
 actions (listing, viewing) are intentionally not logged. **Organization permission changes are
 the one exception**: `update_member_role`/`remove_member`/`leave_organization`/
 `transfer_organization_ownership` in `organizations.actions.ts` no longer call `logEvent()` at

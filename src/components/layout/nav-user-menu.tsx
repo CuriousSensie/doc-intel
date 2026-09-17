@@ -1,8 +1,8 @@
 "use client";
 
 import { LogOut, Settings, ShieldCheck } from "lucide-react";
-import Link from "next/link";
-import type { Route } from "next";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { useRef } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -33,6 +33,7 @@ export function NavUserMenu({
   user: { name: string; email: string; avatarUrl?: string | null };
 }) {
   const logoutFormRef = useRef<HTMLFormElement>(null);
+  const t = useTranslations("common.navUserMenu");
 
   return (
     <>
@@ -40,7 +41,7 @@ export function NavUserMenu({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
-            aria-label="Open account menu"
+            aria-label={t("openAccountMenu")}
             className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
             type="button"
           >
@@ -57,16 +58,16 @@ export function NavUserMenu({
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href={settingsHref as Route}>
+            <Link href={settingsHref}>
               <Settings aria-hidden className="size-4" />
-              Settings
+              {t("settings")}
             </Link>
           </DropdownMenuItem>
           {isAdmin ? (
             <DropdownMenuItem asChild>
-              <Link href={"/admin" as Route}>
+              <Link href="/admin">
                 <ShieldCheck aria-hidden className="size-4" />
-                Admin
+                {t("admin")}
               </Link>
             </DropdownMenuItem>
           ) : null}
@@ -79,7 +80,7 @@ export function NavUserMenu({
             }}
           >
             <LogOut aria-hidden className="size-4" />
-            Log out
+            {t("logOut")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -7,7 +7,6 @@ export type PlanKey = "free" | "pro" | "team";
 
 export type PlanFeatureMap = {
   teamMembers: number;
-  projects: number;
   storageMb: number;
   credits: number;
 };
@@ -53,7 +52,6 @@ export const billingConfig = {
       priceMonthlyCents: 0,
       features: {
         teamMembers: 1,
-        projects: 3,
         storageMb: 100,
         credits: 0
       }
@@ -67,7 +65,6 @@ export const billingConfig = {
       stripePriceIdYearly: env.STRIPE_PRICE_PRO_YEARLY,
       features: {
         teamMembers: 1,
-        projects: 50,
         storageMb: 10_000,
         credits: 500
       }
@@ -81,7 +78,6 @@ export const billingConfig = {
       stripePriceIdYearly: env.STRIPE_PRICE_TEAM_YEARLY,
       features: {
         teamMembers: 10,
-        projects: 250,
         storageMb: 50_000,
         credits: 2_000
       }

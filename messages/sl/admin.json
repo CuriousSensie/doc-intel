@@ -1,0 +1,83 @@
+{
+  "layout": {
+    "title": "Skrbništvo",
+    "fallbackName": "Skrbnik"
+  },
+  "dashboard": {
+    "title": "Nadzorna plošča",
+    "stats": {
+      "users": "Uporabniki",
+      "organizations": "Organizacije",
+      "activeSubscriptions": "Aktivne naročnine"
+    },
+    "actions": {
+      "manageUsers": "Upravljaj uporabnike",
+      "manageOrganizations": "Upravljaj organizacije",
+      "viewAuditLog": "Prikaži dnevnik dejavnosti"
+    },
+    "recentSignups": {
+      "title": "Nedavne registracije",
+      "empty": "Še ni registracij."
+    }
+  },
+  "auditLog": {
+    "title": "Dnevnik dejavnosti",
+    "description": "Varnostni dogodki in dogodki spremembe stanja v aplikaciji. Vrstice, starejše od 30 dni, se izbrišejo.",
+    "empty": "Ni zabeleženih dogodkov.",
+    "actorLabel": "izvajalec",
+    "system": "sistem",
+    "nextPage": "Naslednja stran"
+  },
+  "organizationsPage": {
+    "title": "Organizacije",
+    "searchLabel": "Iskanje po imenu",
+    "search": "Išči",
+    "empty": "Ni najdenih organizacij.",
+    "suspended": "Zadržano",
+    "suspend": "Zadrži",
+    "unsuspend": "Prekliči zadržanje",
+    "delete": "Izbriši",
+    "creditAdjustmentLabel": "Prilagoditev dobroimetja",
+    "creditAdjustmentPlaceholder": "npr. 100 ali -50",
+    "adjustCredits": "Prilagodi dobroimetje",
+    "disableSubscription": "Onemogoči naročnino",
+    "enableSubscription": "Omogoči naročnino",
+    "reprovision": "Ponovno zagotovi",
+    "nextPage": "Naslednja stran"
+  },
+  "usersPage": {
+    "title": "Uporabniki",
+    "searchLabel": "Iskanje po e-pošti",
+    "search": "Išči",
+    "empty": "Ni najdenih uporabnikov.",
+    "admin": "Skrbnik",
+    "suspended": "Zadržano",
+    "suspend": "Zadrži",
+    "unsuspend": "Prekliči zadržanje",
+    "makeAdmin": "Naredi skrbnika",
+    "revokeAdmin": "Prekliči skrbniške pravice",
+    "delete": "Izbriši",
+    "creditAdjustmentLabel": "Prilagoditev dobroimetja",
+    "creditAdjustmentPlaceholder": "npr. 100 ali -50",
+    "adjustCredits": "Prilagodi dobroimetje",
+    "disableSubscription": "Onemogoči naročnino",
+    "enableSubscription": "Omogoči naročnino",
+    "nextPage": "Naslednja stran"
+  },
+  "actions": {
+    "genericError": "Prišlo je do napake",
+    "userSuspended": "Uporabnik je bil zadržan.",
+    "userUnsuspended": "Zadržanje uporabnika je bilo preklicano.",
+    "adminGranted": "Skrbniške pravice so bile dodeljene.",
+    "adminRevoked": "Skrbniške pravice so bile preklicane.",
+    "userDeleted": "Uporabnik je bil izbrisan.",
+    "organizationSuspended": "Organizacija je bila zadržana.",
+    "organizationUnsuspended": "Zadržanje organizacije je bilo preklicano.",
+    "organizationDeleted": "Organizacija je bila izbrisana.",
+    "creditAmountRequired": "Vnesite neničelni znesek dobroimetja",
+    "creditsAdjusted": "Dobroimetje je bilo prilagojeno.",
+    "reprovisioningQueued": "Ponovno zagotavljanje je v čakalni vrsti.",
+    "subscriptionDisabled": "Naročnina je bila onemogočena na ravni platforme.",
+    "subscriptionEnabled": "Naročnina je bila ponovno omogočena."
+  }
+}

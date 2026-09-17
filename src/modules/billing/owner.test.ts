@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AuthContext } from "@/modules/auth/session";
 
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn().mockResolvedValue("en")
+}));
+
+vi.mock("@/i18n/navigation", () => ({
+  redirect: vi.fn()
+}));
+
 const context = { user: { id: "user-1" } } as AuthContext;
 
 describe("resolveBillingOwner", () => {

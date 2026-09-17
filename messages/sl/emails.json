@@ -1,0 +1,11 @@
+{
+  "footerPrefix": "{appName} · Vprašanja? Pišite na",
+  "organizationInvitation": {
+    "subject": "Povabljeni ste v {organizationName}",
+    "heading": "Pridružite se {organizationName}",
+    "previewText": "{inviterName} vas je povabil/-a v {organizationName}",
+    "body": "{inviterName} vas je povabil/-a, da se pridružite <name>{organizationName}</name> kot {role}.",
+    "acceptButton": "Sprejmi povabilo",
+    "copyLink": "Ali kopirajte to povezavo:"
+  }
+}

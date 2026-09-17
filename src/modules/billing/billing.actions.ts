@@ -1,6 +1,8 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+
+import { redirect } from "@/i18n/navigation";
 
 import { billingConfig, type BillingPlan } from "@/config/billing";
 import { AuthorizationError } from "@/lib/errors";
@@ -14,11 +16,6 @@ import { createCheckoutSession, createPortalSession } from "@/modules/billing/bi
 import { requireBillingOwner, type BillingOwner } from "@/modules/billing/owner";
 import { getMembership } from "@/modules/organizations/organizations.service";
 
-function redirectWithError(error: unknown): never {
-  const message = error instanceof Error ? error.message : "Something went wrong";
-  redirect(withStatus("/settings/billing", "error", message));
-}
-
 async function requireBillingPermission(context: AuthContext, owner: BillingOwner) {
   if (owner.type === "user") {
     return;
@@ -27,7 +24,8 @@ async function requireBillingPermission(context: AuthContext, owner: BillingOwne
   const membership = await getMembership(owner.id, context.user.id);
 
   if (!membership || !can(membership.role, "organization.billing.manage")) {
-    throw new AuthorizationError("You do not have permission to manage billing for this organization");
+    const t = await getTranslations("billing");
+    throw new AuthorizationError(t("errors.noPermission"));
   }
 }
 
@@ -35,18 +33,19 @@ export async function createCheckoutAction(formData: FormData) {
   const context = await requireUser("/settings/billing");
   const owner = await requireBillingOwner(context);
   await requireBillingPermission(context, owner);
+  const [t, locale] = await Promise.all([getTranslations("billing"), getLocale()]);
 
   const parsed = checkoutSchema.safeParse(formDataToObject(formData));
 
   if (!parsed.success) {
-    redirect(withStatus("/settings/billing", "error", "Invalid plan selection"));
+    return redirect({ href: withStatus("/settings/billing", "error", t("errors.invalidPlanSelection")), locale });
   }
 
   const plan = billingConfig.plans[parsed.data.planKey] as BillingPlan;
   const priceId = parsed.data.interval === "monthly" ? plan.stripePriceIdMonthly : plan.stripePriceIdYearly;
 
   if (!priceId) {
-    redirect(withStatus("/settings/billing", "error", "This plan is not available for checkout yet"));
+    return redirect({ href: withStatus("/settings/billing", "error", t("errors.planNotAvailable")), locale });
   }
 
   let checkoutUrl: string;
@@ -57,51 +56,55 @@ export async function createCheckoutAction(formData: FormData) {
       email: context.user.email ?? "",
       priceId,
       mode: "subscription",
-      successPath: withStatus("/settings/billing", "message", "Subscription updated."),
+      successPath: withStatus("/settings/billing", "message", t("messages.subscriptionUpdated")),
       cancelPath: "/settings/billing"
     });
   } catch (error) {
-    redirectWithError(error);
+    const message = error instanceof Error ? error.message : t("common.somethingWentWrong");
+    return redirect({ href: withStatus("/settings/billing", "error", message), locale });
   }
 
-  redirect(checkoutUrl);
+  return redirect({ href: checkoutUrl, locale });
 }
 
 export async function createPortalAction() {
   const context = await requireUser("/settings/billing");
   const owner = await requireBillingOwner(context);
   await requireBillingPermission(context, owner);
+  const [t, locale] = await Promise.all([getTranslations("billing"), getLocale()]);
 
   let portalUrl: string | null;
 
   try {
     portalUrl = await createPortalSession({ owner, returnPath: "/settings/billing" });
   } catch (error) {
-    redirectWithError(error);
+    const message = error instanceof Error ? error.message : t("common.somethingWentWrong");
+    return redirect({ href: withStatus("/settings/billing", "error", message), locale });
   }
 
   if (!portalUrl) {
-    redirect(withStatus("/settings/billing", "error", "No billing account found yet"));
+    return redirect({ href: withStatus("/settings/billing", "error", t("errors.noBillingAccount")), locale });
   }
 
-  redirect(portalUrl);
+  return redirect({ href: portalUrl, locale });
 }
 
 export async function purchaseCreditsAction(formData: FormData) {
   const context = await requireUser("/settings/billing");
   const owner = await requireBillingOwner(context);
   await requireBillingPermission(context, owner);
+  const [t, locale] = await Promise.all([getTranslations("billing"), getLocale()]);
 
   const parsed = creditPurchaseSchema.safeParse(formDataToObject(formData));
 
   if (!parsed.success) {
-    redirect(withStatus("/settings/billing", "error", "Invalid credit pack selection"));
+    return redirect({ href: withStatus("/settings/billing", "error", t("errors.invalidCreditPackSelection")), locale });
   }
 
   const pack = billingConfig.creditPacks.find((candidate) => candidate.key === parsed.data.packKey);
 
   if (!pack?.stripePriceId) {
-    redirect(withStatus("/settings/billing", "error", "This credit pack is not available for purchase yet"));
+    return redirect({ href: withStatus("/settings/billing", "error", t("errors.creditPackNotAvailable")), locale });
   }
 
   let checkoutUrl: string;
@@ -112,13 +115,14 @@ export async function purchaseCreditsAction(formData: FormData) {
       email: context.user.email ?? "",
       priceId: pack.stripePriceId,
       mode: "payment",
-      successPath: withStatus("/settings/billing", "message", "Credits purchased."),
+      successPath: withStatus("/settings/billing", "message", t("messages.creditsPurchased")),
       cancelPath: "/settings/billing",
       metadata: { creditPackKey: pack.key }
     });
   } catch (error) {
-    redirectWithError(error);
+    const message = error instanceof Error ? error.message : t("common.somethingWentWrong");
+    return redirect({ href: withStatus("/settings/billing", "error", message), locale });
   }
 
-  redirect(checkoutUrl);
+  return redirect({ href: checkoutUrl, locale });
 }

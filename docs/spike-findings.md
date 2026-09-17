@@ -121,10 +121,16 @@ per-tenant instances, or upstreaming a fix"): Pomočnik already mirrors custom f
 `organization_id` and RLS. **Mitigation for Phase 1: the definition-editing/listing UI and any
 Server Action must query `custom_field_defs` (our mirror), never call
 `GET /api/custom_fields/` directly for a cross-tenant-safe list.** This contains the leak at
-the boundary we already control. What's still open: whether this leak extends to **custom
-field values on documents** (test #7) — pending the document-upload re-run. If values also
-leak, that's more serious since we don't mirror values and DO rely on Paperless's per-document
-access control for them; escalate per specs/12-agent-rules.md if so.
+the boundary we already control.
+
+**Resolved in Phase 2 (test #7, `e2e/isolation.spec.ts`): custom field *values* do not leak.**
+Set a real value on tenant A's document custom field, then checked two angles as tenant B: (a)
+`GET /api/documents/:id/` for A's document still 404s with the value attached, same as the
+plain document-read denial; (b) filtering the document list via `custom_field_query` using A's
+(leaked, per #6) custom field id and the real value returns zero results — a tenant can't use
+the leaked definition id to go fishing for cross-tenant values. Both passed against the live
+pinned instance. The leak is confirmed narrow: **definitions only, never values** — no
+escalation needed.
 
 ### Confirmed finding: cross-tenant document download returns 403, not 404 (#8)
 

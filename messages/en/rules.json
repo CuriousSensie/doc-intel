@@ -1,0 +1,183 @@
+{
+  "list": {
+    "title": "Rules",
+    "description": "Define once, apply automatically. Deterministic conditions and actions — no AI.",
+    "newRule": "New rule",
+    "empty": "No rules yet.",
+    "emptyDescription": "Create a rule to connect documents to entities, set fields, or send reminders automatically.",
+    "trigger": "Trigger: {trigger}",
+    "priority": "Priority {priority}",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "conditionCount": "conditions",
+    "actionCount": "actions",
+    "openActions": "Open rule actions",
+    "editRule": "Edit rule",
+    "triggerRule": "Trigger",
+    "columns": {
+      "name": "Rule name",
+      "trigger": "Triggers",
+      "conditions": "Conditions",
+      "actions": "Actions",
+      "runs": "Runs",
+      "status": "Enabled/disabled",
+      "actionsMenu": "Actions"
+    }
+  },
+  "authorization": {
+    "manageOnly": "Only an organization owner or admin can manage rules"
+  },
+  "form": {
+    "basicsTitle": "Name & trigger",
+    "nameLabel": "Name",
+    "namePlaceholder": "Invoices to ABC d.o.o.",
+    "priorityLabel": "Priority",
+    "priorityHint": "Lower runs first when rules conflict. Most rules can leave this at 100.",
+    "triggerTitle": "Trigger",
+    "triggerDescription": "What causes this rule to run.",
+    "conditionsTitle": "Conditions",
+    "conditionsDescription": "Which documents this rule applies to. All conditions must match.",
+    "conditionNumber": "Condition {number}",
+    "removeCondition": "Remove condition",
+    "conditionFieldLabel": "Condition field",
+    "conditionOperatorLabel": "Condition operator",
+    "conditionValueLabel": "Condition value",
+    "conditionFields": {
+      "filename": "File name",
+      "content": "File content",
+      "tags": "Tags",
+      "correspondent": "Correspondent",
+      "documentType": "Document type"
+    },
+    "conditionOps": {
+      "contains": "contains",
+      "not_contains": "does not contain",
+      "eq": "is exactly",
+      "neq": "is not"
+    },
+    "conditionValuePlaceholder": "e.g. invoice",
+    "addCondition": "Add condition",
+    "actionsTitle": "Actions",
+    "actionsDescription": "What happens when a document matches.",
+    "actionNumber": "Action {number}",
+    "removeAction": "Remove action",
+    "actionKindLabel": "Action type",
+    "relationLabel": "Relation",
+    "actionKinds": {
+      "add_tag": "Assign tag",
+      "remove_tag": "Remove tag",
+      "set_document_type": "Assign document type",
+      "set_correspondent": "Assign correspondent",
+      "connect_entity": "Connect to entity",
+      "disconnect_entity": "Disconnect from entity"
+    },
+    "actionModes": {
+      "attribute": "Attributes",
+      "entity": "Entities"
+    },
+    "attributeOperationLabel": "Attribute operation",
+    "attributeOperations": {
+      "assign": "Assign",
+      "remove": "Remove"
+    },
+    "attributeKindLabel": "Attribute",
+    "attributeKinds": {
+      "tag": "Tags",
+      "correspondent": "Correspondents",
+      "documentType": "Document types"
+    },
+    "entityOperationLabel": "Entity operation",
+    "entityOperations": {
+      "connect": "Connect",
+      "disconnect": "Disconnect"
+    },
+    "relations": {
+      "belongs_to": "Belongs to",
+      "issued_to": "Issued to",
+      "assigned_to": "Assigned to",
+      "part_of": "Part of",
+      "related": "Related"
+    },
+    "addAction": "Add action",
+    "needsConditionAndAction": "Add at least one condition and one action before saving.",
+    "searchPlaceholder": "Search customers, projects, contracts…",
+    "searchFailed": "Search failed",
+    "removeEntityValue": "Remove selected entity",
+    "saving": "Saving…",
+    "save": "Save rule",
+    "create": "Create rule"
+  },
+  "triggers": {
+    "document_ingested": "Document ingested",
+    "document_updated": "Document updated",
+    "document_connected": "Document connected",
+    "entity_created": "Entity created",
+    "manual": "Manual only"
+  },
+  "detail": {
+    "tabs": {
+      "rule": "Rule",
+      "test": "Test",
+      "backfill": "Backfill",
+      "runs": "Runs"
+    },
+    "backToRules": "Back to rules",
+    "edit": "Edit",
+    "trigger": "Trigger",
+    "delete": "Delete rule",
+    "confirmDelete": "Delete this rule? Its run history is kept, but it will stop evaluating.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "recentRuns": "Recent runs",
+    "noRuns": "No runs yet.",
+    "runMatched": "Matched",
+    "runNotMatched": "Did not match",
+    "runStatus": "Status: {status}"
+  },
+  "test": {
+    "title": "Test against a document",
+    "description": "Dry run only — no actions are applied and nothing is recorded.",
+    "documentIdLabel": "Document ID",
+    "documentIdHint": "Paste a document's id from its detail page URL.",
+    "run": "Run test",
+    "running": "Running…",
+    "matched": "Matched",
+    "notMatched": "Did not match",
+    "trace": "Condition trace",
+    "actions": "Actions that would apply",
+    "error": "Could not run the test"
+  },
+  "backfill": {
+    "title": "Backfill",
+    "description": "Apply this rule to existing documents. Always previews a count first.",
+    "documentTypeLabel": "Document type key (optional)",
+    "dateFromLabel": "From date (optional)",
+    "dateToLabel": "To date (optional)",
+    "preview": "Preview count",
+    "previewing": "Counting…",
+    "matchedCount": "{count} documents match this filter",
+    "start": "Start backfill",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "undo": "Undo",
+    "confirmUndo": "Undo this backfill? This removes only the connections it created.",
+    "status": "Status: {status}",
+    "progress": "{applied} applied / {matched} matched",
+    "recentBackfills": "Recent backfills",
+    "noBackfills": "No backfills yet."
+  },
+  "actions": {
+    "somethingWentWrong": "Something went wrong",
+    "created": "Rule created",
+    "saved": "Rule saved",
+    "deleted": "Rule deleted",
+    "enabled": "Rule enabled",
+    "disabled": "Rule disabled",
+    "backfillStarted": "Backfill started",
+    "backfillPaused": "Backfill paused",
+    "backfillResumed": "Backfill resumed",
+    "backfillCancelled": "Backfill cancelled",
+    "backfillUndone": "Backfill undone"
+  }
+}
