@@ -27,18 +27,12 @@ import {
   Users
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Link, usePathname } from "@/i18n/navigation";
 
 import { useSidebar } from "@/components/layout/sidebar-provider";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { appConfig } from "@/config/app";
@@ -125,6 +119,16 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
   const tNav = useTranslations("common");
   const mainItems = items.filter((item) => item.placement !== "bottom");
   const bottomItems = items.filter((item) => item.placement === "bottom");
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  function toggleGroup(key: string) {
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function renderLink(item: NavigationLinkItem, nested = false) {
     const active = isItemActive(pathname, item.href);
@@ -169,40 +173,45 @@ function SidebarNavLinks({ collapsed, items }: { collapsed: boolean; items: Navi
       const active = item.children.some((child) => isItemActive(pathname, child.href));
       const Icon = item.icon ? iconMap[item.icon] : undefined;
       const label = tNav(item.labelKey);
+      const open = active || openGroups.has(item.labelKey);
+
+      const button = (
+        <button
+          aria-current={active ? "page" : undefined}
+          aria-expanded={open}
+          className={cn(
+            "flex min-h-10 w-full items-center rounded-md px-3 text-sm font-semibold outline-none transition-[background-color,color,gap] duration-200 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2",
+            collapsed ? "justify-center gap-0 px-0" : "gap-3",
+            active ? "bg-accent/12 text-accent" : "text-muted hover:bg-panel-strong hover:text-foreground"
+          )}
+          onClick={() => toggleGroup(item.labelKey)}
+          type="button"
+        >
+          {Icon ? <Icon aria-hidden className="size-4.5 shrink-0" /> : null}
+          <CollapsibleLabel collapsed={collapsed}>{label}</CollapsibleLabel>
+          {!collapsed ? (
+            <ChevronRight
+              aria-hidden
+              className={cn("ml-auto size-4 shrink-0 transition-transform", open && "rotate-90")}
+            />
+          ) : null}
+        </button>
+      );
 
       return (
-        <DropdownMenu key={item.labelKey}>
-          <DropdownMenuTrigger asChild>
-            <button
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex min-h-10 w-full items-center rounded-md px-3 text-sm font-semibold outline-none transition-[background-color,color,gap] duration-200 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2",
-                collapsed ? "justify-center gap-0 px-0" : "gap-3",
-                active
-                  ? "bg-accent/12 text-accent"
-                  : "text-muted hover:bg-panel-strong hover:text-foreground"
-              )}
-              type="button"
-            >
-              {Icon ? <Icon aria-hidden className="size-4.5 shrink-0" /> : null}
-              <CollapsibleLabel collapsed={collapsed}>{label}</CollapsibleLabel>
-              {!collapsed ? <ChevronRight aria-hidden className="ml-auto size-4 shrink-0" /> : null}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="right" sideOffset={8}>
-            {item.children.map((child) => {
-              const ChildIcon = child.icon ? iconMap[child.icon] : undefined;
-              return (
-                <DropdownMenuItem asChild key={child.href}>
-                  <Link href={child.href}>
-                    {ChildIcon ? <ChildIcon aria-hidden className="size-4" /> : null}
-                    {tNav(child.labelKey)}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="grid gap-1" key={item.labelKey}>
+          {collapsed ? (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>{button}</TooltipTrigger>
+              <TooltipContent side="right">{label}</TooltipContent>
+            </Tooltip>
+          ) : (
+            button
+          )}
+          {!collapsed && open ? (
+            <div className="grid gap-1">{item.children.map((child) => renderLink(child, true))}</div>
+          ) : null}
+        </div>
       );
     }
 
