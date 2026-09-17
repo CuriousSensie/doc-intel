@@ -743,16 +743,73 @@ much is built, per this file's own rule (checked only once merged).
       `src/lib/rules/backfill-control.ts` (Redis flag, mirrors `src/lib/import/control.ts`),
       self-perpetuating re-enqueue, undo via `rule_backfill_id` scoping (verified live, see above).
       `GET /api/rule-backfills/[id]/route.ts` for progress polling (ADR-0009).
+- [ ] **A real isolation gap found and fixed this session, before it ever shipped**: writing
+      `e2e/isolation-rules.spec.ts` for specs/10-nonfunctional.md test #10 ("A's rule references
+      B's entity → Validation failure") surfaced that `rules.dispatcher.ts#resolveEntityRef()`'s
+      `entity_ref: {by: "id", entityId}` case returned the given id with **no organization_id
+      check at all** — the `by: "identifier"`/`by: "name"` cases were already correctly scoped by
+      `ctx.orgId` in their own queries, `by: "id"` alone was not. Fixed in two places (defense in
+      depth, matching `connections.service.ts#assertBelongsToOrg()`'s own reasoning): (1)
+      `resolveEntityRef()` now does an `organization_id`-scoped existence check before returning
+      the id; (2) `apply_rule_action()` itself (new migration
+      `20260919000000_apply_rule_action_ownership_check.sql`) independently verifies
+      source/target ownership before any `connect_entity`/`disconnect_entity` write, so a future
+      caller bug can't reintroduce the same class of leak. Verified live end-to-end against the
+      real Cloud Supabase project + the pinned Paperless container (two real provisioned tenants,
+      a real document, a real cross-org entity reference) — confirms `skipped_entity_not_found`,
+      zero leaked connection rows, and the RPC's own independent rejection.
+- [ ] Performance pass (found and fixed same session, before shipping): `rules.context.ts` was
+      calling `listPaperlessTags()`/`getPaperlessCorrespondentName()` directly instead of the
+      existing Redis-cached `getCachedTags()`/`getCachedCorrespondentName()`
+      (`src/lib/paperless/metadata-cache.ts`) that `rules.dispatcher.ts`'s find-or-create helpers
+      already used — every single rule evaluation was re-fetching the tenant's full tag list
+      uncached. Fixed; also deduped `listCustomFieldDefs()` (fetched once in the context builder,
+      reused by the dispatcher via `subject.customFieldDefs` instead of querying again) and
+      batched the `field_provenance` user-edit-wins check (one query per `dispatchRuleActions()`
+      call instead of one per field-writing action). `worker/jobs/backfill-rule.ts`'s chunk loop
+      now processes its up-to-50 documents with bounded concurrency (8) instead of serially —
+      each document's own work is Paperless-latency-bound, not CPU-bound, so this is real
+      wall-clock improvement at backfill scale, not a micro-optimization.
 - [ ] Docs updated — this entry; `SPEC_TRACEABILITY.md`/`DATABASE.md`/`MODULES.md`/
-      `API_REFERENCE.md`/`ARCHITECTURE.md` **not yet updated** for Phase 4 — tracked as open.
-- [ ] **Not built this session, tracked as open**: the rules/backfill UI (`/dashboard/rules`,
-      condition-trace viewer, backfill progress/undo controls — `rules` feature flag stays `false`
-      until it exists, so nothing half-built is exposed), `e2e/isolation.spec.ts` additions for
-      rules, a real end-to-end run against the live Paperless + Supabase Cloud stack (everything
-      above was verified against the local Supabase stack + the pinned Paperless container's real
-      schema, not Cloud), and the 5,000-document backfill scale test from the spec's own
-      definition-of-done item 3.
-- [ ] **Phase 4 exit criteria met** — not met; see the open items above.
+      `API_REFERENCE.md`/`ARCHITECTURE.md` **still not updated** for Phase 4 — tracked as open.
+- [ ] `/dashboard/rules` UI — done this session: list (`rules/page.tsx`), create
+      (`rules/new/page.tsx`), detail (`rules/[id]/page.tsx` — edit form, enable/disable toggle,
+      delete with confirm), `RuleTestPanel` (client component, calls `testRuleAction()`, renders
+      the condition trace recursively including `all`/`any` nesting), `RuleBackfillPanel` (preview
+      count → start → poll `GET /api/rule-backfills/[id]` every 2s → pause/resume/cancel/undo).
+      Conditions/actions are authored as raw JSON in a textarea (validated server-side against the
+      same Zod schemas the DSL uses) — a genuine MVP simplification, not a visual condition/action
+      builder; documented here rather than silently presented as more polished than it is.
+      `messages/en/rules.json` + `messages/sl/rules.json` added, registered in
+      `src/i18n/messages.ts` and `global.d.ts`. **The `rules` feature flag stays `false`**
+      (`src/config/features.ts`) — the UI is real and reachable at the route level but not yet
+      linked from anywhere a tenant would find it, per the original plan.
+- [ ] `e2e/isolation.spec.ts` additions for rules — done as `e2e/isolation-rules.spec.ts` (test
+      #10, see the isolation-gap entry above). The full existing 15-test suite
+      (`isolation.spec.ts` + `isolation-phase2.spec.ts`) was re-run live after all of this
+      session's changes and stayed green (14 real passes + test #6's documented expected
+      `test.fail()`) — no regressions from the rules engine or the `documents.service.ts`
+      provenance change.
+- [ ] Live verification against Cloud Supabase + real end-to-end document flow — done for the
+      slice that matters most for isolation: `isolation-rules.spec.ts` and the full existing
+      isolation suite both ran against the **real Cloud Supabase project** (not just the local
+      stack) and the real pinned Paperless container this session — real tenant provisioning
+      (group/user creation), a real document uploaded and consumed through Paperless, a real rule
+      evaluated through the actual `rules.dispatcher.ts`/`apply_rule_action()` code path. A full
+      browser-driven walkthrough (create a rule via the `/dashboard/rules` UI, watch it fire on a
+      real upload) was **not** run — the UI itself is untested in a browser this session, only
+      typechecked/linted/built.
+- [ ] 5,000-document backfill scale test — **prepared, not run at full scale**, same honest
+      deferral Phase 3 M9 made for its own 10k `--execute` run and for the same reason: the
+      expensive part is real Paperless document consumption, not this engine's own claim/cursor/
+      dispatch logic. `scripts/verify-phase4-backfill.ts` provisions a real tenant, creates N real
+      documents (bounded concurrency, default 150), creates a real rule + entity, and can run the
+      actual `backfillRule` worker chain end-to-end with live progress polling and a connection
+      count assertion at the end (`--execute`). Run without `--execute` to just verify document
+      creation; `--docs 5000 --execute` is supported but needs a dedicated operator window with a
+      worker process running, not something to trigger casually mid-session.
+- [ ] **Phase 4 exit criteria met** — not met; the open items above (docs, condition/action visual
+      builder, the 5,000-doc `--execute` run, a browser walkthrough of the new UI) are what's left.
 
 ## Phase 5 — Hardening
 
