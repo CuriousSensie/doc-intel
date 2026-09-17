@@ -870,6 +870,7 @@ export type Database = {
           created_by: string | null;
           created_via: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
           rule_id: string | null;
+          rule_backfill_id: string | null;
           created_at: string;
           deleted_at: string | null;
         };
@@ -885,6 +886,7 @@ export type Database = {
           created_by?: string | null;
           created_via?: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
           rule_id?: string | null;
+          rule_backfill_id?: string | null;
           created_at?: string;
           deleted_at?: string | null;
         };

@@ -47,8 +47,25 @@ function fieldKeyForAction(action: RuleAction): string | null {
   }
 }
 
+// specs/10-nonfunctional.md isolation test #10: "A's rule references B's entity" must be a
+// validation failure, not a cross-tenant connection. entity_ref by "identifier"/"name" are
+// already scoped by ctx.orgId in their own queries below; by "id" is the one shape that takes a
+// raw entity id directly from the rule's own stored actions jsonb — a rule authored (or, more
+// realistically, restored/migrated/copy-pasted) with another tenant's entity id in it must not
+// silently resolve. Same ownership check connections.service.ts#assertBelongsToOrg() already
+// does for a client-supplied connection target.
 async function resolveEntityRef(ctx: ServiceContext, ref: ConnectEntityRef): Promise<string | null> {
-  if (ref.by === "id") return ref.entityId;
+  if (ref.by === "id") {
+    const { data, error } = await ctx.db
+      .from("entities")
+      .select("id")
+      .eq("id", ref.entityId)
+      .eq("organization_id", ctx.orgId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.id ?? null;
+  }
 
   if (ref.by === "identifier") {
     const normalized = normalizeIdentifier(ref.kind, ref.value);
