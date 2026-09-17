@@ -2,10 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { FormMessage } from "@/components/forms/form-message";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DeleteRuleButton } from "@/components/rules/delete-rule-button";
 import { RuleBackfillPanel } from "@/components/rules/rule-backfill-panel";
 import { RuleDetailTabs } from "@/components/rules/rule-detail-tabs";
 import { RuleForm, type RuleFormValue } from "@/components/rules/rule-form";
@@ -17,8 +14,8 @@ import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
-import { listRuleBackfillsForRuleAction, toggleRuleEnabledFormAction } from "@/modules/rules/rules.actions";
-import { triggerMessageKey, type RuleAction } from "@/modules/rules/rules.schemas";
+import { listRuleBackfillsForRuleAction } from "@/modules/rules/rules.actions";
+import { type RuleAction } from "@/modules/rules/rules.schemas";
 import { getRule, listRuleRunsForRule } from "@/modules/rules/rules.service";
 
 export const dynamic = "force-dynamic";
@@ -104,35 +101,17 @@ export default async function RuleDetailPage({
 
   return (
     <div className="mx-auto grid w-full max-w-[1800px] gap-4 px-1">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-black">{rule.name}</h1>
-          <p className="mt-1 text-sm text-muted">
-            {t("list.trigger", { trigger: t(`triggers.${triggerMessageKey(rule.trigger)}`) })} ·{" "}
-            {t("list.priority", { priority: rule.priority })}
-          </p>
-        </div>
-        <Badge variant={rule.enabled ? "accent" : "muted"}>
-          {rule.enabled ? t("list.enabled") : t("list.disabled")}
-        </Badge>
-      </div>
-
       <FormMessage error={search.error} message={search.message} />
-
-      <div className="flex flex-wrap gap-2">
-        <form action={toggleRuleEnabledFormAction}>
-          <input name="ruleId" type="hidden" value={rule.id} />
-          <input name="enabled" type="hidden" value={(!rule.enabled).toString()} />
-          <Button type="submit" variant="outline">
-            {rule.enabled ? t("detail.disable") : t("detail.enable")}
-          </Button>
-        </form>
-        <DeleteRuleButton ruleId={rule.id} />
-      </div>
 
       <RuleDetailTabs
         backfill={<RuleBackfillPanel recentBackfills={recentBackfills} ruleId={rule.id} />}
-        rule={<RuleForm initial={formValue} metaOptions={{ tags, correspondents, documentTypes }} />}
+        rule={
+          <RuleForm
+            enabled={rule.enabled}
+            initial={formValue}
+            metaOptions={{ tags, correspondents, documentTypes }}
+          />
+        }
         runs={
           <Card>
             <CardHeader>

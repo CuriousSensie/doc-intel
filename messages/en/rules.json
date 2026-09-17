@@ -28,7 +28,7 @@
     "manageOnly": "Only an organization owner or admin can manage rules"
   },
   "form": {
-    "basicsTitle": "Name & priority",
+    "basicsTitle": "Name & trigger",
     "nameLabel": "Name",
     "namePlaceholder": "Invoices to ABC d.o.o.",
     "priorityLabel": "Priority",
@@ -71,6 +71,26 @@
       "connect_entity": "Connect to entity",
       "disconnect_entity": "Disconnect from entity"
     },
+    "actionModes": {
+      "attribute": "Assign/remove attributes",
+      "entity": "Connect/disconnect entities"
+    },
+    "attributeOperationLabel": "Attribute operation",
+    "attributeOperations": {
+      "assign": "Assign",
+      "remove": "Remove"
+    },
+    "attributeKindLabel": "Attribute",
+    "attributeKinds": {
+      "tag": "Tags",
+      "correspondent": "Correspondents",
+      "documentType": "Document types"
+    },
+    "entityOperationLabel": "Entity operation",
+    "entityOperations": {
+      "connect": "Connect",
+      "disconnect": "Disconnect"
+    },
     "relations": {
       "belongs_to": "Belongs to",
       "issued_to": "Issued to",
@@ -103,6 +123,7 @@
     },
     "backToRules": "Back to rules",
     "edit": "Edit",
+    "trigger": "Trigger",
     "delete": "Delete rule",
     "confirmDelete": "Delete this rule? Its run history is kept, but it will stop evaluating.",
     "enable": "Enable",

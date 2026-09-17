@@ -1,17 +1,24 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Play, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import { EntityPickerField } from "@/components/rules/entity-picker-field";
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { controlClass } from "@/components/imports/import-controls";
 import { TextField } from "@/components/forms/text-field";
-import { createRuleAction, updateRuleAction } from "@/modules/rules/rules.actions";
+import { DeleteRuleButton } from "@/components/rules/delete-rule-button";
+import {
+  createRuleAction,
+  startRuleBackfillFormAction,
+  toggleRuleEnabledFormAction,
+  updateRuleAction
+} from "@/modules/rules/rules.actions";
 import { RELATIONS, RULE_TRIGGERS, triggerMessageKey, type RuleTrigger } from "@/modules/rules/rules.schemas";
 
 type MetaOption = { id: number; name: string; color?: string; text_color?: string };
@@ -48,12 +55,17 @@ type ConditionRow = {
   metaId: number | null; // tags/correspondent/documentType
 };
 
-type ActionKind = "add_tag" | "remove_tag" | "set_document_type" | "set_correspondent" | "connect_entity" | "disconnect_entity";
+type AttributeKind = "tag" | "correspondent" | "documentType";
+type AttributeOperation = "assign" | "remove";
+type EntityOperation = "connect" | "disconnect";
 
 type ActionRow = {
   key: string;
-  kind: ActionKind;
-  metaId: number | null; // add_tag/remove_tag/set_document_type/set_correspondent
+  mode: "attribute" | "entity";
+  attributeKind: AttributeKind;
+  attributeOperation: AttributeOperation;
+  metaId: number | null;
+  entityOperation: EntityOperation;
   entity: { id: string; label: string } | null; // connect_entity/disconnect_entity
   relation: (typeof RELATIONS)[number];
 };
@@ -69,19 +81,22 @@ function newConditionRow(): ConditionRow {
 }
 
 function newActionRow(): ActionRow {
-  return { key: nextKey(), kind: "add_tag", metaId: null, entity: null, relation: "related" };
+  return {
+    key: nextKey(),
+    mode: "attribute",
+    attributeKind: "tag",
+    attributeOperation: "assign",
+    metaId: null,
+    entityOperation: "connect",
+    entity: null,
+    relation: "related"
+  };
 }
 
 function pickerKindFor(field: ConditionFieldKind | "tag" | "documentType" | "correspondent") {
   if (field === "tags" || field === "tag") return "tag" as const;
   if (field === "documentType") return "documentType" as const;
   return "correspondent" as const;
-}
-
-function actionMetaKindFor(kind: ActionKind): "tag" | "correspondent" | "documentType" {
-  if (kind === "add_tag" || kind === "remove_tag") return "tag";
-  if (kind === "set_document_type") return "documentType";
-  return "correspondent";
 }
 
 export type RuleFormValue = {
@@ -163,33 +178,46 @@ function actionRowsFromDslWithMeta(
   const list = Array.isArray(actions) ? (actions as Array<Record<string, unknown>>) : [];
   const rows = list
     .map((action): ActionRow | null => {
-      const type = action.type as ActionKind;
+      const type = action.type as string;
       if (type === "add_tag" || type === "remove_tag") {
-        return { key: nextKey(), kind: type, metaId: findMetaIdByName(metaOptions.tags, action.value), entity: null, relation: "related" };
+        return {
+          ...newActionRow(),
+          key: nextKey(),
+          attributeKind: "tag",
+          attributeOperation: type === "remove_tag" ? "remove" : "assign",
+          metaId: findMetaIdByName(metaOptions.tags, action.value)
+        };
       }
       if (type === "set_document_type") {
         return {
+          ...newActionRow(),
           key: nextKey(),
-          kind: type,
+          attributeKind: "documentType",
           metaId: findMetaIdByName(metaOptions.documentTypes, action.value),
-          entity: null,
-          relation: "related"
+          attributeOperation: "assign"
         };
       }
       if (type === "set_correspondent") {
         return {
+          ...newActionRow(),
           key: nextKey(),
-          kind: type,
+          attributeKind: "correspondent",
           metaId: findMetaIdByName(metaOptions.correspondents, action.value),
-          entity: null,
-          relation: "related"
+          attributeOperation: "assign"
         };
       }
       if (type === "connect_entity" || type === "disconnect_entity") {
         const ref = action.entity_ref as { by?: string; entityId?: string; label?: string } | undefined;
         const relation = (action.relation as (typeof RELATIONS)[number]) ?? "related";
         const entity = ref?.by === "id" && ref.entityId && ref.label ? { id: ref.entityId, label: ref.label } : null;
-        return { key: nextKey(), kind: type, metaId: null, entity, relation };
+        return {
+          ...newActionRow(),
+          key: nextKey(),
+          mode: "entity",
+          entityOperation: type === "disconnect_entity" ? "disconnect" : "connect",
+          entity,
+          relation
+        };
       }
       return null;
     })
@@ -197,14 +225,39 @@ function actionRowsFromDslWithMeta(
   return rows;
 }
 
+function serializeConditionRows(rows: ConditionRow[]) {
+  return rows.map((row) => ({
+    field: row.field,
+    op: row.op,
+    text: row.text,
+    metaId: row.metaId
+  }));
+}
+
+function serializeActionRows(rows: ActionRow[]) {
+  return rows.map((row) => ({
+    mode: row.mode,
+    attributeKind: row.attributeKind,
+    attributeOperation: row.attributeOperation,
+    metaId: row.metaId,
+    entityOperation: row.entityOperation,
+    entityId: row.entity?.id ?? null,
+    relation: row.relation
+  }));
+}
+
 export function RuleForm({
+  enabled,
   initial,
   metaOptions: initialMetaOptions
 }: {
+  enabled?: boolean;
   initial?: RuleFormValue;
   metaOptions: { tags: MetaOption[]; correspondents: MetaOption[]; documentTypes: MetaOption[] };
 }) {
   const t = useTranslations("rules.form");
+  const tDetail = useTranslations("rules.detail");
+  const tList = useTranslations("rules.list");
   const tTriggers = useTranslations("rules.triggers");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -228,13 +281,35 @@ export function RuleForm({
 
   const [name, setName] = useState(initial?.name ?? "");
   const [trigger, setTrigger] = useState<RuleTrigger>(initial?.trigger ?? "document.ingested");
-  const [priority, setPriority] = useState(initial?.priority ?? 100);
+  const priority = initial?.priority ?? 100;
   const [conditionRows, setConditionRows] = useState<ConditionRow[]>(() =>
     initial ? conditionRowsFromDslWithMeta(initial.conditions, initialMetaOptions) : [newConditionRow()]
   );
   const [actionRows, setActionRows] = useState<ActionRow[]>(() =>
-    initial ? actionRowsFromDslWithMeta(initial.actions, initialMetaOptions) : [newActionRow()]
+    initial ? actionRowsFromDslWithMeta(initial.actions, initialMetaOptions).slice(0, 2) : [newActionRow()]
   );
+  const [initialSignature] = useState(() =>
+    initial
+      ? JSON.stringify({
+          name: initial.name,
+          trigger: initial.trigger,
+          conditions: serializeConditionRows(conditionRows),
+          actions: serializeActionRows(actionRows)
+        })
+      : ""
+  );
+
+  const currentSignature = useMemo(
+    () =>
+      JSON.stringify({
+        name,
+        trigger,
+        conditions: serializeConditionRows(conditionRows),
+        actions: serializeActionRows(actionRows)
+      }),
+    [actionRows, conditionRows, name, trigger]
+  );
+  const hasChanges = !initial || currentSignature !== initialSignature;
 
   function optionsFor(kind: "tag" | "correspondent" | "documentType"): MetaOption[] {
     if (kind === "tag") return metaOptions.tags;
@@ -253,7 +328,7 @@ export function RuleForm({
       : row.text.trim().length > 0
   );
   const actionsValid = actionRows.every((row) =>
-    row.kind === "connect_entity" || row.kind === "disconnect_entity" ? row.entity !== null : row.metaId !== null
+    row.mode === "entity" ? row.entity !== null : row.metaId !== null
   );
   const canSubmit = name.trim().length > 0 && conditionRows.length > 0 && actionRows.length > 0 && conditionsValid && actionsValid;
 
@@ -273,17 +348,21 @@ export function RuleForm({
     };
 
     const actions = actionRows.map((row) => {
-      if (row.kind === "add_tag" || row.kind === "remove_tag") {
-        return { type: row.kind, value: nameForMetaId("tag", row.metaId) };
+      if (row.mode === "attribute") {
+        if (row.attributeKind === "tag") {
+          return {
+            type: row.attributeOperation === "remove" ? "remove_tag" : "add_tag",
+            value: nameForMetaId("tag", row.metaId)
+          };
+        }
+        if (row.attributeKind === "documentType") {
+          return { type: "set_document_type", value: nameForMetaId("documentType", row.metaId) };
+        }
+        return { type: "set_correspondent", value: nameForMetaId("correspondent", row.metaId) };
       }
-      if (row.kind === "set_document_type") {
-        return { type: row.kind, value: nameForMetaId("documentType", row.metaId) };
-      }
-      if (row.kind === "set_correspondent") {
-        return { type: row.kind, value: nameForMetaId("correspondent", row.metaId) };
-      }
+
       return {
-        type: row.kind,
+        type: row.entityOperation === "disconnect" ? "disconnect_entity" : "connect_entity",
         entity_ref: { by: "id" as const, entityId: row.entity!.id },
         relation: row.relation
       };
@@ -305,6 +384,44 @@ export function RuleForm({
 
   return (
     <div className="grid gap-5">
+      {initial?.id ? (
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="min-w-0 truncate text-3xl font-black">{name || initial.name}</h1>
+              <Badge variant={enabled ? "accent" : "muted"}>
+                {enabled ? tList("enabled") : tList("disabled")}
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              {tList("trigger", { trigger: tTriggers(triggerMessageKey(trigger)) })}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {hasChanges ? (
+              <Button disabled={isPending || !canSubmit} onClick={handleSubmit} type="button">
+                {isPending ? t("saving") : t("save")}
+              </Button>
+            ) : null}
+            <form action={startRuleBackfillFormAction}>
+              <input name="ruleId" type="hidden" value={initial.id} />
+              <Button type="submit" variant="outline">
+                <Play aria-hidden className="size-4" />
+                {tDetail("trigger")}
+              </Button>
+            </form>
+            <form action={toggleRuleEnabledFormAction}>
+              <input name="ruleId" type="hidden" value={initial.id} />
+              <input name="enabled" type="hidden" value={(!enabled).toString()} />
+              <Button type="submit" variant="outline">
+                {enabled ? tDetail("disable") : tDetail("enable")}
+              </Button>
+            </form>
+            <DeleteRuleButton ruleId={initial.id} />
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>{t("basicsTitle")}</CardTitle>
@@ -316,22 +433,6 @@ export function RuleForm({
             placeholder={t("namePlaceholder")}
             value={name}
           />
-          <TextField
-            hint={t("priorityHint")}
-            label={t("priorityLabel")}
-            onChange={(e) => setPriority(Number(e.target.value) || 100)}
-            type="number"
-            value={priority}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("triggerTitle")}</CardTitle>
-          <p className="text-sm text-muted">{t("triggerDescription")}</p>
-        </CardHeader>
-        <CardContent>
           <select
             aria-label={t("triggerTitle")}
             className={controlClass}
@@ -474,24 +575,46 @@ export function RuleForm({
                 aria-label={t("actionKindLabel")}
                 className={controlClass}
                 onChange={(e) => {
-                  const kind = e.target.value as ActionKind;
+                  const mode = e.target.value as ActionRow["mode"];
                   setActionRows((rows) =>
-                    rows.map((r) => (r.key === row.key ? { ...r, kind, metaId: null, entity: null } : r))
+                    rows.map((r) =>
+                      r.key === row.key
+                        ? {
+                            ...r,
+                            mode,
+                            metaId: null,
+                            entity: null,
+                            attributeKind: "tag",
+                            attributeOperation: "assign",
+                            entityOperation: "connect"
+                          }
+                        : r
+                    )
                   );
                 }}
-                value={row.kind}
+                value={row.mode}
               >
-                {(
-                  ["add_tag", "remove_tag", "set_document_type", "set_correspondent", "connect_entity", "disconnect_entity"] as ActionKind[]
-                ).map((kind) => (
-                  <option key={kind} value={kind}>
-                    {t(`actionKinds.${kind}`)}
-                  </option>
-                ))}
+                <option value="attribute">{t("actionModes.attribute")}</option>
+                <option value="entity">{t("actionModes.entity")}</option>
               </select>
 
-              {row.kind === "connect_entity" || row.kind === "disconnect_entity" ? (
-                <div className="grid gap-2 sm:grid-cols-2">
+              {row.mode === "entity" ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <select
+                    aria-label={t("entityOperationLabel")}
+                    className={controlClass}
+                    onChange={(e) =>
+                      setActionRows((rows) =>
+                        rows.map((r) =>
+                          r.key === row.key ? { ...r, entityOperation: e.target.value as EntityOperation } : r
+                        )
+                      )
+                    }
+                    value={row.entityOperation}
+                  >
+                    <option value="connect">{t("entityOperations.connect")}</option>
+                    <option value="disconnect">{t("entityOperations.disconnect")}</option>
+                  </select>
                   <EntityPickerField
                     onSelect={(entity) =>
                       setActionRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, entity } : r)))
@@ -518,30 +641,79 @@ export function RuleForm({
                   </select>
                 </div>
               ) : (
-                <PaperlessMetaPicker
-                  kind={actionMetaKindFor(row.kind)}
-                  mode="single"
-                  onChange={(ids, newOption) => {
-                    if (newOption) addMetaOption(actionMetaKindFor(row.kind), newOption);
-                    setActionRows((rows) =>
-                      rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
-                    );
-                  }}
-                  options={optionsFor(actionMetaKindFor(row.kind))}
-                  value={row.metaId !== null ? [row.metaId] : []}
-                />
+                <div className="grid gap-2 sm:grid-cols-[220px_220px_1fr]">
+                  <select
+                    aria-label={t("attributeOperationLabel")}
+                    className={controlClass}
+                    onChange={(e) => {
+                      const operation = e.target.value as AttributeOperation;
+                      setActionRows((rows) =>
+                        rows.map((r) =>
+                          r.key === row.key
+                            ? {
+                                ...r,
+                                attributeOperation: operation,
+                                attributeKind: operation === "remove" ? "tag" : r.attributeKind,
+                                metaId: null
+                              }
+                            : r
+                        )
+                      );
+                    }}
+                    value={row.attributeOperation}
+                  >
+                    <option value="assign">{t("attributeOperations.assign")}</option>
+                    <option value="remove">{t("attributeOperations.remove")}</option>
+                  </select>
+                  <select
+                    aria-label={t("attributeKindLabel")}
+                    className={controlClass}
+                    onChange={(e) =>
+                      setActionRows((rows) =>
+                        rows.map((r) =>
+                          r.key === row.key
+                            ? { ...r, attributeKind: e.target.value as AttributeKind, metaId: null }
+                            : r
+                        )
+                      )
+                    }
+                    value={row.attributeKind}
+                  >
+                    <option value="tag">{t("attributeKinds.tag")}</option>
+                    {row.attributeOperation === "assign" ? (
+                      <>
+                        <option value="correspondent">{t("attributeKinds.correspondent")}</option>
+                        <option value="documentType">{t("attributeKinds.documentType")}</option>
+                      </>
+                    ) : null}
+                  </select>
+                  <PaperlessMetaPicker
+                    kind={row.attributeKind}
+                    mode="single"
+                    onChange={(ids, newOption) => {
+                      if (newOption) addMetaOption(row.attributeKind, newOption);
+                      setActionRows((rows) =>
+                        rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
+                      );
+                    }}
+                    options={optionsFor(row.attributeKind)}
+                    value={row.metaId !== null ? [row.metaId] : []}
+                  />
+                </div>
               )}
             </div>
           ))}
-          <Button
-            className="justify-self-start"
-            onClick={() => setActionRows((rows) => [...rows, newActionRow()])}
-            type="button"
-            variant="outline"
-          >
-            <Plus className="size-4" />
-            {t("addAction")}
-          </Button>
+          {actionRows.length < 2 ? (
+            <Button
+              className="justify-self-start"
+              onClick={() => setActionRows((rows) => [...rows, newActionRow()])}
+              type="button"
+              variant="outline"
+            >
+              <Plus className="size-4" />
+              {t("addAction")}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -550,9 +722,11 @@ export function RuleForm({
         <p className="text-sm text-muted">{t("needsConditionAndAction")}</p>
       ) : null}
 
-      <Button disabled={isPending || !canSubmit} onClick={handleSubmit} type="button">
-        {isPending ? t("saving") : initial?.id ? t("save") : t("create")}
-      </Button>
+      {!initial ? (
+        <Button disabled={isPending || !canSubmit} onClick={handleSubmit} type="button">
+          {isPending ? t("saving") : t("create")}
+        </Button>
+      ) : null}
     </div>
   );
 }
