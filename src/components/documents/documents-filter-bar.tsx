@@ -34,6 +34,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import type { PaperlessCorrespondent, PaperlessTag } from "@/lib/paperless/documents";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import type { DocumentSort, DocumentSortDirection } from "@/modules/documents/documents.service";
+import { DocumentUploadDialogButton } from "@/components/documents/document-upload-dialog-button";
 
 export type DocumentsViewMode = "list" | "smallCards" | "largeCards";
 
@@ -402,8 +403,10 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
       data-pending={isPending}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <h1 className="text-3xl font-black">{tList("title")}</h1>
-
+        <div className="flex justify-between md:justify-start gap-3">
+          <h1 className="text-3xl font-black">{tList("title")}</h1>
+          <DocumentUploadDialogButton />
+        </div>
         <div className="hidden flex-wrap items-center gap-2 xl:flex">{listControls}</div>
       </div>
 

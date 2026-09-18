@@ -31,7 +31,6 @@ import {
   listRules,
   updateRule
 } from "./rules.service";
-import { rulesConfig } from "@/config/rules";
 
 // docs/adr/0009-route-handlers-vs-server-actions.md: rule CRUD is a Server Action, same as every
 // other module's mutations. GET /api/rule-backfills/[id]/route.ts (progress polling) is the one
@@ -138,13 +137,20 @@ export async function startRuleBackfillAction(input: unknown) {
     if (error) throw error;
 
     await setRuleBackfillControl(data.id, "running");
-    for (let i = 0; i < rulesConfig.defaultBackfillConcurrencyPerOrganization; i++) {
-      await enqueue(
-        QUEUE_NAMES.backfillRule,
-        { orgId: ctx.orgId, ruleBackfillId: data.id },
-        { priority: QUEUE_PRIORITY.ruleBackfill }
-      );
-    }
+    // Exactly one initial job, not one per rulesConfig.defaultBackfillConcurrencyPerOrganization
+    // (that constant bounds run-import-chunk.ts's N-chain fan-out, which is safe there because
+    // claim_import_chunk() is a row-claim table — N chains can't claim the same row twice. This
+    // job's own claim, claim_rule_backfill_documents(), is cursor pagination by design (see the
+    // migration's comment): N concurrently-enqueued copies would all read the same
+    // cursor_document_id before any of them advances it, so a real N-way duplicate-processing
+    // bug (confirmed live: 2 real matching documents produced matched_count=8 with N=4) rather
+    // than N-way parallelism. The self-perpetuating re-enqueue in backfill-rule.ts already
+    // provides the "keep going" chain; a second concurrent chain has nothing safe to do.
+    await enqueue(
+      QUEUE_NAMES.backfillRule,
+      { orgId: ctx.orgId, ruleBackfillId: data.id },
+      { priority: QUEUE_PRIORITY.ruleBackfill }
+    );
 
     return data;
   });
@@ -327,13 +333,13 @@ export async function startRuleBackfillFormAction(formData: FormData) {
     if (error) throw error;
 
     await setRuleBackfillControl(data.id, "running");
-    for (let i = 0; i < rulesConfig.defaultBackfillConcurrencyPerOrganization; i++) {
-      await enqueue(
-        QUEUE_NAMES.backfillRule,
-        { orgId: ctx.orgId, ruleBackfillId: data.id },
-        { priority: QUEUE_PRIORITY.ruleBackfill }
-      );
-    }
+    // See startRuleBackfillAction()'s comment: exactly one initial job — cursor-paginated
+    // claiming isn't safe for N concurrent chains the way run-import-chunk.ts's row-claim table is.
+    await enqueue(
+      QUEUE_NAMES.backfillRule,
+      { orgId: ctx.orgId, ruleBackfillId: data.id },
+      { priority: QUEUE_PRIORITY.ruleBackfill }
+    );
   } catch (error) {
     redirectWithError(returnPath, error, t, locale);
   }

@@ -44,16 +44,39 @@ function evaluateOperator(op: ConditionLeaf["op"], actual: unknown, expected: un
       return Array.isArray(actual) ? actual.includes(expected) : actual === expected;
     case "neq":
       return !(Array.isArray(actual) ? actual.includes(expected) : actual === expected);
+    // Real bug found via live testing: a document whose real OCR'd content contained "Tintash"
+    // never matched a rule condition written as `contains "tintash"` — plain .includes() is
+    // case-sensitive, and nobody writing a free-text content/filename condition expects to have
+    // to guess exact capitalization. Paperless's own tag/correspondent matching is always
+    // is_insensitive: true (attributes.service.ts) — text-comparison operators here match that
+    // convention. eq/neq/in/not_in stay exact, since those compare precise identifiers (a tag
+    // name, a document type), not free text.
     case "contains":
       if (Array.isArray(actual)) return actual.includes(expected);
-      return typeof actual === "string" && typeof expected === "string" && actual.includes(expected);
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.toLocaleLowerCase().includes(expected.toLocaleLowerCase())
+      );
     case "not_contains":
       if (Array.isArray(actual)) return !actual.includes(expected);
-      return !(typeof actual === "string" && typeof expected === "string" && actual.includes(expected));
+      return !(
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.toLocaleLowerCase().includes(expected.toLocaleLowerCase())
+      );
     case "starts_with":
-      return typeof actual === "string" && typeof expected === "string" && actual.startsWith(expected);
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.toLocaleLowerCase().startsWith(expected.toLocaleLowerCase())
+      );
     case "ends_with":
-      return typeof actual === "string" && typeof expected === "string" && actual.endsWith(expected);
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.toLocaleLowerCase().endsWith(expected.toLocaleLowerCase())
+      );
     case "regex":
       return typeof actual === "string" && typeof expected === "string" && safeRegexTest(expected, actual);
     case "in":

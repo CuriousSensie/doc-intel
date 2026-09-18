@@ -60,6 +60,7 @@
   "upload": {
     "dropTitle": "Izberite dokumente ali jih spustite sem",
     "dropHint": "Izberete lahko več datotek. Vsak dokument se obdela ločeno.",
+    "maxSize": "Do {size} na datoteko. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
     "uploading": "Nalaganje…",
     "upload": "Naloži",
     "uploadCount": "Naloži {count} dokumentov",

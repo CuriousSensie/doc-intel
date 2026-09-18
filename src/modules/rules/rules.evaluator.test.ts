@@ -58,6 +58,16 @@ describe("evaluateConditions — operators", () => {
     expect(evaluateConditions({ field: "document.content", op: "not_contains", value: "XYZ" }, documentSubject()).matched).toBe(true);
   });
 
+  // Real bug found via live testing: a real document's OCR'd content contained "Tintash" and a
+  // rule condition written as `contains "tintash"` silently never matched — plain .includes() is
+  // case-sensitive. contains/not_contains/starts_with/ends_with must be case-insensitive, since
+  // nobody writing a free-text condition expects to guess exact capitalization (matches
+  // Paperless's own is_insensitive: true tag/correspondent matching convention).
+  it("contains/starts_with/ends_with are case-insensitive", () => {
+    expect(evaluateConditions({ field: "document.content", op: "contains", value: "abc d.o.o." }, documentSubject()).matched).toBe(true);
+    expect(evaluateConditions({ field: "document.title", op: "starts_with", value: "invoice" }, documentSubject()).matched).toBe(true);
+  });
+
   it("starts_with / ends_with", () => {
     expect(evaluateConditions({ field: "document.title", op: "starts_with", value: "Invoice" }, documentSubject()).matched).toBe(true);
     expect(evaluateConditions({ field: "document.title", op: "ends_with", value: "42" }, documentSubject()).matched).toBe(true);

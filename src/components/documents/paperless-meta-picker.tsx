@@ -2,7 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,20 @@ export function PaperlessMetaPicker({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Real bug found via live testing: creating two brand-new tags back to back (multi-select
+  // "assign multiple tags" rule action) silently dropped the first one. createAndSelect() is
+  // async (a real network call to create the Paperless object) and closed over `value` at click
+  // time — starting a second create before the first one's onChange had round-tripped back into
+  // this component's `value` prop meant both calls computed `[...value, newId]` from the same
+  // stale (pre-first-create) array, so whichever resolved last overwrote the other's addition
+  // instead of both landing. This ref always holds the latest ids synchronously, independent of
+  // whether the parent's state update has re-rendered this component yet, so a create started
+  // while an earlier one is still in flight chains onto it instead of racing it.
+  const latestIdsRef = useRef(value);
+  useEffect(() => {
+    latestIdsRef.current = value;
+  }, [value]);
+
   const selected = options.filter((o) => value.includes(o.id));
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -58,18 +72,23 @@ export function PaperlessMetaPicker({
   const exactMatch = options.some((o) => o.name.toLowerCase() === query.trim().toLowerCase());
 
   function select(id: number) {
-    onChange(mode === "multi" ? [...value, id] : [id]);
+    const next = mode === "multi" ? [...latestIdsRef.current, id] : [id];
+    latestIdsRef.current = next;
+    onChange(next);
     setQuery("");
     setOpen(mode === "multi");
   }
 
   function remove(id: number) {
-    onChange(value.filter((v) => v !== id));
+    const next = latestIdsRef.current.filter((v) => v !== id);
+    latestIdsRef.current = next;
+    onChange(next);
   }
 
   function createAndSelect() {
     const name = query.trim();
     if (!name) return;
+    setQuery("");
     startTransition(async () => {
       try {
         const created = await createPaperlessMetaAction({
@@ -77,8 +96,9 @@ export function PaperlessMetaPicker({
           name,
           color: kind === "tag" ? newColor : undefined
         });
-        onChange(mode === "multi" ? [...value, created.id] : [created.id], created);
-        setQuery("");
+        const next = mode === "multi" ? [...latestIdsRef.current, created.id] : [created.id];
+        latestIdsRef.current = next;
+        onChange(next, created);
         setOpen(mode === "multi");
         setError(null);
       } catch (err) {

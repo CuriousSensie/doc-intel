@@ -43,6 +43,23 @@ async function mapWithConcurrency<T>(
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
 }
 
+// Serializes calls through this function to at most one in flight at a time. Concurrent
+// dispatchRuleActions() calls (Paperless field/tag writes) against the pinned all-in-one
+// Paperless instance were observed live to deadlock its Django ORM (auditlog signal + tags m2m
+// update on the same tag row), leaving Postgres backends stuck `idle in transaction` and the
+// backfill's applied_count permanently at 0 — reproduced with BACKFILL_DOCUMENT_CONCURRENCY's
+// full fan-out hitting the same tag concurrently. Reads (buildDocumentSubjectContext,
+// evaluateConditions) don't write to Paperless and stay concurrent; only the write path is
+// serialized, so this keeps most of the concurrency's wall-clock benefit.
+function createMutex() {
+  let tail: Promise<unknown> = Promise.resolve();
+  return function withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = tail.then(fn, fn);
+    tail = run.catch(() => undefined);
+    return run;
+  };
+}
+
 async function claimChunk(admin: AdminDb, orgId: string, ruleBackfillId: string, filter: BackfillFilter) {
   const { data, error } = await admin.rpc("claim_rule_backfill_documents", {
     p_rule_backfill_id: ruleBackfillId,
@@ -87,16 +104,60 @@ async function tryFinalize(admin: AdminDb, orgId: string, ruleBackfillId: string
 // checked before each claim, cursor-based pagination over the filtered document set (see
 // claim_rule_backfill_documents() in the migration for why this isn't a row-claim table), one
 // re-enqueue per chunk while still running.
+// rule_backfills.status is documented as worker-managed (no update RLS policy for authenticated
+// users) — pauseRuleBackfillAction()/cancelRuleBackfillAction() only ever set the Redis control
+// flag, so without this the DB row (and the UI reading it) stayed stuck on "running" forever
+// after a pause/cancel, even though the job chain had genuinely stopped re-enqueuing itself.
+// Called from two places: the top-of-job guard (a job that starts and finds itself already
+// paused/cancelled) and the end-of-chunk re-enqueue decision (a job that was "running" when it
+// started but got paused/cancelled while it was mid-chunk) — the second is the common real path,
+// since a pause/cancel almost always lands while a chunk is in flight, not between chunks. Only
+// overwrites a still-"running" row — never clobbers a terminal completed/failed status a
+// concurrent final chunk may have already written.
+async function persistNonRunningStatus(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  ruleBackfillId: string,
+  control: "paused" | "cancelled"
+): Promise<void> {
+  await admin
+    .from("rule_backfills")
+    .update({
+      status: control,
+      finished_at: control === "cancelled" ? new Date().toISOString() : null
+    })
+    .eq("id", ruleBackfillId)
+    .eq("organization_id", orgId)
+    .eq("status", "running");
+}
+
 export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
   const { orgId, ruleBackfillId } = job.data as BackfillRulePayload;
 
   const control = await getRuleBackfillControl(ruleBackfillId);
   if (control !== "running") {
     logger.info("rules.backfill.stopped", { orgId, ruleBackfillId, control });
+    if (control === "paused" || control === "cancelled") {
+      await persistNonRunningStatus(createAdminClient(), orgId, ruleBackfillId, control);
+    }
     return;
   }
 
   const admin = createAdminClient();
+
+  // resumeRuleBackfillAction() only sets the Redis control flag back to "running" and
+  // re-enqueues — it never touches this row (same "worker-managed status" reasoning as above),
+  // so a resumed backfill's DB status is still "paused" here. claim_rule_backfill_documents()
+  // internally requires status='running' to return any cursor at all; without this, a resume
+  // would silently claim zero documents and tryFinalize() would mark the backfill "completed"
+  // after only a partial run. Idempotent no-op once already "running".
+  await admin
+    .from("rule_backfills")
+    .update({ status: "running" })
+    .eq("id", ruleBackfillId)
+    .eq("organization_id", orgId)
+    .eq("status", "paused");
+
   const { data: backfill, error: backfillError } = await admin
     .from("rule_backfills")
     .select("*")
@@ -128,6 +189,7 @@ export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
   // the concurrent processing order below, so the cursor only needs to be set once after the
   // whole chunk finishes, not tracked per-iteration.
   const lastDocumentId = documents[documents.length - 1]?.id ?? backfill.cursor_document_id;
+  const withPaperlessWriteLock = createMutex();
 
   await mapWithConcurrency(documents, BACKFILL_DOCUMENT_CONCURRENCY, async (doc) => {
     try {
@@ -153,9 +215,9 @@ export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
       if (matched) {
         matchedDelta++;
         const fieldClaims = new Map<string, string>();
-        const outcomes = await dispatchRuleActions(ctx, rule, ruleRun.id, subject, fieldClaims, {
-          ruleBackfillId
-        });
+        const outcomes = await withPaperlessWriteLock(() =>
+          dispatchRuleActions(ctx, rule, ruleRun.id, subject, fieldClaims, { ruleBackfillId })
+        );
         if (outcomes.some((o) => o.status === "applied")) appliedDelta++;
       }
     } catch (err) {
@@ -190,5 +252,7 @@ export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
   const nextControl = await getRuleBackfillControl(ruleBackfillId);
   if (nextControl === "running") {
     await enqueue(QUEUE_NAMES.backfillRule, { orgId, ruleBackfillId });
+  } else if (nextControl === "paused" || nextControl === "cancelled") {
+    await persistNonRunningStatus(admin, orgId, ruleBackfillId, nextControl);
   }
 }

@@ -130,9 +130,12 @@ const setCustomFieldActionSchema = z.object({
   value: conditionValueSchema
 });
 
+// value: null clears the field (Paperless document_type/correspondent are single nullable FKs,
+// so "remove" means unset, not "remove one of several" the way remove_tag does) — added
+// alongside the guided rule builder's "remove" operation for these two attribute kinds.
 const setDocumentTypeActionSchema = z.object({
   type: z.literal("set_document_type"),
-  value: z.string().trim().min(1)
+  value: z.string().trim().min(1).nullable()
 });
 
 const addRemoveTagActionSchema = z.object({
@@ -142,7 +145,7 @@ const addRemoveTagActionSchema = z.object({
 
 const setCorrespondentActionSchema = z.object({
   type: z.literal("set_correspondent"),
-  value: z.string().trim().min(1)
+  value: z.string().trim().min(1).nullable()
 });
 
 const setStoragePathActionSchema = z.object({

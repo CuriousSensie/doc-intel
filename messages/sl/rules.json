@@ -99,6 +99,7 @@
       "related": "Povezano"
     },
     "addAction": "Dodaj dejanje",
+    "attributeRemoveClearsValue": "Počisti trenutno vrednost — ni česa izbrati.",
     "needsConditionAndAction": "Pred shranjevanjem dodajte vsaj en pogoj in eno dejanje.",
     "searchPlaceholder": "Iščite stranke, projekte, pogodbe …",
     "searchFailed": "Iskanje ni uspelo",

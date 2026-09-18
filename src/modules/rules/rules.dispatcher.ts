@@ -207,9 +207,16 @@ export async function dispatchRuleActions(
   const outcomes: ActionOutcome[] = [];
   const userOwnedFieldKeys =
     subject.kind === "document" ? await fetchUserOwnedFieldKeys(ctx, subject.documentId) : new Set<string>();
+  // Real bug found via live testing: two add_tag actions in the same rule (the guided builder's
+  // new multi-tag row expands to one add_tag per tag) each independently recomputed "current
+  // tags" from subject.fields — a snapshot taken once, before any action ran — so the second
+  // add_tag's PATCH overwrote the first tag's addition instead of layering on top of it. This
+  // holds the actually-current tag id list across every add_tag/remove_tag in one dispatch,
+  // lazily seeded from the subject snapshot and updated after each write.
+  const tagState: { ids: number[] | null } = { ids: null };
 
   for (const action of rule.actions as unknown as RuleAction[]) {
-    outcomes.push(await dispatchOne(ctx, rule, ruleRunId, subject, fieldClaims, userOwnedFieldKeys, action, options));
+    outcomes.push(await dispatchOne(ctx, rule, ruleRunId, subject, fieldClaims, userOwnedFieldKeys, action, options, tagState));
   }
 
   return outcomes;
@@ -223,7 +230,8 @@ async function dispatchOne(
   fieldClaims: Map<string, string>,
   userOwnedFieldKeys: Set<string>,
   action: RuleAction,
-  options: { ruleBackfillId?: string | null }
+  options: { ruleBackfillId?: string | null },
+  tagState: { ids: number[] | null }
 ): Promise<ActionOutcome> {
   if (action.type === "connect_entity" || action.type === "disconnect_entity" || action.type === "assign_responsible") {
     const ref = action.entity_ref;
@@ -283,24 +291,30 @@ async function dispatchOne(
         custom_fields: [{ field: def.paperless_custom_field_id, value: action.value }]
       });
     } else if (action.type === "set_document_type") {
-      const id = await findOrCreateDocumentTypeId(ctx, action.value);
+      // value: null is the guided builder's "remove document type" operation — Paperless's
+      // document_type is a single nullable FK, so removing means unsetting it, not finding an
+      // object to remove.
+      const id = action.value === null ? null : await findOrCreateDocumentTypeId(ctx, action.value);
       await updatePaperlessDocument(client, subject.paperlessDocumentId, { document_type: id });
     } else if (action.type === "set_correspondent") {
-      const id = await findOrCreateCorrespondentId(ctx, action.value);
+      const id = action.value === null ? null : await findOrCreateCorrespondentId(ctx, action.value);
       await updatePaperlessDocument(client, subject.paperlessDocumentId, { correspondent: id });
     } else if (action.type === "add_tag" || action.type === "remove_tag") {
       const id = action.type === "add_tag" ? await findOrCreateTagId(ctx, action.value) : await findExistingTagId(ctx, action.value);
       if (id === null) return { action, status: "noop_tag_not_found" };
 
-      const currentTags = subject.fields["document.tags"];
-      const allTags = await getCachedTags(client, ctx.orgId);
-      const idByName = new Map(allTags.map((t) => [t.name, t.id]));
-      const currentIds = currentTags.map((name) => idByName.get(name)).filter((v): v is number => v !== undefined);
+      if (tagState.ids === null) {
+        const currentTags = subject.fields["document.tags"];
+        const allTags = await getCachedTags(client, ctx.orgId);
+        const idByName = new Map(allTags.map((t) => [t.name, t.id]));
+        tagState.ids = currentTags.map((name) => idByName.get(name)).filter((v): v is number => v !== undefined);
+      }
       const nextIds =
         action.type === "add_tag"
-          ? [...new Set([...currentIds, id])]
-          : currentIds.filter((tagId) => tagId !== id);
+          ? [...new Set([...tagState.ids, id])]
+          : tagState.ids.filter((tagId) => tagId !== id);
       await updatePaperlessDocument(client, subject.paperlessDocumentId, { tags: nextIds });
+      tagState.ids = nextIds;
     } else {
       // set_storage_path: no createOwnedObject wrapper exists for storage paths yet — recorded
       // as a known gap rather than silently guessed at, since specs/07 lists it as an action but
@@ -339,7 +353,7 @@ async function dispatchOne(
       rule_id: rule.id
     });
     if (error) throw error;
-    return { action, status: "applied" };
+    return recordRuleActionOutcome(ctx, rule, ruleRunId, action, "create_reminder", subject);
   }
 
   if (action.type === "notify") {
@@ -349,8 +363,36 @@ async function dispatchOne(
       message: action.message,
       metadata: { ruleId: rule.id, documentId: subject.kind === "document" ? subject.documentId : null }
     });
-    return { action, status: "applied" };
+    return recordRuleActionOutcome(ctx, rule, ruleRunId, action, "notify", subject);
   }
 
   return { action, status: "skipped_unknown_action" };
+}
+
+// create_reminder/notify's domain write (a reminders insert / a notifications insert) is
+// already done above by the time this runs — apply_rule_action()'s own catch-all branch exists
+// exactly for this ("assign_responsible / create_reminder / notify: domain write already
+// performed by the caller... this call only records the run outcome and audit event uniformly"),
+// but the dispatcher never actually called it for these two action types, found via live
+// testing: a real notify action fired and the notification was genuinely created, yet
+// rule_runs.actions_applied stayed empty and no audit_logs "rule.applied" row was ever written —
+// the run looked like nothing happened even though it had.
+async function recordRuleActionOutcome(
+  ctx: ServiceContext,
+  rule: Rule,
+  ruleRunId: string,
+  action: RuleAction,
+  actionType: string,
+  subject: SubjectContext
+): Promise<ActionOutcome> {
+  const { data: status, error } = await ctx.db.rpc("apply_rule_action", {
+    p_organization_id: ctx.orgId,
+    p_rule_id: rule.id,
+    p_rule_run_id: ruleRunId,
+    p_action_type: actionType,
+    p_action: action as never,
+    p_document_id: subject.kind === "document" ? subject.documentId : null
+  });
+  if (error) throw error;
+  return { action, status: status as string };
 }

@@ -60,6 +60,7 @@
   "upload": {
     "dropTitle": "Choose documents or drop them here",
     "dropHint": "Multiple files are fine. Each document is ingested separately.",
+    "maxSize": "Up to {size} per file. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
     "uploading": "Uploading…",
     "upload": "Upload",
     "uploadCount": "Upload {count} documents",

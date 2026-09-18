@@ -99,6 +99,7 @@
       "related": "Related"
     },
     "addAction": "Add action",
+    "attributeRemoveClearsValue": "Clears the current value — nothing to pick.",
     "needsConditionAndAction": "Add at least one condition and one action before saving.",
     "searchPlaceholder": "Search customers, projects, contracts…",
     "searchFailed": "Search failed",

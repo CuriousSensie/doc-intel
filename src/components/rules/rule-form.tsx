@@ -64,7 +64,8 @@ type ActionRow = {
   mode: "attribute" | "entity";
   attributeKind: AttributeKind;
   attributeOperation: AttributeOperation;
-  metaId: number | null;
+  metaId: number | null; // correspondent/documentType — a document can only have one of each
+  metaIds: number[]; // tag — a document can carry any number of tags, so this row can assign/remove several at once
   entityOperation: EntityOperation;
   entity: { id: string; label: string } | null; // connect_entity/disconnect_entity
   relation: (typeof RELATIONS)[number];
@@ -87,6 +88,7 @@ function newActionRow(): ActionRow {
     attributeKind: "tag",
     attributeOperation: "assign",
     metaId: null,
+    metaIds: [],
     entityOperation: "connect",
     entity: null,
     relation: "related"
@@ -171,57 +173,75 @@ function conditionRowsFromDslWithMeta(
 // show a human-readable chip for a bare id. A `by:"identifier"`/`by:"name"` ref (possible if the
 // rule predates this UI, or was hand-authored) has no single resolvable id to preselect — that
 // row comes back with entity: null, a reasonable degradation rather than a crash.
+// add_tag/remove_tag stay one-DSL-action-per-tag server-side (specs/07's own action shape) —
+// this UI groups them into one row per contiguous same-operation run so "assign tags A, B, C"
+// edits as a single multi-select row instead of three separate ones. A rule authored outside
+// this builder with tag actions interleaved with other action types would split back into
+// multiple rows on hydration rather than merging non-contiguous ones — a reasonable degradation
+// for a guided subset over the full DSL, not a data-loss risk (every action still round-trips).
 function actionRowsFromDslWithMeta(
   actions: unknown,
   metaOptions: { tags: MetaOption[]; correspondents: MetaOption[]; documentTypes: MetaOption[] }
 ): ActionRow[] {
   const list = Array.isArray(actions) ? (actions as Array<Record<string, unknown>>) : [];
-  const rows = list
-    .map((action): ActionRow | null => {
-      const type = action.type as string;
-      if (type === "add_tag" || type === "remove_tag") {
-        return {
-          ...newActionRow(),
-          key: nextKey(),
-          attributeKind: "tag",
-          attributeOperation: type === "remove_tag" ? "remove" : "assign",
-          metaId: findMetaIdByName(metaOptions.tags, action.value)
-        };
+  const rows: ActionRow[] = [];
+  let i = 0;
+  while (i < list.length) {
+    const action = list[i];
+    const type = action.type as string;
+
+    if (type === "add_tag" || type === "remove_tag") {
+      const metaIds: number[] = [];
+      while (i < list.length && list[i].type === type) {
+        const id = findMetaIdByName(metaOptions.tags, list[i].value);
+        if (id !== null) metaIds.push(id);
+        i += 1;
       }
-      if (type === "set_document_type") {
-        return {
-          ...newActionRow(),
-          key: nextKey(),
-          attributeKind: "documentType",
-          metaId: findMetaIdByName(metaOptions.documentTypes, action.value),
-          attributeOperation: "assign"
-        };
-      }
-      if (type === "set_correspondent") {
-        return {
-          ...newActionRow(),
-          key: nextKey(),
-          attributeKind: "correspondent",
-          metaId: findMetaIdByName(metaOptions.correspondents, action.value),
-          attributeOperation: "assign"
-        };
-      }
-      if (type === "connect_entity" || type === "disconnect_entity") {
-        const ref = action.entity_ref as { by?: string; entityId?: string; label?: string } | undefined;
-        const relation = (action.relation as (typeof RELATIONS)[number]) ?? "related";
-        const entity = ref?.by === "id" && ref.entityId && ref.label ? { id: ref.entityId, label: ref.label } : null;
-        return {
-          ...newActionRow(),
-          key: nextKey(),
-          mode: "entity",
-          entityOperation: type === "disconnect_entity" ? "disconnect" : "connect",
-          entity,
-          relation
-        };
-      }
-      return null;
-    })
-    .filter((r): r is ActionRow => r !== null);
+      rows.push({
+        ...newActionRow(),
+        key: nextKey(),
+        attributeKind: "tag",
+        attributeOperation: type === "remove_tag" ? "remove" : "assign",
+        metaIds
+      });
+      continue;
+    }
+
+    i += 1;
+    if (type === "set_document_type") {
+      rows.push({
+        ...newActionRow(),
+        key: nextKey(),
+        attributeKind: "documentType",
+        metaId: findMetaIdByName(metaOptions.documentTypes, action.value),
+        attributeOperation: "assign"
+      });
+      continue;
+    }
+    if (type === "set_correspondent") {
+      rows.push({
+        ...newActionRow(),
+        key: nextKey(),
+        attributeKind: "correspondent",
+        metaId: findMetaIdByName(metaOptions.correspondents, action.value),
+        attributeOperation: "assign"
+      });
+      continue;
+    }
+    if (type === "connect_entity" || type === "disconnect_entity") {
+      const ref = action.entity_ref as { by?: string; entityId?: string; label?: string } | undefined;
+      const relation = (action.relation as (typeof RELATIONS)[number]) ?? "related";
+      const entity = ref?.by === "id" && ref.entityId && ref.label ? { id: ref.entityId, label: ref.label } : null;
+      rows.push({
+        ...newActionRow(),
+        key: nextKey(),
+        mode: "entity",
+        entityOperation: type === "disconnect_entity" ? "disconnect" : "connect",
+        entity,
+        relation
+      });
+    }
+  }
   return rows;
 }
 
@@ -240,6 +260,7 @@ function serializeActionRows(rows: ActionRow[]) {
     attributeKind: row.attributeKind,
     attributeOperation: row.attributeOperation,
     metaId: row.metaId,
+    metaIds: row.metaIds,
     entityOperation: row.entityOperation,
     entityId: row.entity?.id ?? null,
     relation: row.relation
@@ -286,7 +307,7 @@ export function RuleForm({
     initial ? conditionRowsFromDslWithMeta(initial.conditions, initialMetaOptions) : [newConditionRow()]
   );
   const [actionRows, setActionRows] = useState<ActionRow[]>(() =>
-    initial ? actionRowsFromDslWithMeta(initial.actions, initialMetaOptions).slice(0, 2) : [newActionRow()]
+    initial ? actionRowsFromDslWithMeta(initial.actions, initialMetaOptions) : [newActionRow()]
   );
   const [initialSignature] = useState(() =>
     initial
@@ -327,9 +348,14 @@ export function RuleForm({
       ? row.metaId !== null
       : row.text.trim().length > 0
   );
-  const actionsValid = actionRows.every((row) =>
-    row.mode === "entity" ? row.entity !== null : row.metaId !== null
-  );
+  const actionsValid = actionRows.every((row) => {
+    if (row.mode === "entity") return row.entity !== null;
+    if (row.attributeKind === "tag") return row.metaIds.length > 0;
+    // Removing a document type/correspondent clears it — there's no value to pick, so the row
+    // is already complete as soon as that combination is chosen.
+    if (row.attributeOperation === "remove") return true;
+    return row.metaId !== null;
+  });
   const canSubmit = name.trim().length > 0 && conditionRows.length > 0 && actionRows.length > 0 && conditionsValid && actionsValid;
 
   function handleSubmit() {
@@ -347,25 +373,27 @@ export function RuleForm({
       })
     };
 
-    const actions = actionRows.map((row) => {
+    const actions = actionRows.flatMap((row): Record<string, unknown>[] => {
       if (row.mode === "attribute") {
         if (row.attributeKind === "tag") {
-          return {
-            type: row.attributeOperation === "remove" ? "remove_tag" : "add_tag",
-            value: nameForMetaId("tag", row.metaId)
-          };
+          // One DSL action per selected tag — the multi-select row expands to N add_tag/
+          // remove_tag actions, since specs/07's action shape has no "list of tags" variant.
+          const type = row.attributeOperation === "remove" ? "remove_tag" : "add_tag";
+          return row.metaIds.map((id) => ({ type, value: nameForMetaId("tag", id) }));
         }
-        if (row.attributeKind === "documentType") {
-          return { type: "set_document_type", value: nameForMetaId("documentType", row.metaId) };
-        }
-        return { type: "set_correspondent", value: nameForMetaId("correspondent", row.metaId) };
+        const kind = row.attributeKind === "documentType" ? "documentType" : "correspondent";
+        const actionType = kind === "documentType" ? "set_document_type" : "set_correspondent";
+        const value = row.attributeOperation === "remove" ? null : nameForMetaId(kind, row.metaId);
+        return [{ type: actionType, value }];
       }
 
-      return {
-        type: row.entityOperation === "disconnect" ? "disconnect_entity" : "connect_entity",
-        entity_ref: { by: "id" as const, entityId: row.entity!.id },
-        relation: row.relation
-      };
+      return [
+        {
+          type: row.entityOperation === "disconnect" ? "disconnect_entity" : "connect_entity",
+          entity_ref: { by: "id" as const, entityId: row.entity!.id },
+          relation: row.relation
+        }
+      ];
     });
 
     startTransition(async () => {
@@ -648,16 +676,7 @@ export function RuleForm({
                     onChange={(e) => {
                       const operation = e.target.value as AttributeOperation;
                       setActionRows((rows) =>
-                        rows.map((r) =>
-                          r.key === row.key
-                            ? {
-                                ...r,
-                                attributeOperation: operation,
-                                attributeKind: operation === "remove" ? "tag" : r.attributeKind,
-                                metaId: null
-                              }
-                            : r
-                        )
+                        rows.map((r) => (r.key === row.key ? { ...r, attributeOperation: operation, metaId: null, metaIds: [] } : r))
                       );
                     }}
                     value={row.attributeOperation}
@@ -672,7 +691,7 @@ export function RuleForm({
                       setActionRows((rows) =>
                         rows.map((r) =>
                           r.key === row.key
-                            ? { ...r, attributeKind: e.target.value as AttributeKind, metaId: null }
+                            ? { ...r, attributeKind: e.target.value as AttributeKind, metaId: null, metaIds: [] }
                             : r
                         )
                       )
@@ -680,40 +699,51 @@ export function RuleForm({
                     value={row.attributeKind}
                   >
                     <option value="tag">{t("attributeKinds.tag")}</option>
-                    {row.attributeOperation === "assign" ? (
-                      <>
-                        <option value="correspondent">{t("attributeKinds.correspondent")}</option>
-                        <option value="documentType">{t("attributeKinds.documentType")}</option>
-                      </>
-                    ) : null}
+                    <option value="correspondent">{t("attributeKinds.correspondent")}</option>
+                    <option value="documentType">{t("attributeKinds.documentType")}</option>
                   </select>
-                  <PaperlessMetaPicker
-                    kind={row.attributeKind}
-                    mode="single"
-                    onChange={(ids, newOption) => {
-                      if (newOption) addMetaOption(row.attributeKind, newOption);
-                      setActionRows((rows) =>
-                        rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
-                      );
-                    }}
-                    options={optionsFor(row.attributeKind)}
-                    value={row.metaId !== null ? [row.metaId] : []}
-                  />
+                  {row.attributeKind === "tag" ? (
+                    <PaperlessMetaPicker
+                      kind="tag"
+                      mode="multi"
+                      onChange={(ids, newOption) => {
+                        if (newOption) addMetaOption("tag", newOption);
+                        setActionRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, metaIds: ids } : r)));
+                      }}
+                      options={optionsFor("tag")}
+                      value={row.metaIds}
+                    />
+                  ) : row.attributeOperation === "remove" ? (
+                    // A document type/correspondent is a single nullable field — "remove" always
+                    // means "clear it," so there's nothing to pick.
+                    <p className="flex items-center text-sm text-muted">{t("attributeRemoveClearsValue")}</p>
+                  ) : (
+                    <PaperlessMetaPicker
+                      kind={row.attributeKind}
+                      mode="single"
+                      onChange={(ids, newOption) => {
+                        if (newOption) addMetaOption(row.attributeKind, newOption);
+                        setActionRows((rows) =>
+                          rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
+                        );
+                      }}
+                      options={optionsFor(row.attributeKind)}
+                      value={row.metaId !== null ? [row.metaId] : []}
+                    />
+                  )}
                 </div>
               )}
             </div>
           ))}
-          {actionRows.length < 2 ? (
-            <Button
-              className="justify-self-start"
-              onClick={() => setActionRows((rows) => [...rows, newActionRow()])}
-              type="button"
-              variant="outline"
-            >
-              <Plus className="size-4" />
-              {t("addAction")}
-            </Button>
-          ) : null}
+          <Button
+            className="justify-self-start"
+            onClick={() => setActionRows((rows) => [...rows, newActionRow()])}
+            type="button"
+            variant="outline"
+          >
+            <Plus className="size-4" />
+            {t("addAction")}
+          </Button>
         </CardContent>
       </Card>
 

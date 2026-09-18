@@ -917,6 +917,16 @@ export async function updateDocument(
     metadata: { fields: Object.keys(input) }
   });
 
+  // Real gap found via live testing: the rules engine's document.updated trigger only ever
+  // fired from sync-paperless-document.ts (webhook/reconciliation noticing a type/date change
+  // coming from Paperless), never from this function — the one path a user actually associates
+  // with "I edited a document." A rule configured on document.updated never ran for an edit made
+  // through this app's own edit form, regardless of what changed. field_provenance above already
+  // protects any field the user just touched from being overwritten by the fired rule (user-edit-
+  // wins), so firing on every successful patch here — not just type/date — is safe: a rule can
+  // still act on other conditions/fields this edit didn't touch.
+  await enqueue(QUEUE_NAMES.runRule, { orgId: organizationId, documentId, trigger: "document.updated" });
+
   return updatedRow;
 }
 
