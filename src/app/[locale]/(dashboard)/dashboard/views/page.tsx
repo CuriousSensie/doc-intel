@@ -1,4 +1,3 @@
-import { Link } from "@/i18n/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +10,7 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { SavedViewRowActions } from "@/components/saved-views/saved-view-row-actions";
+import { TrackedViewLink } from "@/components/saved-views/tracked-view-link";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { ensureStarterViews, type SavedView } from "@/modules/saved-views/saved-views.service";
@@ -68,9 +68,14 @@ export default async function ViewsPage() {
             return (
               <TableRow key={view.id}>
                 <TableCell>
-                  <Link className="font-semibold hover:underline" href={href}>
+                  <TrackedViewLink
+                    className="font-semibold hover:underline"
+                    href={href}
+                    id={view.id}
+                    name={view.name}
+                  >
                     {view.name}
-                  </Link>
+                  </TrackedViewLink>
                 </TableCell>
                 <TableCell>
                   <Badge variant={view.view_kind === "static" ? "accent" : "outline"}>

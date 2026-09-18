@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 
 import { DocumentActionsBar } from "@/components/documents/document-actions-bar";
 import { DocumentDetailsTab } from "@/components/documents/document-details-tab";
@@ -10,6 +10,7 @@ import { DocumentStatusBadge } from "@/components/documents/document-status-badg
 import { PdfJsViewer } from "@/components/documents/pdf-js-viewer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { recordDocumentOpen } from "@/lib/dashboard/recent-activity";
 import {
   toDocumentTypeKey,
   type PaperlessCorrespondent,
@@ -132,6 +133,13 @@ export function DocumentDetailShell({
   );
   const [draft, setDraft] = useState<DocumentDraft>(baseline);
   const isDirty = !draftsEqual(draft, baseline);
+
+  // Easy Access "recently accessed documents" (dashboard, localStorage-only) — record on arrival
+  // regardless of entry point (list row, search, direct link).
+  useEffect(() => {
+    recordDocumentOpen({ id: initialDocument.id, title: initialDocument.title });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDocument.id]);
 
   function handleDraftChange(next: Partial<DocumentDraft>) {
     setDraft((d) => ({ ...d, ...next }));

@@ -4,12 +4,14 @@ import { Link } from "@/i18n/navigation";
 import { DocumentProcessingRefresh } from "@/components/documents/document-processing-refresh";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form";
+import { MemberDashboard } from "@/components/dashboard/member-dashboard";
+import { OwnerDashboard } from "@/components/dashboard/owner-dashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { documentsConfig } from "@/config/documents";
 import { isFeatureEnabled } from "@/config/features";
-import { getOwnerAdminSummary, getMemberSummary } from "@/modules/dashboard/dashboard.service";
+import { getAttentionDocuments, getRecentUploads } from "@/modules/dashboard/dashboard.service";
 import { requireUser } from "@/modules/auth/session";
 import { listRecentUploads } from "@/modules/documents/documents.service";
 import { listImportJobs } from "@/modules/imports/imports.service";
@@ -18,22 +20,6 @@ import { getMembership } from "@/modules/organizations/organizations.service";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-
-function StatRow({ label, value, href }: { label: string; value: number | string; href?: string }) {
-  const content = (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2">
-      <span className="text-sm text-muted">{label}</span>
-      <span className="text-lg font-black">{value}</span>
-    </div>
-  );
-  return href ? (
-    <Link className="transition-opacity hover:opacity-80" href={href}>
-      {content}
-    </Link>
-  ) : (
-    content
-  );
-}
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -85,161 +71,6 @@ async function DocumentUploadPanel({ organizationId }: { organizationId: string 
   );
 }
 
-async function OwnerAdminHome({ organizationId }: { organizationId: string }) {
-  const [summary, t] = await Promise.all([
-    getOwnerAdminSummary(organizationId),
-    getTranslations("dashboard.home")
-  ]);
-  const documents = isFeatureEnabled("documents");
-  const entities = isFeatureEnabled("entities");
-
-  return (
-    <div className="grid gap-4">
-      {summary.provisioningStatus !== "ready" ? (
-        <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
-          {t("provisioningStatus")} <Badge variant="muted">{summary.provisioningStatus}</Badge>
-        </div>
-      ) : null}
-
-      {documents ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("documents")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-2">
-            <StatRow
-              href="/dashboard/documents"
-              label={t("ready")}
-              value={summary.documentCountsByStatus.ready ?? 0}
-            />
-            <StatRow
-              href="/dashboard/documents"
-              label={t("processing")}
-              value={
-                (summary.documentCountsByStatus.pending ?? 0) +
-                (summary.documentCountsByStatus.processing ?? 0)
-              }
-            />
-            <StatRow
-              href="/dashboard/documents"
-              label={t("failed")}
-              value={summary.documentCountsByStatus.failed ?? 0}
-            />
-            <StatRow
-              href="/dashboard/documents?hasNoConnections=true"
-              label={t("noConnections")}
-              value={summary.noConnectionsCount}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {entities && summary.entityCounts.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("entities")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-2">
-            {summary.entityCounts.map((type) => (
-              <StatRow
-                href={`/dashboard/entities/${type.typeKey}`}
-                key={type.typeKey}
-                label={type.typeName}
-                value={type.count}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {summary.pendingInvitesCount > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("team")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StatRow
-              href="/settings/team"
-              label={t("pendingInvites")}
-              value={summary.pendingInvitesCount}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
-  );
-}
-
-async function MemberHome({
-  organizationId,
-  canUpload
-}: {
-  organizationId: string;
-  canUpload: boolean;
-}) {
-  const [summary, t] = await Promise.all([
-    getMemberSummary(organizationId),
-    getTranslations("dashboard.home")
-  ]);
-
-  return (
-    <div className="grid gap-4">
-      {summary.attentionDocuments.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("needsAttention")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            {summary.attentionDocuments.map((doc) => (
-              <Link
-                className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 hover:bg-panel-strong/40"
-                href={`/dashboard/documents/${doc.id}`}
-                key={doc.id}
-              >
-                <span className="truncate text-sm font-semibold">{doc.title}</span>
-                <Badge variant="danger">{doc.status}</Badge>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("recentUploads")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          {summary.recentUploads.length === 0 ? (
-            <p className="text-sm text-muted">
-              {canUpload ? (
-                <>
-                  {t("noUploadsYet")}{" "}
-                  <Link className="underline underline-offset-4" href="/dashboard/documents">
-                    {t("uploadADocument")}
-                  </Link>
-                  .
-                </>
-              ) : (
-                t("noDocumentsYet")
-              )}
-            </p>
-          ) : (
-            summary.recentUploads.map((upload) => (
-              <div
-                className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2"
-                key={upload.id}
-              >
-                <span className="truncate text-sm font-semibold">{upload.filename}</span>
-                <Badge variant="muted">{upload.status}</Badge>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 async function ActivityHub({
   organizationId,
   userId,
@@ -251,15 +82,16 @@ async function ActivityHub({
 }) {
   const db = await createClient();
   const ctx = { db, orgId: organizationId, actorId: userId, correlationId: "dashboard" };
-  const [summary, imports, t] = await Promise.all([
-    getMemberSummary(organizationId),
+  const [attentionDocuments, recentUploads, imports, t] = await Promise.all([
+    getAttentionDocuments(organizationId),
+    getRecentUploads(organizationId),
     isFeatureEnabled("imports")
       ? listImportJobs(ctx).then((jobs) => jobs.slice(0, 5))
       : Promise.resolve([]),
     getTranslations("dashboard.home")
   ]);
   const items = [
-    ...summary.attentionDocuments.map((doc) => ({
+    ...attentionDocuments.map((doc) => ({
       key: `doc-${doc.id}`,
       href: `/dashboard/documents/${doc.id}`,
       title: doc.title,
@@ -267,7 +99,7 @@ async function ActivityHub({
       badge: doc.status,
       badgeVariant: "danger" as const
     })),
-    ...summary.recentUploads.slice(0, 5).map((upload) => ({
+    ...recentUploads.slice(0, 5).map((upload) => ({
       key: `upload-${upload.id}`,
       href: "/dashboard/documents",
       title: upload.filename,
@@ -328,8 +160,48 @@ async function ActivityHub({
   );
 }
 
-export default async function DashboardPage() {
+// Role gate (per project decision, overrides the stale organization_role enum grouping): the
+// only roles that matter for this page are "owner" (org creator) and everyone else ("member",
+// with or without the read-only permission). The unrelated platform-level admin
+// (profiles.is_app_admin, gates /admin, all-tenant access) never affects this branch.
+async function RoleGatedHome({
+  organizationId,
+  userId,
+  selectedMemberId
+}: {
+  organizationId: string;
+  userId: string;
+  selectedMemberId?: string;
+}) {
+  const membership = await getMembership(organizationId, userId);
+  const role = membership?.role;
+  const isOwner = role === "owner";
+  const canWrite = role !== "read-only";
+
+  return (
+    <div className="grid gap-4">
+      <ActivityHub canWrite={canWrite} organizationId={organizationId} userId={userId} />
+      {canWrite ? <DocumentUploadPanel organizationId={organizationId} /> : null}
+      {isOwner ? (
+        <OwnerDashboard
+          organizationId={organizationId}
+          selectedMemberId={selectedMemberId}
+          userId={userId}
+        />
+      ) : (
+        <MemberDashboard canUpload={canWrite} organizationId={organizationId} userId={userId} />
+      )}
+    </div>
+  );
+}
+
+export default async function DashboardPage({
+  searchParams
+}: {
+  searchParams: Promise<{ member?: string }>;
+}) {
   const { profile, user } = await requireUser("/dashboard");
+  const { member: selectedMemberId } = await searchParams;
   const t = await getTranslations("dashboard.home");
   const organizationId = isFeatureEnabled("organizations")
     ? await getActiveOrganizationId(user.id)
@@ -347,42 +219,16 @@ export default async function DashboardPage() {
       </div>
 
       {organizationId ? (
-        <RoleGatedHome organizationId={organizationId} userId={user.id} />
+        <RoleGatedHome
+          organizationId={organizationId}
+          selectedMemberId={selectedMemberId}
+          userId={user.id}
+        />
       ) : (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-muted">
           {t("notInOrganization")}
         </p>
       )}
-    </div>
-  );
-}
-
-async function RoleGatedHome({
-  organizationId,
-  userId
-}: {
-  organizationId: string;
-  userId: string;
-}) {
-  const membership = await getMembership(organizationId, userId);
-  const role = membership?.role;
-  const canUpload = role === "owner" || role === "admin" || role === "member";
-
-  if (role === "owner" || role === "admin") {
-    return (
-      <div className="grid gap-4">
-        <ActivityHub canWrite organizationId={organizationId} userId={userId} />
-        {canUpload ? <DocumentUploadPanel organizationId={organizationId} /> : null}
-        <OwnerAdminHome organizationId={organizationId} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      <ActivityHub canWrite={canUpload} organizationId={organizationId} userId={userId} />
-      {canUpload ? <DocumentUploadPanel organizationId={organizationId} /> : null}
-      <MemberHome canUpload={canUpload} organizationId={organizationId} />
     </div>
   );
 }

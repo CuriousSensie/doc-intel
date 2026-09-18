@@ -1467,6 +1467,14 @@ export type Database = {
         Args: { p_keep_id: string; p_merge_id: string };
         Returns: undefined;
       };
+      get_org_dashboard_counts: {
+        Args: { p_organization_id: string };
+        Returns: { documents: number; entities: number; connections: number }[];
+      };
+      get_member_dashboard_counts: {
+        Args: { p_organization_id: string; p_user_id: string };
+        Returns: { documents: number; entities: number; connections: number }[];
+      };
     };
     Enums: {
       organization_role: "owner" | "admin" | "member" | "read-only";
