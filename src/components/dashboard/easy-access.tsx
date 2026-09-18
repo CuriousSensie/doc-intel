@@ -12,7 +12,7 @@ import type { RecentItem } from "@/lib/dashboard/recent-activity";
 
 function RecentList({ items }: { items: RecentItem[] }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       {items.map((item) => (
         <Link
           className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 hover:bg-panel-strong/40"
@@ -57,8 +57,8 @@ export function EasyAccess() {
             title={t("noRecentActivity")}
           />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="grid gap-2">
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div className="grid content-start gap-2">
               <h3 className="text-sm font-semibold text-muted">{t("recentDocuments")}</h3>
               {isLoading ? (
                 <ListSkeleton />
@@ -68,7 +68,7 @@ export function EasyAccess() {
                 <RecentList items={documents} />
               )}
             </div>
-            <div className="grid gap-2">
+            <div className="grid content-start gap-2">
               <h3 className="text-sm font-semibold text-muted">{t("recentViews")}</h3>
               {isLoading ? (
                 <ListSkeleton />

@@ -54,7 +54,7 @@ function mergeFiles(current: QueuedFile[], files: File[]): QueuedFile[] {
 // specs/01-architecture.md §Upload: intent -> direct-to-storage PUT (bypasses our server) ->
 // complete. Client-side because step 2 has to run in the browser against the signed URL — a
 // Server Action can't do a direct browser-to-storage upload.
-export function DocumentUploadForm() {
+export function DocumentUploadForm({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<QueuedFile[]>([]);
@@ -168,7 +168,8 @@ export function DocumentUploadForm() {
     <form className="grid gap-4" onSubmit={handleSubmit}>
       <label
         className={[
-          "flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center transition",
+          "flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed text-center transition",
+          compact ? "gap-0.5 p-3" : "p-6",
           dragActive ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-muted/30",
           uploading ? "cursor-not-allowed opacity-70" : ""
         ].join(" ")}
@@ -199,9 +200,9 @@ export function DocumentUploadForm() {
           ref={inputRef}
           type="file"
         />
-        <FileUp className="mb-3 text-muted" size={28} aria-hidden />
+        <FileUp className={compact ? "text-muted" : "mb-3 text-muted"} size={compact ? 18 : 28} aria-hidden />
         <span className="text-sm font-semibold">{t("dropTitle")}</span>
-        <span className="mt-1 text-xs text-muted">{t("dropHint")}</span>
+        {compact ? null : <span className="mt-1 text-xs text-muted">{t("dropHint")}</span>}
       </label>
 
       {items.length > 0 ? (
@@ -239,13 +240,11 @@ export function DocumentUploadForm() {
         </div>
       ) : null}
 
-      <Button
-        className="justify-self-start"
-        disabled={uploading || uploadableCount === 0}
-        type="submit"
-      >
-        {uploading ? t("uploading") : uploadableCount > 1 ? t("uploadCount", { count: uploadableCount }) : t("upload")}
-      </Button>
+      {items.length > 0 ? (
+        <Button className="justify-self-start" disabled={uploading || uploadableCount === 0} type="submit">
+          {uploading ? t("uploading") : uploadableCount > 1 ? t("uploadCount", { count: uploadableCount }) : t("upload")}
+        </Button>
+      ) : null}
     </form>
   );
 }

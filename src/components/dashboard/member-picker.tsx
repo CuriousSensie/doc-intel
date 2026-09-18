@@ -54,7 +54,7 @@ export function MemberPicker({
     <div className="relative">
       <Button
         aria-expanded={open}
-        className="justify-between gap-3"
+        className="max-w-40 justify-between gap-2 sm:max-w-56"
         disabled={isPending}
         onClick={() => setOpen((v) => !v)}
         type="button"
@@ -65,7 +65,7 @@ export function MemberPicker({
       </Button>
 
       {open ? (
-        <div className="absolute z-10 mt-2 w-72 rounded-md border border-border bg-panel p-2 shadow-md">
+        <div className="absolute right-0 z-10 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-panel p-2 shadow-md sm:w-72">
           <Input
             autoFocus
             onChange={(e) => setQuery(e.target.value)}

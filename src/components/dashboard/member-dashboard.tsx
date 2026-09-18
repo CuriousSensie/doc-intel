@@ -3,10 +3,8 @@ import { getTranslations } from "next-intl/server";
 
 import { AiOverviewCard } from "@/components/dashboard/ai-overview-card";
 import { EasyAccess } from "@/components/dashboard/easy-access";
-import { StatsTileRow, type StatTile } from "@/components/dashboard/stats-tile-row";
-import { Badge } from "@/components/ui/badge";
+import { StatGroup, StatsList, type StatRow } from "@/components/dashboard/stats-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Link } from "@/i18n/navigation";
 import {
   getAttentionDocuments,
   getMemberStats,
@@ -14,60 +12,37 @@ import {
   getRecentUploads
 } from "@/modules/dashboard/dashboard.service";
 
-async function MyStatsSection({
-  organizationId,
-  userId
-}: {
-  organizationId: string;
-  userId: string;
-}) {
+function skeletonRows(count: number): StatRow[] {
+  return Array.from({ length: count }).map((_, index) => ({
+    key: `skeleton-${index}`,
+    label: "",
+    value: null
+  }));
+}
+
+async function MyStatsGroup({ organizationId, userId }: { organizationId: string; userId: string }) {
   const [stats, t] = await Promise.all([
     getMemberStats(organizationId, userId),
     getTranslations("dashboard.home")
   ]);
 
-  const tiles: StatTile[] = [
+  const rows: StatRow[] = [
     { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" },
     { key: "entities", label: t("stats.entities"), value: stats.entities, href: "/dashboard/entities" },
     { key: "connections", label: t("stats.connections"), value: stats.connections }
   ];
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("stats.myStats")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <StatsTileRow tiles={tiles} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function MyStatsSectionSkeleton() {
-  const tiles: StatTile[] = Array.from({ length: 3 }).map((_, index) => ({
-    key: `skeleton-${index}`,
-    label: "",
-    value: null
-  }));
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <StatsTileRow tiles={tiles} />
-      </CardContent>
-    </Card>
-  );
+  return <StatGroup rows={rows} title={t("stats.myStats")} />;
 }
 
 // Reduced set per temp.md §Team Member Organization Stats — no total documents/characters.
-async function ReducedOrgStatsSection({ organizationId }: { organizationId: string }) {
+async function ReducedOrgStatsGroup({ organizationId }: { organizationId: string }) {
   const [stats, t] = await Promise.all([
     getOrgStats(organizationId),
     getTranslations("dashboard.home")
   ]);
 
-  const tiles: StatTile[] = [
+  const rows: StatRow[] = [
     { key: "tags", label: t("stats.tags"), value: stats.tags },
     { key: "correspondents", label: t("stats.correspondents"), value: stats.correspondents },
     { key: "documentTypes", label: t("stats.documentTypes"), value: stats.documentTypes },
@@ -75,32 +50,7 @@ async function ReducedOrgStatsSection({ organizationId }: { organizationId: stri
     { key: "connections", label: t("stats.connections"), value: stats.connections }
   ];
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("stats.orgStats")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <StatsTileRow tiles={tiles} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function ReducedOrgStatsSectionSkeleton() {
-  const tiles: StatTile[] = Array.from({ length: 5 }).map((_, index) => ({
-    key: `skeleton-${index}`,
-    label: "",
-    value: null
-  }));
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <StatsTileRow tiles={tiles} />
-      </CardContent>
-    </Card>
-  );
+  return <StatGroup rows={rows} title={t("stats.orgStats")} />;
 }
 
 async function NeedsAttentionCard({ organizationId }: { organizationId: string }) {
@@ -111,22 +61,21 @@ async function NeedsAttentionCard({ organizationId }: { organizationId: string }
 
   if (documents.length === 0) return null;
 
+  const rows: StatRow[] = documents.map((doc) => ({
+    key: doc.id,
+    label: doc.title,
+    value: doc.status,
+    href: `/dashboard/documents/${doc.id}`,
+    badgeVariant: "danger"
+  }));
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("needsAttention")}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2">
-        {documents.map((doc) => (
-          <Link
-            className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 hover:bg-panel-strong/40"
-            href={`/dashboard/documents/${doc.id}`}
-            key={doc.id}
-          >
-            <span className="truncate text-sm font-semibold">{doc.title}</span>
-            <Badge variant="danger">{doc.status}</Badge>
-          </Link>
-        ))}
+      <CardContent>
+        <StatsList rows={rows} />
       </CardContent>
     </Card>
   );
@@ -149,38 +98,24 @@ async function RecentUploadsCard({
       <CardHeader>
         <CardTitle>{t("recentUploads")}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2">
+      <CardContent>
         {uploads.length === 0 ? (
-          <p className="text-sm text-muted">
-            {canUpload ? (
-              <>
-                {t("noUploadsYet")}{" "}
-                <Link className="underline underline-offset-4" href="/dashboard/documents">
-                  {t("uploadADocument")}
-                </Link>
-                .
-              </>
-            ) : (
-              t("noDocumentsYet")
-            )}
-          </p>
+          <p className="text-sm text-muted">{canUpload ? t("noUploadsYet") : t("noDocumentsYet")}</p>
         ) : (
-          uploads.map((upload) => (
-            <div
-              className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2"
-              key={upload.id}
-            >
-              <span className="truncate text-sm font-semibold">{upload.filename}</span>
-              <Badge variant="muted">{upload.status}</Badge>
-            </div>
-          ))
+          <StatsList
+            rows={uploads.map((upload) => ({
+              key: upload.id,
+              label: upload.filename,
+              value: upload.status
+            }))}
+          />
         )}
       </CardContent>
     </Card>
   );
 }
 
-export function MemberDashboard({
+export async function MemberDashboard({
   organizationId,
   userId,
   canUpload
@@ -189,15 +124,30 @@ export function MemberDashboard({
   userId: string;
   canUpload: boolean;
 }) {
+  const t = await getTranslations("dashboard.home");
+
   return (
     <div className="grid gap-4">
-      <Suspense fallback={<MyStatsSectionSkeleton />}>
-        <MyStatsSection organizationId={organizationId} userId={userId} />
-      </Suspense>
+      <div className="grid items-stretch gap-4 lg:grid-cols-2">
+        <AiOverviewCard />
 
-      <Suspense fallback={<ReducedOrgStatsSectionSkeleton />}>
-        <ReducedOrgStatsSection organizationId={organizationId} />
-      </Suspense>
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>{t("stats.title")}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <Suspense fallback={<StatGroup rows={skeletonRows(3)} title={t("stats.myStats")} />}>
+              <MyStatsGroup organizationId={organizationId} userId={userId} />
+            </Suspense>
+
+            <Suspense fallback={<StatGroup rows={skeletonRows(5)} title={t("stats.orgStats")} />}>
+              <ReducedOrgStatsGroup organizationId={organizationId} />
+            </Suspense>
+          </CardContent>
+        </Card>
+      </div>
+
+      <EasyAccess />
 
       <Suspense fallback={null}>
         <NeedsAttentionCard organizationId={organizationId} />
@@ -206,10 +156,6 @@ export function MemberDashboard({
       <Suspense fallback={null}>
         <RecentUploadsCard canUpload={canUpload} organizationId={organizationId} />
       </Suspense>
-
-      <EasyAccess />
-
-      <AiOverviewCard />
     </div>
   );
 }

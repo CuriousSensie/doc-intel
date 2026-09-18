@@ -4,7 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { AiOverviewCard } from "@/components/dashboard/ai-overview-card";
 import { EasyAccess } from "@/components/dashboard/easy-access";
 import { MemberPicker } from "@/components/dashboard/member-picker";
-import { StatsTileRow, type StatTile } from "@/components/dashboard/stats-tile-row";
+import { StatGroup, StatsList, type StatRow } from "@/components/dashboard/stats-list";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isFeatureEnabled } from "@/config/features";
@@ -31,13 +31,13 @@ async function ProvisioningBanner({ organizationId }: { organizationId: string }
   );
 }
 
-async function OrgStatsSection({ organizationId }: { organizationId: string }) {
+async function OrgStatsGroup({ organizationId }: { organizationId: string }) {
   const [stats, t] = await Promise.all([
     getOrgStats(organizationId),
     getTranslations("dashboard.home")
   ]);
 
-  const tiles: StatTile[] = [
+  const rows: StatRow[] = [
     { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" },
     {
       key: "noConnections",
@@ -52,35 +52,21 @@ async function OrgStatsSection({ organizationId }: { organizationId: string }) {
     { key: "documentTypes", label: t("stats.documentTypes"), value: stats.documentTypes }
   ];
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("stats.orgStats")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <StatsTileRow tiles={tiles} />
-      </CardContent>
-    </Card>
-  );
+  return <StatGroup rows={rows} title={t("stats.orgStats")} />;
 }
 
-function OrgStatsSectionSkeleton() {
-  const tiles: StatTile[] = Array.from({ length: 7 }).map((_, index) => ({
+function skeletonRows(count: number): StatRow[] {
+  return Array.from({ length: count }).map((_, index) => ({
     key: `skeleton-${index}`,
     label: "",
     value: null
   }));
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <StatsTileRow tiles={tiles} />
-      </CardContent>
-    </Card>
-  );
 }
 
-async function MemberStatsSection({
+// Rows only (no repeated group title) — the parent already renders the "Member stats" heading
+// alongside the picker (which itself shows the selected member's name), and the Suspense
+// fallback needs to sit under that same fixed heading.
+async function MemberStatsRows({
   organizationId,
   memberId
 }: {
@@ -92,23 +78,13 @@ async function MemberStatsSection({
     getTranslations("dashboard.home")
   ]);
 
-  const tiles: StatTile[] = [
+  const rows: StatRow[] = [
     { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" },
     { key: "entities", label: t("stats.entities"), value: stats.entities, href: "/dashboard/entities" },
     { key: "connections", label: t("stats.connections"), value: stats.connections }
   ];
 
-  return <StatsTileRow tiles={tiles} />;
-}
-
-function MemberStatsSectionSkeleton() {
-  const tiles: StatTile[] = Array.from({ length: 3 }).map((_, index) => ({
-    key: `skeleton-${index}`,
-    label: "",
-    value: null
-  }));
-
-  return <StatsTileRow tiles={tiles} />;
+  return <StatsList rows={rows} />;
 }
 
 async function PendingInvitesCard({ organizationId }: { organizationId: string }) {
@@ -125,10 +101,9 @@ async function PendingInvitesCard({ organizationId }: { organizationId: string }
         <CardTitle>{t("team")}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2">
-          <span className="text-sm text-muted">{t("pendingInvites")}</span>
-          <span className="text-lg font-black">{count}</span>
-        </div>
+        <StatsList
+          rows={[{ key: "pendingInvites", label: t("pendingInvites"), value: count, href: "/settings/team" }]}
+        />
       </CardContent>
     </Card>
   );
@@ -151,8 +126,6 @@ export async function OwnerDashboard({
     selectedMemberId && members.some((member) => member.user_id === selectedMemberId)
       ? selectedMemberId
       : userId;
-  const selectedMember = members.find((member) => member.user_id === memberId);
-  const memberLabel = selectedMember?.profile?.name || selectedMember?.profile?.email || "";
 
   return (
     <div className="grid gap-4">
@@ -160,33 +133,42 @@ export async function OwnerDashboard({
         <ProvisioningBanner organizationId={organizationId} />
       </Suspense>
 
-      {isFeatureEnabled("documents") ? (
-        <Suspense fallback={<OrgStatsSectionSkeleton />}>
-          <OrgStatsSection organizationId={organizationId} />
-        </Suspense>
-      ) : null}
+      <div className="grid items-stretch gap-4 lg:grid-cols-2">
+        <AiOverviewCard />
 
-      <Card>
-        <CardHeader className="flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>{t("stats.memberStats", { name: memberLabel })}</CardTitle>
-          {members.length > 0 ? (
-            <MemberPicker members={members} selectedMemberId={memberId} />
-          ) : null}
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<MemberStatsSectionSkeleton />} key={memberId}>
-            <MemberStatsSection memberId={memberId} organizationId={organizationId} />
-          </Suspense>
-        </CardContent>
-      </Card>
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>{t("stats.title")}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {isFeatureEnabled("documents") ? (
+              <Suspense fallback={<StatGroup rows={skeletonRows(7)} title={t("stats.orgStats")} />}>
+                <OrgStatsGroup organizationId={organizationId} />
+              </Suspense>
+            ) : null}
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {t("stats.memberStats")}
+                </h3>
+                {members.length > 0 ? (
+                  <MemberPicker members={members} selectedMemberId={memberId} />
+                ) : null}
+              </div>
+              <Suspense fallback={<StatsList rows={skeletonRows(3)} />} key={memberId}>
+                <MemberStatsRows memberId={memberId} organizationId={organizationId} />
+              </Suspense>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <EasyAccess />
 
       <Suspense fallback={null}>
         <PendingInvitesCard organizationId={organizationId} />
       </Suspense>
-
-      <EasyAccess />
-
-      <AiOverviewCard />
     </div>
   );
 }
