@@ -8,10 +8,15 @@ import { DocumentLargeCardsView } from "@/components/documents/document-large-ca
 import { DocumentListView } from "@/components/documents/document-list-view";
 import { DocumentSmallCardsView } from "@/components/documents/document-small-cards-view";
 import { BulkAssignAttributesDialog } from "@/components/documents/bulk-assign-attributes-dialog";
+import { SaveViewDialog } from "@/components/saved-views/save-view-dialog";
 import type { DocumentsViewMode } from "@/components/documents/documents-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { PaperlessCorrespondent, PaperlessDocumentType, PaperlessTag } from "@/lib/paperless/documents";
+import type {
+  PaperlessCorrespondent,
+  PaperlessDocumentType,
+  PaperlessTag
+} from "@/lib/paperless/documents";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import {
@@ -280,6 +285,15 @@ export function DocumentsBulkList({
             }}
             selection={selectAllMatching ? { filter } : { documentIds: [...selectedIds] }}
           />
+          {!selectAllMatching ? (
+            <SaveViewDialog
+              buttonLabel={t("bulk.saveStaticView")}
+              description={t("bulk.saveStaticViewDescription")}
+              documentIds={[...selectedIds]}
+              size="sm"
+              viewKind="static"
+            />
+          ) : null}
           <Button
             disabled={isPending}
             onClick={() => handleExport("csv")}

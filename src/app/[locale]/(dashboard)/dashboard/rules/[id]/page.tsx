@@ -9,7 +9,11 @@ import { RuleForm, type RuleFormValue } from "@/components/rules/rule-form";
 import { RuleTestPanel } from "@/components/rules/rule-test-panel";
 import { AuthorizationError, NotFoundError } from "@/lib/errors";
 import { paperlessFor } from "@/lib/paperless/client";
-import { getCachedCorrespondents, getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
+import {
+  getCachedCorrespondents,
+  getCachedDocumentTypes,
+  getCachedTags
+} from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
@@ -32,8 +36,13 @@ async function enrichEntityRefs(
 ): Promise<unknown> {
   const list = Array.isArray(actions) ? (actions as RuleAction[]) : [];
   const entityIds = list
-    .filter((a) => (a.type === "connect_entity" || a.type === "disconnect_entity") && a.entity_ref.by === "id")
-    .map((a) => (a as Extract<RuleAction, { type: "connect_entity" | "disconnect_entity" }>).entity_ref)
+    .filter(
+      (a) =>
+        (a.type === "connect_entity" || a.type === "disconnect_entity") && a.entity_ref.by === "id"
+    )
+    .map(
+      (a) => (a as Extract<RuleAction, { type: "connect_entity" | "disconnect_entity" }>).entity_ref
+    )
     .filter((ref): ref is Extract<typeof ref, { by: "id" }> => ref.by === "id")
     .map((ref) => ref.entityId);
 
@@ -80,14 +89,40 @@ export default async function RuleDetailPage({
   }
 
   const client = await paperlessFor(ctx.orgId);
-  const [runs, backfillsResult, tags, correspondents, documentTypes, enrichedActions] = await Promise.all([
-    listRuleRunsForRule(ctx, id),
-    listRuleBackfillsForRuleAction(id),
-    getCachedTags(client, ctx.orgId),
-    getCachedCorrespondents(client, ctx.orgId),
-    getCachedDocumentTypes(client, ctx.orgId),
-    enrichEntityRefs(ctx, rule.actions)
-  ]);
+  const [runs, backfillsResult, tags, correspondents, documentTypes, enrichedActions] =
+    await Promise.all([
+      listRuleRunsForRule(ctx, id),
+      listRuleBackfillsForRuleAction(id),
+      getCachedTags(client, ctx.orgId),
+      getCachedCorrespondents(client, ctx.orgId),
+      getCachedDocumentTypes(client, ctx.orgId),
+      enrichEntityRefs(ctx, rule.actions)
+    ]);
+  const runDocumentIds = [
+    ...new Set(
+      runs.map((run) => run.document_id).filter((value): value is string => Boolean(value))
+    )
+  ];
+  const { data: runDocuments } = runDocumentIds.length
+    ? await ctx.db
+        .from("documents")
+        .select("id, title, status")
+        .eq("organization_id", ctx.orgId)
+        .in("id", runDocumentIds)
+    : { data: [] as Array<{ id: string; title: string; status: string }> };
+  const documentById = new Map((runDocuments ?? []).map((document) => [document.id, document]));
+  const runRows = runs.flatMap((run) => {
+    const document = run.document_id ? documentById.get(run.document_id) : null;
+    const actionsApplied = Array.isArray(run.actions_applied) && run.actions_applied.length > 0;
+    return [
+      ...(run.matched
+        ? [{ id: `${run.id}-matched`, kind: "matched" as const, run, document }]
+        : []),
+      ...(actionsApplied
+        ? [{ id: `${run.id}-applied`, kind: "applied" as const, run, document }]
+        : [])
+    ];
+  });
   const recentBackfills = backfillsResult.data ?? [];
 
   const formValue: RuleFormValue = {
@@ -113,21 +148,33 @@ export default async function RuleDetailPage({
           />
         }
         runs={
-          <Card>
-            <CardHeader>
+          <Card className="flex min-h-0 flex-col lg:h-full">
+            <CardHeader className="shrink-0">
               <CardTitle>{t("detail.recentRuns")}</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-2">
-              {runs.length === 0 ? (
+            <CardContent className="grid min-h-0 gap-2 lg:overflow-y-auto">
+              {runRows.length === 0 ? (
                 <p className="text-sm text-muted">{t("detail.noRuns")}</p>
               ) : (
-                runs.map((run) => (
+                runRows.map((row) => (
                   <div
                     className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 text-sm"
-                    key={run.id}
+                    key={row.id}
                   >
-                    <span>{run.matched ? t("detail.runMatched") : t("detail.runNotMatched")}</span>
-                    <span className="text-xs text-muted">{t("detail.runStatus", { status: run.status })}</span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">
+                        {row.kind === "matched" ? t("detail.runMatched") : t("detail.runAppliedTo")}
+                        {" · "}
+                        {row.document?.title ?? t("detail.unknownDocument")}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {row.document?.status ?? row.run.status} ·{" "}
+                        {new Date(row.run.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-muted">
+                      {t("detail.runStatus", { status: row.run.status })}
+                    </span>
                   </div>
                 ))
               )}

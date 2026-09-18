@@ -51,7 +51,9 @@ function BackfillRow({ ruleId, backfill: initial }: { ruleId: string; backfill: 
   return (
     <div className="grid gap-2 rounded-md border border-border bg-panel px-3 py-2 text-sm">
       <div className="flex items-center justify-between gap-3">
-        <Badge variant={backfill.status === "running" ? "accent" : "muted"}>{backfill.status}</Badge>
+        <Badge variant={backfill.status === "running" ? "accent" : "muted"}>
+          {backfill.status}
+        </Badge>
         <span className="text-xs text-muted">
           {t("progress", { applied: backfill.applied_count, matched: backfill.matched_count })}
         </span>
@@ -138,12 +140,12 @@ export function RuleBackfillPanel({
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-col lg:h-full">
+      <CardHeader className="shrink-0">
         <CardTitle>{t("title")}</CardTitle>
         <p className="text-sm text-muted">{t("description")}</p>
       </CardHeader>
-      <CardContent className="grid gap-4">
+      <CardContent className="grid min-h-0 gap-4 lg:overflow-y-auto">
         <form action={startRuleBackfillFormAction} className="grid gap-3 sm:grid-cols-3">
           <input name="ruleId" type="hidden" value={ruleId} />
           <Input
@@ -175,19 +177,27 @@ export function RuleBackfillPanel({
               {isPending ? t("previewing") : t("preview")}
             </Button>
             {matchedCount !== null ? (
-              <span className="text-sm text-muted">{t("matchedCount", { count: matchedCount })}</span>
+              <span className="text-sm text-muted">
+                {t("matchedCount", { count: matchedCount })}
+              </span>
             ) : null}
           </div>
 
           {error ? <p className="text-sm text-danger sm:col-span-3">{error}</p> : null}
 
-          <Button className="sm:col-span-3" disabled={matchedCount === null || matchedCount === 0} type="submit">
+          <Button
+            className="sm:col-span-3"
+            disabled={matchedCount === null || matchedCount === 0}
+            type="submit"
+          >
             {t("start")}
           </Button>
         </form>
 
         <div className="grid gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("recentBackfills")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {t("recentBackfills")}
+          </p>
           {recentBackfills.length === 0 ? (
             <p className="text-sm text-muted">{t("noBackfills")}</p>
           ) : (

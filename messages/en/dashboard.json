@@ -18,7 +18,15 @@
     "noUploadsYet": "No uploads yet.",
     "uploadADocument": "Upload a document",
     "maxSizePerFile": "Up to {size} per file. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
-    "noDocumentsYet": "No documents yet."
+    "noDocumentsYet": "No documents yet.",
+    "activity": "Activity",
+    "openDocuments": "Documents",
+    "openViews": "Views",
+    "openImports": "Imports",
+    "noActivity": "No recent activity yet.",
+    "documentNeedsAttention": "Document needs attention",
+    "untitledImport": "Untitled import",
+    "importRows": "{count} rows"
   },
   "layout": {
     "accountFallback": "Account"

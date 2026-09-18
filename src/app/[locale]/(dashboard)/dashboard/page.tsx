@@ -5,14 +5,17 @@ import { DocumentProcessingRefresh } from "@/components/documents/document-proce
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentUploadForm } from "@/components/documents/document-upload-form";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { documentsConfig } from "@/config/documents";
 import { isFeatureEnabled } from "@/config/features";
 import { getOwnerAdminSummary, getMemberSummary } from "@/modules/dashboard/dashboard.service";
 import { requireUser } from "@/modules/auth/session";
 import { listRecentUploads } from "@/modules/documents/documents.service";
+import { listImportJobs } from "@/modules/imports/imports.service";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 import { getMembership } from "@/modules/organizations/organizations.service";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -237,6 +240,94 @@ async function MemberHome({
   );
 }
 
+async function ActivityHub({
+  organizationId,
+  userId,
+  canWrite
+}: {
+  organizationId: string;
+  userId: string;
+  canWrite: boolean;
+}) {
+  const db = await createClient();
+  const ctx = { db, orgId: organizationId, actorId: userId, correlationId: "dashboard" };
+  const [summary, imports, t] = await Promise.all([
+    getMemberSummary(organizationId),
+    isFeatureEnabled("imports")
+      ? listImportJobs(ctx).then((jobs) => jobs.slice(0, 5))
+      : Promise.resolve([]),
+    getTranslations("dashboard.home")
+  ]);
+  const items = [
+    ...summary.attentionDocuments.map((doc) => ({
+      key: `doc-${doc.id}`,
+      href: `/dashboard/documents/${doc.id}`,
+      title: doc.title,
+      meta: t("documentNeedsAttention"),
+      badge: doc.status,
+      badgeVariant: "danger" as const
+    })),
+    ...summary.recentUploads.slice(0, 5).map((upload) => ({
+      key: `upload-${upload.id}`,
+      href: "/dashboard/documents",
+      title: upload.filename,
+      meta: new Date(upload.created_at).toLocaleString(),
+      badge: upload.status,
+      badgeVariant: "muted" as const
+    })),
+    ...imports.map((job) => ({
+      key: `import-${job.id}`,
+      href: `/dashboard/imports/${job.id}`,
+      title: job.source_filename ?? t("untitledImport"),
+      meta: t("importRows", { count: job.total_rows }),
+      badge: job.status,
+      badgeVariant: "outline" as const
+    }))
+  ].slice(0, 10);
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle>{t("activity")}</CardTitle>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dashboard/documents">{t("openDocuments")}</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dashboard/views">{t("openViews")}</Link>
+          </Button>
+          {canWrite && isFeatureEnabled("imports") ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/imports">{t("openImports")}</Link>
+            </Button>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-2">
+        {items.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted">
+            {t("noActivity")}
+          </p>
+        ) : (
+          items.map((item) => (
+            <Link
+              className="flex items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 hover:bg-panel-strong/40"
+              href={item.href}
+              key={item.key}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">{item.title}</span>
+                <span className="mt-0.5 block truncate text-xs text-muted">{item.meta}</span>
+              </span>
+              <Badge variant={item.badgeVariant}>{item.badge}</Badge>
+            </Link>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function DashboardPage() {
   const { profile, user } = await requireUser("/dashboard");
   const t = await getTranslations("dashboard.home");
@@ -280,6 +371,7 @@ async function RoleGatedHome({
   if (role === "owner" || role === "admin") {
     return (
       <div className="grid gap-4">
+        <ActivityHub canWrite organizationId={organizationId} userId={userId} />
         {canUpload ? <DocumentUploadPanel organizationId={organizationId} /> : null}
         <OwnerAdminHome organizationId={organizationId} />
       </div>
@@ -288,6 +380,7 @@ async function RoleGatedHome({
 
   return (
     <div className="grid gap-4">
+      <ActivityHub canWrite={canUpload} organizationId={organizationId} userId={userId} />
       {canUpload ? <DocumentUploadPanel organizationId={organizationId} /> : null}
       <MemberHome canUpload={canUpload} organizationId={organizationId} />
     </div>

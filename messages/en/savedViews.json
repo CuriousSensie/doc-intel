@@ -2,7 +2,32 @@
   "page": {
     "title": "Views",
     "description": "Saved filters over documents and entities — click one to jump straight to it.",
+    "columns": {
+      "name": "Name",
+      "kind": "Kind",
+      "scope": "Scope",
+      "visibility": "Visibility",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "dynamic": "Dynamic",
+    "static": "Static",
     "shared": "Shared with your organization",
     "personal": "Personal view"
+  },
+  "actions": {
+    "saveTitle": "Save view",
+    "namePlaceholder": "View name",
+    "nameRequired": "Enter a name.",
+    "saveFailed": "Could not save this view.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save view",
+    "openMenu": "Open view actions",
+    "open": "Open",
+    "rename": "Rename",
+    "renamePrompt": "Rename this view",
+    "delete": "Delete",
+    "deleteConfirm": "Delete \"{name}\"?"
   }
 }

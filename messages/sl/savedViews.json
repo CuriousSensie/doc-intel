@@ -2,7 +2,32 @@
   "page": {
     "title": "Pogledi",
     "description": "Shranjeni filtri za dokumente in entitete — kliknite enega za neposreden skok nanj.",
+    "columns": {
+      "name": "Ime",
+      "kind": "Vrsta",
+      "scope": "Obseg",
+      "visibility": "Vidnost",
+      "created": "Ustvarjeno",
+      "actions": "Dejanja"
+    },
+    "dynamic": "Dinamičen",
+    "static": "Statičen",
     "shared": "Deljeno z vašo organizacijo",
     "personal": "Osebni pogled"
+  },
+  "actions": {
+    "saveTitle": "Shrani pogled",
+    "namePlaceholder": "Ime pogleda",
+    "nameRequired": "Vnesite ime.",
+    "saveFailed": "Pogleda ni bilo mogoče shraniti.",
+    "cancel": "Prekliči",
+    "saving": "Shranjujem…",
+    "save": "Shrani pogled",
+    "openMenu": "Odpri dejanja pogleda",
+    "open": "Odpri",
+    "rename": "Preimenuj",
+    "renamePrompt": "Preimenuj pogled",
+    "delete": "Izbriši",
+    "deleteConfirm": "Izbrišem \"{name}\"?"
   }
 }

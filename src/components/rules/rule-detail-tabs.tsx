@@ -24,7 +24,10 @@ export function RuleDetailTabs({
   const t = useTranslations("rules.detail.tabs");
 
   return (
-    <Tabs defaultValue="rule">
+    <Tabs
+      className="grid gap-4 lg:h-[calc(100vh-8rem)] lg:grid-rows-[auto_minmax(0,1fr)]"
+      defaultValue="rule"
+    >
       <TabsList className="h-auto w-full flex-wrap justify-start gap-x-4 gap-y-1 rounded-none border-0 border-b border-border bg-transparent p-0">
         <TabsTrigger className={triggerClassName} value="rule">
           {t("rule")}
@@ -39,16 +42,16 @@ export function RuleDetailTabs({
           {t("runs")}
         </TabsTrigger>
       </TabsList>
-      <TabsContent className="pt-5" value="rule">
+      <TabsContent className="min-h-0 pt-1" value="rule">
         {rule}
       </TabsContent>
-      <TabsContent className="pt-5" value="test">
+      <TabsContent className="min-h-0 overflow-hidden pt-1" value="test">
         {test}
       </TabsContent>
-      <TabsContent className="pt-5" value="backfill">
+      <TabsContent className="min-h-0 overflow-hidden pt-1" value="backfill">
         {backfill}
       </TabsContent>
-      <TabsContent className="pt-5" value="runs">
+      <TabsContent className="min-h-0 overflow-hidden pt-1" value="runs">
         {runs}
       </TabsContent>
     </Tabs>

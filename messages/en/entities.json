@@ -5,6 +5,10 @@
     "manageTypes": "Manage types",
     "emptyTitle": "No entity types yet",
     "emptyDescription": "Entity types are seeded automatically when your organization is provisioned.",
+    "columns": {
+      "type": "Type",
+      "count": "Records"
+    },
     "newEntityType": "New entity type",
     "keyLabel": "Key",
     "keyHint": "lowercase, no spaces",

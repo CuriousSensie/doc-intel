@@ -9,6 +9,13 @@
   "entityOrderWarning": "Import customers, projects and other referenced records first. Then connect documents to them using a shared identifier.",
   "firstImport": "Set up your first import",
   "recentImports": "Recent imports",
+  "columns": {
+    "file": "File",
+    "kind": "Kind",
+    "rows": "Rows",
+    "status": "Status",
+    "open": "Open"
+  },
   "historyLimit": "Showing the 50 most recent imports.",
   "readOnly": "You can review imports. Ask an organization member with write access to create or change one.",
   "untitled": "Untitled import",

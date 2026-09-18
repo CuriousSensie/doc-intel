@@ -2,12 +2,17 @@
 
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
-import { createSavedViewSchema } from "@/modules/saved-views/saved-views.schemas";
+import {
+  createSavedViewSchema,
+  renameSavedViewSchema
+} from "@/modules/saved-views/saved-views.schemas";
 import {
   createSavedView,
   deleteSavedView,
   ensureStarterViews,
-  listSavedViews
+  getSavedView,
+  listSavedViews,
+  renameSavedView
 } from "@/modules/saved-views/saved-views.service";
 
 export async function listSavedViewsAction() {
@@ -27,6 +32,19 @@ export async function createSavedViewAction(input: unknown) {
   const parsed = createSavedViewSchema.parse(input);
   const ctx = await buildRequestContext();
   return createSavedView(ctx, parsed);
+}
+
+export async function getSavedViewAction(id: string) {
+  requireFeature("entities");
+  const ctx = await buildRequestContext();
+  return getSavedView(ctx, id);
+}
+
+export async function renameSavedViewAction(input: unknown) {
+  requireFeature("entities");
+  const parsed = renameSavedViewSchema.parse(input);
+  const ctx = await buildRequestContext();
+  return renameSavedView(ctx, parsed.id, parsed.name);
 }
 
 export async function deleteSavedViewAction(id: string) {

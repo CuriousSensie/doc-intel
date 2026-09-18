@@ -5,6 +5,10 @@
     "manageTypes": "Upravljaj tipe",
     "emptyTitle": "Ni še tipov entitet",
     "emptyDescription": "Tipi entitet se samodejno pripravijo ob vzpostavitvi vaše organizacije.",
+    "columns": {
+      "type": "Tip",
+      "count": "Zapisi"
+    },
     "newEntityType": "Nov tip entitete",
     "keyLabel": "Ključ",
     "keyHint": "male črke, brez presledkov",

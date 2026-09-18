@@ -1,9 +1,9 @@
 "use client";
 
-import { Play, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Play, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 
 import { EntityPickerField } from "@/components/rules/entity-picker-field";
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
@@ -19,7 +19,12 @@ import {
   toggleRuleEnabledFormAction,
   updateRuleAction
 } from "@/modules/rules/rules.actions";
-import { RELATIONS, RULE_TRIGGERS, triggerMessageKey, type RuleTrigger } from "@/modules/rules/rules.schemas";
+import {
+  RELATIONS,
+  RULE_TRIGGERS,
+  triggerMessageKey,
+  type RuleTrigger
+} from "@/modules/rules/rules.schemas";
 
 type MetaOption = { id: number; name: string; color?: string; text_color?: string };
 
@@ -70,6 +75,53 @@ type ActionRow = {
   entity: { id: string; label: string } | null; // connect_entity/disconnect_entity
   relation: (typeof RELATIONS)[number];
 };
+
+type RuleSection = "basics" | "conditions" | "actions";
+
+function RuleAccordionSection({
+  id,
+  open,
+  title,
+  description,
+  summary,
+  onOpenChange,
+  children
+}: {
+  id: RuleSection;
+  open: boolean;
+  title: string;
+  description?: string;
+  summary?: string;
+  onOpenChange: (id: RuleSection) => void;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="p-0">
+        <button
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-panel-strong/40"
+          onClick={() => onOpenChange(id)}
+          type="button"
+        >
+          <span className="min-w-0">
+            <CardTitle>{title}</CardTitle>
+            {open && description ? (
+              <span className="mt-1 block text-sm text-muted">{description}</span>
+            ) : null}
+            {!open && summary ? (
+              <span className="mt-1 block text-sm text-muted">{summary}</span>
+            ) : null}
+          </span>
+          <ChevronDown
+            className={`size-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+      </CardHeader>
+      {open ? children : null}
+    </Card>
+  );
+}
 
 let rowCounter = 0;
 function nextKey(): string {
@@ -135,12 +187,20 @@ function conditionRowsFromDslWithMeta(
     .map((leaf): ConditionRow | null => {
       const field = dslToField[leaf.field];
       if (!field) return null;
-      const op = (["contains", "not_contains", "eq", "neq"] as const).includes(leaf.op as ConditionOp)
+      const op = (["contains", "not_contains", "eq", "neq"] as const).includes(
+        leaf.op as ConditionOp
+      )
         ? (leaf.op as ConditionOp)
         : "contains";
 
       if (field === "tags") {
-        return { key: nextKey(), field, op, text: "", metaId: findMetaIdByName(metaOptions.tags, leaf.value) };
+        return {
+          key: nextKey(),
+          field,
+          op,
+          text: "",
+          metaId: findMetaIdByName(metaOptions.tags, leaf.value)
+        };
       }
       if (field === "correspondent") {
         return {
@@ -229,9 +289,13 @@ function actionRowsFromDslWithMeta(
       continue;
     }
     if (type === "connect_entity" || type === "disconnect_entity") {
-      const ref = action.entity_ref as { by?: string; entityId?: string; label?: string } | undefined;
+      const ref = action.entity_ref as
+        { by?: string; entityId?: string; label?: string } | undefined;
       const relation = (action.relation as (typeof RELATIONS)[number]) ?? "related";
-      const entity = ref?.by === "id" && ref.entityId && ref.label ? { id: ref.entityId, label: ref.label } : null;
+      const entity =
+        ref?.by === "id" && ref.entityId && ref.label
+          ? { id: ref.entityId, label: ref.label }
+          : null;
       rows.push({
         ...newActionRow(),
         key: nextKey(),
@@ -294,7 +358,8 @@ export function RuleForm({
 
   function addMetaOption(kind: "tag" | "correspondent" | "documentType", option: MetaOption) {
     setMetaOptions((prev) => {
-      const key = kind === "tag" ? "tags" : kind === "correspondent" ? "correspondents" : "documentTypes";
+      const key =
+        kind === "tag" ? "tags" : kind === "correspondent" ? "correspondents" : "documentTypes";
       if (prev[key].some((o) => o.id === option.id)) return prev;
       return { ...prev, [key]: [...prev[key], option] };
     });
@@ -302,9 +367,12 @@ export function RuleForm({
 
   const [name, setName] = useState(initial?.name ?? "");
   const [trigger, setTrigger] = useState<RuleTrigger>(initial?.trigger ?? "document.ingested");
+  const [openSection, setOpenSection] = useState<RuleSection>("basics");
   const priority = initial?.priority ?? 100;
   const [conditionRows, setConditionRows] = useState<ConditionRow[]>(() =>
-    initial ? conditionRowsFromDslWithMeta(initial.conditions, initialMetaOptions) : [newConditionRow()]
+    initial
+      ? conditionRowsFromDslWithMeta(initial.conditions, initialMetaOptions)
+      : [newConditionRow()]
   );
   const [actionRows, setActionRows] = useState<ActionRow[]>(() =>
     initial ? actionRowsFromDslWithMeta(initial.actions, initialMetaOptions) : [newActionRow()]
@@ -338,7 +406,10 @@ export function RuleForm({
     return metaOptions.documentTypes;
   }
 
-  function nameForMetaId(kind: "tag" | "correspondent" | "documentType", id: number | null): string {
+  function nameForMetaId(
+    kind: "tag" | "correspondent" | "documentType",
+    id: number | null
+  ): string {
     if (id === null) return "";
     return optionsFor(kind).find((o) => o.id === id)?.name ?? "";
   }
@@ -356,7 +427,12 @@ export function RuleForm({
     if (row.attributeOperation === "remove") return true;
     return row.metaId !== null;
   });
-  const canSubmit = name.trim().length > 0 && conditionRows.length > 0 && actionRows.length > 0 && conditionsValid && actionsValid;
+  const canSubmit =
+    name.trim().length > 0 &&
+    conditionRows.length > 0 &&
+    actionRows.length > 0 &&
+    conditionsValid &&
+    actionsValid;
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -364,7 +440,8 @@ export function RuleForm({
 
     const conditions = {
       all: conditionRows.map((row) => {
-        const isMeta = row.field === "tags" || row.field === "correspondent" || row.field === "documentType";
+        const isMeta =
+          row.field === "tags" || row.field === "correspondent" || row.field === "documentType";
         return {
           field: CONDITION_FIELD_TO_DSL[row.field],
           op: row.op,
@@ -411,7 +488,8 @@ export function RuleForm({
   }
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4 lg:h-full lg:grid-rows-[auto_minmax(0,1fr)_auto]">
+      {!initial?.id ? <div className="hidden lg:block" /> : null}
       {initial?.id ? (
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div className="min-w-0">
@@ -450,313 +528,370 @@ export function RuleForm({
         </div>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("basicsTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <TextField
-            label={t("nameLabel")}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("namePlaceholder")}
-            value={name}
-          />
-          <select
-            aria-label={t("triggerTitle")}
-            className={controlClass}
-            onChange={(e) => setTrigger(e.target.value as RuleTrigger)}
-            value={trigger}
-          >
-            {RULE_TRIGGERS.map((value) => (
-              <option key={value} value={value}>
-                {tTriggers(triggerMessageKey(value))}
-              </option>
-            ))}
-          </select>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
+        <RuleAccordionSection
+          id="basics"
+          onOpenChange={setOpenSection}
+          open={openSection === "basics"}
+          summary={`${name || t("namePlaceholder")} · ${tTriggers(triggerMessageKey(trigger))}`}
+          title={t("basicsTitle")}
+        >
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              label={t("nameLabel")}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("namePlaceholder")}
+              value={name}
+            />
+            <select
+              aria-label={t("triggerTitle")}
+              className={controlClass}
+              onChange={(e) => setTrigger(e.target.value as RuleTrigger)}
+              value={trigger}
+            >
+              {RULE_TRIGGERS.map((value) => (
+                <option key={value} value={value}>
+                  {tTriggers(triggerMessageKey(value))}
+                </option>
+              ))}
+            </select>
+          </CardContent>
+        </RuleAccordionSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("conditionsTitle")}</CardTitle>
-          <p className="text-sm text-muted">{t("conditionsDescription")}</p>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {conditionRows.map((row, index) => (
-            <div className="grid gap-2 rounded-md border border-border bg-panel p-3" key={row.key}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  {t("conditionNumber", { number: index + 1 })}
-                </span>
-                <Button
-                  aria-label={t("removeCondition")}
-                  onClick={() => setConditionRows((rows) => rows.filter((r) => r.key !== row.key))}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <select
-                  aria-label={t("conditionFieldLabel")}
-                  className={controlClass}
-                  onChange={(e) => {
-                    const field = e.target.value as ConditionFieldKind;
-                    setConditionRows((rows) =>
-                      rows.map((r) =>
-                        r.key === row.key
-                          ? { ...r, field, op: CONDITION_OPS_BY_FIELD[field][0], text: "", metaId: null }
-                          : r
-                      )
-                    );
-                  }}
-                  value={row.field}
-                >
-                  {(Object.keys(CONDITION_FIELD_TO_DSL) as ConditionFieldKind[]).map((field) => (
-                    <option key={field} value={field}>
-                      {t(`conditionFields.${field}`)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label={t("conditionOperatorLabel")}
-                  className={controlClass}
-                  onChange={(e) =>
-                    setConditionRows((rows) =>
-                      rows.map((r) => (r.key === row.key ? { ...r, op: e.target.value as ConditionOp } : r))
-                    )
-                  }
-                  value={row.op}
-                >
-                  {CONDITION_OPS_BY_FIELD[row.field].map((op) => (
-                    <option key={op} value={op}>
-                      {t(`conditionOps.${op}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {row.field === "tags" || row.field === "correspondent" || row.field === "documentType" ? (
-                <PaperlessMetaPicker
-                  kind={pickerKindFor(row.field)}
-                  mode="single"
-                  onChange={(ids, newOption) => {
-                    if (newOption) addMetaOption(pickerKindFor(row.field), newOption);
-                    setConditionRows((rows) =>
-                      rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
-                    );
-                  }}
-                  options={optionsFor(pickerKindFor(row.field))}
-                  value={row.metaId !== null ? [row.metaId] : []}
-                />
-              ) : (
-                <input
-                  aria-label={t("conditionValueLabel")}
-                  className={controlClass}
-                  onChange={(e) =>
-                    setConditionRows((rows) =>
-                      rows.map((r) => (r.key === row.key ? { ...r, text: e.target.value } : r))
-                    )
-                  }
-                  placeholder={t("conditionValuePlaceholder")}
-                  value={row.text}
-                />
-              )}
-            </div>
-          ))}
-          <Button
-            className="justify-self-start"
-            onClick={() => setConditionRows((rows) => [...rows, newConditionRow()])}
-            type="button"
-            variant="outline"
-          >
-            <Plus className="size-4" />
-            {t("addCondition")}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("actionsTitle")}</CardTitle>
-          <p className="text-sm text-muted">{t("actionsDescription")}</p>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {actionRows.map((row, index) => (
-            <div className="grid gap-2 rounded-md border border-border bg-panel p-3" key={row.key}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  {t("actionNumber", { number: index + 1 })}
-                </span>
-                <Button
-                  aria-label={t("removeAction")}
-                  onClick={() => setActionRows((rows) => rows.filter((r) => r.key !== row.key))}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-              <select
-                aria-label={t("actionKindLabel")}
-                className={controlClass}
-                onChange={(e) => {
-                  const mode = e.target.value as ActionRow["mode"];
-                  setActionRows((rows) =>
-                    rows.map((r) =>
-                      r.key === row.key
-                        ? {
-                            ...r,
-                            mode,
-                            metaId: null,
-                            entity: null,
-                            attributeKind: "tag",
-                            attributeOperation: "assign",
-                            entityOperation: "connect"
-                          }
-                        : r
-                    )
-                  );
-                }}
-                value={row.mode}
+        <RuleAccordionSection
+          description={t("conditionsDescription")}
+          id="conditions"
+          onOpenChange={setOpenSection}
+          open={openSection === "conditions"}
+          summary={t("sectionSummary.conditions", { count: conditionRows.length })}
+          title={t("conditionsTitle")}
+        >
+          <CardContent className="grid gap-3">
+            {conditionRows.map((row, index) => (
+              <div
+                className="grid gap-2 rounded-md border border-border bg-panel p-3"
+                key={row.key}
               >
-                <option value="attribute">{t("actionModes.attribute")}</option>
-                <option value="entity">{t("actionModes.entity")}</option>
-              </select>
-
-              {row.mode === "entity" ? (
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <select
-                    aria-label={t("entityOperationLabel")}
-                    className={controlClass}
-                    onChange={(e) =>
-                      setActionRows((rows) =>
-                        rows.map((r) =>
-                          r.key === row.key ? { ...r, entityOperation: e.target.value as EntityOperation } : r
-                        )
-                      )
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {t("conditionNumber", { number: index + 1 })}
+                  </span>
+                  <Button
+                    aria-label={t("removeCondition")}
+                    onClick={() =>
+                      setConditionRows((rows) => rows.filter((r) => r.key !== row.key))
                     }
-                    value={row.entityOperation}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
                   >
-                    <option value="connect">{t("entityOperations.connect")}</option>
-                    <option value="disconnect">{t("entityOperations.disconnect")}</option>
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <select
+                    aria-label={t("conditionFieldLabel")}
+                    className={controlClass}
+                    onChange={(e) => {
+                      const field = e.target.value as ConditionFieldKind;
+                      setConditionRows((rows) =>
+                        rows.map((r) =>
+                          r.key === row.key
+                            ? {
+                                ...r,
+                                field,
+                                op: CONDITION_OPS_BY_FIELD[field][0],
+                                text: "",
+                                metaId: null
+                              }
+                            : r
+                        )
+                      );
+                    }}
+                    value={row.field}
+                  >
+                    {(Object.keys(CONDITION_FIELD_TO_DSL) as ConditionFieldKind[]).map((field) => (
+                      <option key={field} value={field}>
+                        {t(`conditionFields.${field}`)}
+                      </option>
+                    ))}
                   </select>
-                  <EntityPickerField
-                    onSelect={(entity) =>
-                      setActionRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, entity } : r)))
-                    }
-                    value={row.entity}
-                  />
                   <select
-                    aria-label={t("relationLabel")}
+                    aria-label={t("conditionOperatorLabel")}
                     className={controlClass}
                     onChange={(e) =>
-                      setActionRows((rows) =>
+                      setConditionRows((rows) =>
                         rows.map((r) =>
-                          r.key === row.key ? { ...r, relation: e.target.value as (typeof RELATIONS)[number] } : r
+                          r.key === row.key ? { ...r, op: e.target.value as ConditionOp } : r
                         )
                       )
                     }
-                    value={row.relation}
+                    value={row.op}
                   >
-                    {RELATIONS.map((relation) => (
-                      <option key={relation} value={relation}>
-                        {t(`relations.${relation}`)}
+                    {CONDITION_OPS_BY_FIELD[row.field].map((op) => (
+                      <option key={op} value={op}>
+                        {t(`conditionOps.${op}`)}
                       </option>
                     ))}
                   </select>
                 </div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-[220px_220px_1fr]">
-                  <select
-                    aria-label={t("attributeOperationLabel")}
-                    className={controlClass}
-                    onChange={(e) => {
-                      const operation = e.target.value as AttributeOperation;
-                      setActionRows((rows) =>
-                        rows.map((r) => (r.key === row.key ? { ...r, attributeOperation: operation, metaId: null, metaIds: [] } : r))
+                {row.field === "tags" ||
+                row.field === "correspondent" ||
+                row.field === "documentType" ? (
+                  <PaperlessMetaPicker
+                    kind={pickerKindFor(row.field)}
+                    mode="single"
+                    onChange={(ids, newOption) => {
+                      if (newOption) addMetaOption(pickerKindFor(row.field), newOption);
+                      setConditionRows((rows) =>
+                        rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
                       );
                     }}
-                    value={row.attributeOperation}
-                  >
-                    <option value="assign">{t("attributeOperations.assign")}</option>
-                    <option value="remove">{t("attributeOperations.remove")}</option>
-                  </select>
-                  <select
-                    aria-label={t("attributeKindLabel")}
+                    options={optionsFor(pickerKindFor(row.field))}
+                    value={row.metaId !== null ? [row.metaId] : []}
+                  />
+                ) : (
+                  <input
+                    aria-label={t("conditionValueLabel")}
                     className={controlClass}
                     onChange={(e) =>
-                      setActionRows((rows) =>
-                        rows.map((r) =>
-                          r.key === row.key
-                            ? { ...r, attributeKind: e.target.value as AttributeKind, metaId: null, metaIds: [] }
-                            : r
-                        )
+                      setConditionRows((rows) =>
+                        rows.map((r) => (r.key === row.key ? { ...r, text: e.target.value } : r))
                       )
                     }
-                    value={row.attributeKind}
+                    placeholder={t("conditionValuePlaceholder")}
+                    value={row.text}
+                  />
+                )}
+              </div>
+            ))}
+            <Button
+              className="justify-self-start"
+              onClick={() => setConditionRows((rows) => [...rows, newConditionRow()])}
+              type="button"
+              variant="outline"
+            >
+              <Plus className="size-4" />
+              {t("addCondition")}
+            </Button>
+          </CardContent>
+        </RuleAccordionSection>
+
+        <RuleAccordionSection
+          description={t("actionsDescription")}
+          id="actions"
+          onOpenChange={setOpenSection}
+          open={openSection === "actions"}
+          summary={t("sectionSummary.actions", { count: actionRows.length })}
+          title={t("actionsTitle")}
+        >
+          <CardContent className="grid gap-3">
+            {actionRows.map((row, index) => (
+              <div
+                className="grid gap-2 rounded-md border border-border bg-panel p-3"
+                key={row.key}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {t("actionNumber", { number: index + 1 })}
+                  </span>
+                  <Button
+                    aria-label={t("removeAction")}
+                    onClick={() => setActionRows((rows) => rows.filter((r) => r.key !== row.key))}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
                   >
-                    <option value="tag">{t("attributeKinds.tag")}</option>
-                    <option value="correspondent">{t("attributeKinds.correspondent")}</option>
-                    <option value="documentType">{t("attributeKinds.documentType")}</option>
-                  </select>
-                  {row.attributeKind === "tag" ? (
-                    <PaperlessMetaPicker
-                      kind="tag"
-                      mode="multi"
-                      onChange={(ids, newOption) => {
-                        if (newOption) addMetaOption("tag", newOption);
-                        setActionRows((rows) => rows.map((r) => (r.key === row.key ? { ...r, metaIds: ids } : r)));
-                      }}
-                      options={optionsFor("tag")}
-                      value={row.metaIds}
-                    />
-                  ) : row.attributeOperation === "remove" ? (
-                    // A document type/correspondent is a single nullable field — "remove" always
-                    // means "clear it," so there's nothing to pick.
-                    <p className="flex items-center text-sm text-muted">{t("attributeRemoveClearsValue")}</p>
-                  ) : (
-                    <PaperlessMetaPicker
-                      kind={row.attributeKind}
-                      mode="single"
-                      onChange={(ids, newOption) => {
-                        if (newOption) addMetaOption(row.attributeKind, newOption);
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <select
+                  aria-label={t("actionKindLabel")}
+                  className={controlClass}
+                  onChange={(e) => {
+                    const mode = e.target.value as ActionRow["mode"];
+                    setActionRows((rows) =>
+                      rows.map((r) =>
+                        r.key === row.key
+                          ? {
+                              ...r,
+                              mode,
+                              metaId: null,
+                              entity: null,
+                              attributeKind: "tag",
+                              attributeOperation: "assign",
+                              entityOperation: "connect"
+                            }
+                          : r
+                      )
+                    );
+                  }}
+                  value={row.mode}
+                >
+                  <option value="attribute">{t("actionModes.attribute")}</option>
+                  <option value="entity">{t("actionModes.entity")}</option>
+                </select>
+
+                {row.mode === "entity" ? (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <select
+                      aria-label={t("entityOperationLabel")}
+                      className={controlClass}
+                      onChange={(e) =>
                         setActionRows((rows) =>
-                          rows.map((r) => (r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r))
+                          rows.map((r) =>
+                            r.key === row.key
+                              ? { ...r, entityOperation: e.target.value as EntityOperation }
+                              : r
+                          )
+                        )
+                      }
+                      value={row.entityOperation}
+                    >
+                      <option value="connect">{t("entityOperations.connect")}</option>
+                      <option value="disconnect">{t("entityOperations.disconnect")}</option>
+                    </select>
+                    <EntityPickerField
+                      onSelect={(entity) =>
+                        setActionRows((rows) =>
+                          rows.map((r) => (r.key === row.key ? { ...r, entity } : r))
+                        )
+                      }
+                      value={row.entity}
+                    />
+                    <select
+                      aria-label={t("relationLabel")}
+                      className={controlClass}
+                      onChange={(e) =>
+                        setActionRows((rows) =>
+                          rows.map((r) =>
+                            r.key === row.key
+                              ? { ...r, relation: e.target.value as (typeof RELATIONS)[number] }
+                              : r
+                          )
+                        )
+                      }
+                      value={row.relation}
+                    >
+                      {RELATIONS.map((relation) => (
+                        <option key={relation} value={relation}>
+                          {t(`relations.${relation}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-[220px_220px_1fr]">
+                    <select
+                      aria-label={t("attributeOperationLabel")}
+                      className={controlClass}
+                      onChange={(e) => {
+                        const operation = e.target.value as AttributeOperation;
+                        setActionRows((rows) =>
+                          rows.map((r) =>
+                            r.key === row.key
+                              ? { ...r, attributeOperation: operation, metaId: null, metaIds: [] }
+                              : r
+                          )
                         );
                       }}
-                      options={optionsFor(row.attributeKind)}
-                      value={row.metaId !== null ? [row.metaId] : []}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                      value={row.attributeOperation}
+                    >
+                      <option value="assign">{t("attributeOperations.assign")}</option>
+                      <option value="remove">{t("attributeOperations.remove")}</option>
+                    </select>
+                    <select
+                      aria-label={t("attributeKindLabel")}
+                      className={controlClass}
+                      onChange={(e) =>
+                        setActionRows((rows) =>
+                          rows.map((r) =>
+                            r.key === row.key
+                              ? {
+                                  ...r,
+                                  attributeKind: e.target.value as AttributeKind,
+                                  metaId: null,
+                                  metaIds: []
+                                }
+                              : r
+                          )
+                        )
+                      }
+                      value={row.attributeKind}
+                    >
+                      <option value="tag">{t("attributeKinds.tag")}</option>
+                      <option value="correspondent">{t("attributeKinds.correspondent")}</option>
+                      <option value="documentType">{t("attributeKinds.documentType")}</option>
+                    </select>
+                    {row.attributeKind === "tag" ? (
+                      <PaperlessMetaPicker
+                        kind="tag"
+                        mode="multi"
+                        onChange={(ids, newOption) => {
+                          if (newOption) addMetaOption("tag", newOption);
+                          setActionRows((rows) =>
+                            rows.map((r) => (r.key === row.key ? { ...r, metaIds: ids } : r))
+                          );
+                        }}
+                        options={optionsFor("tag")}
+                        value={row.metaIds}
+                      />
+                    ) : row.attributeOperation === "remove" ? (
+                      // A document type/correspondent is a single nullable field — "remove" always
+                      // means "clear it," so there's nothing to pick.
+                      <p className="flex items-center text-sm text-muted">
+                        {t("attributeRemoveClearsValue")}
+                      </p>
+                    ) : (
+                      <PaperlessMetaPicker
+                        kind={row.attributeKind}
+                        mode="single"
+                        onChange={(ids, newOption) => {
+                          if (newOption) addMetaOption(row.attributeKind, newOption);
+                          setActionRows((rows) =>
+                            rows.map((r) =>
+                              r.key === row.key ? { ...r, metaId: ids[0] ?? null } : r
+                            )
+                          );
+                        }}
+                        options={optionsFor(row.attributeKind)}
+                        value={row.metaId !== null ? [row.metaId] : []}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            <Button
+              className="justify-self-start"
+              onClick={() => setActionRows((rows) => [...rows, newActionRow()])}
+              type="button"
+              variant="outline"
+            >
+              <Plus className="size-4" />
+              {t("addAction")}
+            </Button>
+          </CardContent>
+        </RuleAccordionSection>
+      </div>
+
+      <div className="grid gap-2">
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {!canSubmit && (conditionRows.length === 0 || actionRows.length === 0) ? (
+          <p className="text-sm text-muted">{t("needsConditionAndAction")}</p>
+        ) : null}
+
+        {!initial ? (
           <Button
             className="justify-self-start"
-            onClick={() => setActionRows((rows) => [...rows, newActionRow()])}
+            disabled={isPending || !canSubmit}
+            onClick={handleSubmit}
             type="button"
-            variant="outline"
           >
-            <Plus className="size-4" />
-            {t("addAction")}
+            {isPending ? t("saving") : t("create")}
           </Button>
-        </CardContent>
-      </Card>
-
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
-      {!canSubmit && (conditionRows.length === 0 || actionRows.length === 0) ? (
-        <p className="text-sm text-muted">{t("needsConditionAndAction")}</p>
-      ) : null}
-
-      {!initial ? (
-        <Button disabled={isPending || !canSubmit} onClick={handleSubmit} type="button">
-          {isPending ? t("saving") : t("create")}
-        </Button>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

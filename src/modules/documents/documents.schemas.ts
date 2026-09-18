@@ -26,7 +26,10 @@ export const documentListFieldSchema = z.enum([
   "createdAt"
 ]);
 export const customDocumentListFieldSchema = z.string().regex(/^custom:[a-z][a-z0-9_]*$/);
-export const anyDocumentListFieldSchema = z.union([documentListFieldSchema, customDocumentListFieldSchema]);
+export const anyDocumentListFieldSchema = z.union([
+  documentListFieldSchema,
+  customDocumentListFieldSchema
+]);
 export type StaticDocumentListField = z.infer<typeof documentListFieldSchema>;
 export type DocumentListField = StaticDocumentListField | `custom:${string}`;
 export const DEFAULT_DOCUMENT_LIST_FIELDS: DocumentListField[] = [
@@ -57,6 +60,7 @@ export const listDocumentsFilterSchema = z.object({
   tagIds: z.array(z.coerce.number().int().positive()).optional(),
   correspondentId: z.coerce.number().int().positive().optional(),
   entityId: z.string().uuid().optional(),
+  documentIds: z.array(z.string().uuid()).optional(),
   hasNoConnections: z.boolean().optional(),
   sort: documentSortSchema.optional(),
   sortDirection: documentSortDirectionSchema.optional(),

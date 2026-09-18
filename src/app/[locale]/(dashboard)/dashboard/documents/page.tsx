@@ -28,12 +28,15 @@ import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.s
 import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
 import {
   documentsViewSearchParamSchema,
+  type DocumentListField,
+  listDocumentsFilterSchema,
   parseDocumentListFields,
   parseDocumentsSearchParams
 } from "@/modules/documents/documents.schemas";
 import { countConnectionsForDocuments, listDocuments } from "@/modules/documents/documents.service";
 import { getEntity } from "@/modules/entities/entities.service";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
+import { getSavedView } from "@/modules/saved-views/saved-views.service";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +52,22 @@ function EmptyDocumentsState({ t }: { t: Awaited<ReturnType<typeof getTranslatio
       </section>
     </div>
   );
+}
+
+function firstSearchValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function jsonStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 export default async function DocumentsPage({
@@ -69,19 +88,54 @@ export default async function DocumentsPage({
     return <EmptyDocumentsState t={t} />;
   }
 
-  const filter = parseDocumentsSearchParams(rawSearch);
-  const rawView = Array.isArray(rawSearch.view) ? rawSearch.view[0] : rawSearch.view;
-  const viewParse = documentsViewSearchParamSchema.safeParse({ view: rawView });
-  const view = (viewParse.success ? viewParse.data.view : undefined) ?? "list";
-  const parsedVisibleFields = parseDocumentListFields(rawSearch);
-
-  const client = await paperlessFor(organizationId);
   const defsCtx = {
     db: await createClient(),
     orgId: organizationId,
     actorId: context.user.id,
     correlationId: randomUUID()
   };
+  const rawSavedViewId = firstSearchValue(rawSearch.savedViewId);
+  const savedView =
+    rawSavedViewId &&
+    /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(rawSavedViewId)
+      ? await getSavedView(defsCtx, rawSavedViewId).catch(() => null)
+      : null;
+  const savedSort = jsonObject(savedView?.sort);
+  const savedColumns = jsonStringArray(savedView?.columns);
+  const savedDocumentIds = jsonStringArray(savedView?.document_ids);
+  const filter =
+    savedView?.view_kind === "static"
+      ? listDocumentsFilterSchema.parse({
+          documentIds: savedDocumentIds,
+          page: firstSearchValue(rawSearch.page),
+          pageSize: firstSearchValue(rawSearch.pageSize),
+          sort: savedSort.sort,
+          sortDirection: savedSort.sortDirection
+        })
+      : savedView?.view_kind === "dynamic"
+        ? listDocumentsFilterSchema.parse({
+            ...jsonObject(savedView.filters),
+            page: firstSearchValue(rawSearch.page),
+            pageSize: firstSearchValue(rawSearch.pageSize),
+            sort: savedSort.sort,
+            sortDirection: savedSort.sortDirection
+          })
+        : parseDocumentsSearchParams(rawSearch);
+  const rawView =
+    savedView?.view_kind === "dynamic" && typeof savedSort.view === "string"
+      ? savedSort.view
+      : firstSearchValue(rawSearch.view);
+  const viewParse = documentsViewSearchParamSchema.safeParse({ view: rawView });
+  const view = (viewParse.success ? viewParse.data.view : undefined) ?? "list";
+  const savedFieldsParse = documentsViewSearchParamSchema.safeParse({ fields: savedColumns });
+  const parsedVisibleFields =
+    savedView?.view_kind === "dynamic" &&
+    savedFieldsParse.success &&
+    savedFieldsParse.data.fields?.length
+      ? (savedFieldsParse.data.fields as DocumentListField[])
+      : parseDocumentListFields(rawSearch);
+
+  const client = await paperlessFor(organizationId);
 
   const [
     { items: documents, totalCount, page, pageSize, totalPages },
@@ -138,34 +192,37 @@ export default async function DocumentsPage({
   const needsCustomFields = visibleCustomFieldDefs.length > 0 && documents.length > 0;
   const tagById = new Map(tags.map((tg) => [tg.id, tg]));
 
-  const [contentByPaperlessId, tagsByPaperlessId, connectionCountsByDocumentId, customFieldsByPaperlessId] = await Promise.all(
-    [
-      needsContent
-        ? getPaperlessContentSnippets(
-            client,
-            documents.map((d) => d.paperless_document_id)
-          ).then((entries) => Object.fromEntries(entries))
-        : Promise.resolve({} as Record<number, string>),
-      needsTags
-        ? getPaperlessDocumentTags(
-            client,
-            documents.map((d) => d.paperless_document_id)
-          )
-        : Promise.resolve(new Map<number, number[]>()),
-      needsConnections
-        ? countConnectionsForDocuments(
-            organizationId,
-            documents.map((d) => d.id)
-          )
-        : Promise.resolve({} as Record<string, number>),
-      needsCustomFields
-        ? getPaperlessDocumentCustomFields(
-            client,
-            documents.map((d) => d.paperless_document_id)
-          )
-        : Promise.resolve(new Map<number, Array<{ field: number; value: unknown }>>())
-    ]
-  );
+  const [
+    contentByPaperlessId,
+    tagsByPaperlessId,
+    connectionCountsByDocumentId,
+    customFieldsByPaperlessId
+  ] = await Promise.all([
+    needsContent
+      ? getPaperlessContentSnippets(
+          client,
+          documents.map((d) => d.paperless_document_id)
+        ).then((entries) => Object.fromEntries(entries))
+      : Promise.resolve({} as Record<number, string>),
+    needsTags
+      ? getPaperlessDocumentTags(
+          client,
+          documents.map((d) => d.paperless_document_id)
+        )
+      : Promise.resolve(new Map<number, number[]>()),
+    needsConnections
+      ? countConnectionsForDocuments(
+          organizationId,
+          documents.map((d) => d.id)
+        )
+      : Promise.resolve({} as Record<string, number>),
+    needsCustomFields
+      ? getPaperlessDocumentCustomFields(
+          client,
+          documents.map((d) => d.paperless_document_id)
+        )
+      : Promise.resolve(new Map<number, Array<{ field: number; value: unknown }>>())
+  ]);
 
   const tagsByDocumentId: Record<string, PaperlessTag[]> = Object.fromEntries(
     documents.map((d) => [
@@ -178,7 +235,10 @@ export default async function DocumentsPage({
   const customFieldValuesByDocumentId = Object.fromEntries(
     documents.map((d) => [
       d.id,
-      mapRawCustomFieldValues(customFieldsByPaperlessId.get(d.paperless_document_id), customFieldDefs)
+      mapRawCustomFieldValues(
+        customFieldsByPaperlessId.get(d.paperless_document_id),
+        customFieldDefs
+      )
     ])
   );
 
@@ -191,7 +251,8 @@ export default async function DocumentsPage({
     filter.tagIds?.length ||
     filter.correspondentId ||
     filter.entityId ||
-    filter.hasNoConnections
+    filter.hasNoConnections ||
+    savedView
   );
 
   return (

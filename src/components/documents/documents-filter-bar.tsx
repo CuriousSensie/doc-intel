@@ -31,9 +31,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { SaveViewDialog } from "@/components/saved-views/save-view-dialog";
 import type { PaperlessCorrespondent, PaperlessTag } from "@/lib/paperless/documents";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
-import type { DocumentListField, StaticDocumentListField } from "@/modules/documents/documents.schemas";
+import type {
+  DocumentListField,
+  StaticDocumentListField
+} from "@/modules/documents/documents.schemas";
 import type { DocumentSort, DocumentSortDirection } from "@/modules/documents/documents.service";
 import { DocumentUploadDialogButton } from "@/components/documents/document-upload-dialog-button";
 
@@ -111,16 +115,13 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
     const next = new Set(current.fields ?? FIELD_VALUES);
     if (next.has(field) && next.size > 1) next.delete(field);
     else next.add(field);
-    navigate(
-      (params) => {
-        const staticFields = FIELD_VALUES.filter((f) => next.has(f));
-        const customFields = filterOptions.customFields
-          .map((def) => `custom:${def.key}` as DocumentListField)
-          .filter((fieldKey) => next.has(fieldKey));
-        setOrDelete(params, "fields", [...staticFields, ...customFields].join(","));
-      },
-      false
-    );
+    navigate((params) => {
+      const staticFields = FIELD_VALUES.filter((f) => next.has(f));
+      const customFields = filterOptions.customFields
+        .map((def) => `custom:${def.key}` as DocumentListField)
+        .filter((fieldKey) => next.has(fieldKey));
+      setOrDelete(params, "fields", [...staticFields, ...customFields].join(","));
+    }, false);
   }
 
   useEffect(() => {
@@ -153,6 +154,33 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
     current.hasNoConnections ||
     selectedEntity
   );
+  const fields = current.fields ?? FIELD_VALUES;
+  const fieldsChanged =
+    fields.length !== FIELD_VALUES.length ||
+    fields.some((field, index) => field !== FIELD_VALUES[index]);
+  const hasSavableView = Boolean(
+    hasAnyFilter ||
+    current.sort ||
+    current.sortDirection === "asc" ||
+    (current.view && current.view !== "list") ||
+    fieldsChanged
+  );
+  const savedViewFilters: Record<string, unknown> = {
+    ...(current.q ? { q: current.q } : {}),
+    ...(current.titleOnly ? { titleOnly: true } : {}),
+    ...(current.tagIds?.length ? { tagIds: current.tagIds } : {}),
+    ...(current.correspondentId ? { correspondentId: current.correspondentId } : {}),
+    ...(current.documentTypeKey ? { documentTypeKey: current.documentTypeKey } : {}),
+    ...(current.status ? { status: current.status } : {}),
+    ...(current.dateFrom ? { dateFrom: current.dateFrom } : {}),
+    ...(current.dateTo ? { dateTo: current.dateTo } : {}),
+    ...(current.hasNoConnections ? { hasNoConnections: true } : {})
+  };
+  const savedViewSort: Record<string, unknown> = {
+    sort: current.sort ?? "created",
+    sortDirection: current.sortDirection ?? "desc",
+    view: current.view ?? "list"
+  };
 
   const listControls = (
     <>
@@ -429,8 +457,18 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
       data-pending={isPending}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex justify-between md:justify-start gap-3">
+        <div className="flex flex-wrap justify-between gap-3 md:justify-start">
           <h1 className="text-3xl font-black">{tList("title")}</h1>
+          {hasSavableView ? (
+            <SaveViewDialog
+              buttonLabel={tList("saveView")}
+              columns={fields}
+              description={tList("saveViewDescription")}
+              filters={savedViewFilters}
+              sort={savedViewSort}
+              viewKind="dynamic"
+            />
+          ) : null}
           <DocumentUploadDialogButton />
         </div>
         <div className="hidden flex-wrap items-center gap-2 xl:flex">{listControls}</div>

@@ -954,10 +954,12 @@ export type Database = {
           organization_id: string;
           name: string;
           scope: "documents" | "entities";
+          view_kind: "dynamic" | "static";
           entity_type_id: string | null;
           filters: Json;
           columns: Json;
           sort: Json | null;
+          document_ids: Json;
           is_shared: boolean;
           created_by: string | null;
           created_at: string;
@@ -967,19 +969,23 @@ export type Database = {
           organization_id: string;
           name: string;
           scope: "documents" | "entities";
+          view_kind?: "dynamic" | "static";
           entity_type_id?: string | null;
           filters?: Json;
           columns?: Json;
           sort?: Json | null;
+          document_ids?: Json;
           is_shared?: boolean;
           created_by?: string | null;
           created_at?: string;
         };
         Update: {
           name?: string;
+          view_kind?: "dynamic" | "static";
           filters?: Json;
           columns?: Json;
           sort?: Json | null;
+          document_ids?: Json;
           is_shared?: boolean;
         };
         Relationships: [];
@@ -1042,7 +1048,12 @@ export type Database = {
           organization_id: string;
           name: string;
           enabled: boolean;
-          trigger: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          trigger:
+            | "document.ingested"
+            | "document.updated"
+            | "document.connected"
+            | "entity.created"
+            | "manual";
           priority: number;
           conditions: Json;
           actions: Json;
@@ -1058,7 +1069,12 @@ export type Database = {
           organization_id: string;
           name: string;
           enabled?: boolean;
-          trigger: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          trigger:
+            | "document.ingested"
+            | "document.updated"
+            | "document.connected"
+            | "entity.created"
+            | "manual";
           priority?: number;
           conditions: Json;
           actions: Json;
@@ -1072,7 +1088,12 @@ export type Database = {
         Update: {
           name?: string;
           enabled?: boolean;
-          trigger?: "document.ingested" | "document.updated" | "document.connected" | "entity.created" | "manual";
+          trigger?:
+            | "document.ingested"
+            | "document.updated"
+            | "document.connected"
+            | "entity.created"
+            | "manual";
           priority?: number;
           conditions?: Json;
           actions?: Json;
@@ -1247,7 +1268,11 @@ export type Database = {
         Returns: Database["public"]["Tables"]["documents"]["Row"][];
       };
       advance_rule_backfill_cursor: {
-        Args: { p_rule_backfill_id: string; p_organization_id: string; p_cursor_document_id: string };
+        Args: {
+          p_rule_backfill_id: string;
+          p_organization_id: string;
+          p_cursor_document_id: string;
+        };
         Returns: void;
       };
       increment_rule_backfill_progress: {

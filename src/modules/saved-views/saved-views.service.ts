@@ -69,7 +69,9 @@ export async function ensureStarterViews(ctx: ServiceContext): Promise<SavedView
         organization_id: ctx.orgId,
         name: view.name,
         scope: view.scope,
+        view_kind: "dynamic",
         filters: view.filters as Json,
+        document_ids: [] as Json,
         is_shared: view.isShared,
         created_by: ctx.actorId
       }))
@@ -85,26 +87,60 @@ export async function createSavedView(
   input: {
     name: string;
     scope: "documents" | "entities";
+    viewKind?: "dynamic" | "static";
     entityTypeId?: string;
     filters?: Record<string, unknown>;
     columns?: string[];
     sort?: Record<string, unknown>;
+    documentIds?: string[];
     isShared?: boolean;
   }
 ): Promise<SavedView> {
+  const viewKind = input.viewKind ?? "dynamic";
   const { data, error } = await ctx.db
     .from("saved_views")
     .insert({
       organization_id: ctx.orgId,
       name: input.name,
       scope: input.scope,
+      view_kind: viewKind,
       entity_type_id: input.entityTypeId ?? null,
       filters: (input.filters ?? {}) as Json,
       columns: (input.columns ?? []) as Json,
       sort: (input.sort ?? null) as Json | null,
+      document_ids: (viewKind === "static" ? (input.documentIds ?? []) : []) as Json,
       is_shared: input.isShared ?? false,
       created_by: ctx.actorId
     })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getSavedView(ctx: ServiceContext, id: string): Promise<SavedView> {
+  const { data, error } = await ctx.db
+    .from("saved_views")
+    .select("*")
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function renameSavedView(
+  ctx: ServiceContext,
+  id: string,
+  name: string
+): Promise<SavedView> {
+  const { data, error } = await ctx.db
+    .from("saved_views")
+    .update({ name })
+    .eq("id", id)
+    .eq("organization_id", ctx.orgId)
     .select("*")
     .single();
 

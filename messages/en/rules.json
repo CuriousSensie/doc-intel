@@ -37,6 +37,10 @@
     "triggerDescription": "What causes this rule to run.",
     "conditionsTitle": "Conditions",
     "conditionsDescription": "Which documents this rule applies to. All conditions must match.",
+    "sectionSummary": {
+      "conditions": "{count} condition(s)",
+      "actions": "{count} action(s)"
+    },
     "conditionNumber": "Condition {number}",
     "removeCondition": "Remove condition",
     "conditionFieldLabel": "Condition field",
@@ -132,6 +136,8 @@
     "recentRuns": "Recent runs",
     "noRuns": "No runs yet.",
     "runMatched": "Matched",
+    "runAppliedTo": "Applied to",
+    "unknownDocument": "Unknown document",
     "runNotMatched": "Did not match",
     "runStatus": "Status: {status}"
   },
@@ -146,6 +152,7 @@
     "notMatched": "Did not match",
     "trace": "Condition trace",
     "actions": "Actions that would apply",
+    "noActions": "No actions would apply.",
     "error": "Could not run the test"
   },
   "backfill": {

@@ -7,6 +7,14 @@ import { TextField } from "@/components/forms/text-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { createEntityTypeFormAction } from "@/modules/entity-types/entity-types.actions";
@@ -57,20 +65,29 @@ export default async function EntitiesIndexPage({
       {entityTypes.length === 0 ? (
         <EmptyState description={t("emptyDescription")} title={t("emptyTitle")} />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {entityTypes.map((type) => (
-            <Link href={`/dashboard/entities/${type.key}`} key={type.id}>
-              <Card className="transition-colors hover:bg-panel-strong/40">
-                <CardHeader>
-                  <CardTitle>{type.name_plural}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-black">{counts[type.id] ?? 0}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.type")}</TableHead>
+              <TableHead>{t("columns.count")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entityTypes.map((type) => (
+              <TableRow key={type.id}>
+                <TableCell>
+                  <Link
+                    className="font-semibold hover:underline"
+                    href={`/dashboard/entities/${type.key}`}
+                  >
+                    {type.name_plural}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-muted">{counts[type.id] ?? 0}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
 
       {canManage ? (
@@ -88,7 +105,12 @@ export default async function EntitiesIndexPage({
                 required
               />
               <TextField label={t("nameLabel")} name="name" placeholder="Supplier" required />
-              <TextField label={t("pluralNameLabel")} name="namePlural" placeholder="Suppliers" required />
+              <TextField
+                label={t("pluralNameLabel")}
+                name="namePlural"
+                placeholder="Suppliers"
+                required
+              />
               <Button className="sm:col-span-3" type="submit">
                 {t("createEntityType")}
               </Button>

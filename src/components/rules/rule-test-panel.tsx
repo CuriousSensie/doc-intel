@@ -9,6 +9,31 @@ import { Input } from "@/components/ui/input";
 import { testRuleAction } from "@/modules/rules/rules.actions";
 import type { ConditionTrace } from "@/modules/rules/rules.evaluator";
 
+function valueText(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "empty";
+  if (Array.isArray(value)) return value.map(valueText).join(", ");
+  if (typeof value === "object")
+    return Object.values(value as Record<string, unknown>)
+      .map(valueText)
+      .join(" ");
+  return String(value);
+}
+
+function actionText(action: unknown): string {
+  if (!action || typeof action !== "object") return valueText(action);
+  const item = action as Record<string, unknown>;
+  const type = String(item.type ?? "action");
+  if (type === "add_tag") return `Add tag ${valueText(item.value)}`;
+  if (type === "remove_tag") return `Remove tag ${valueText(item.value)}`;
+  if (type === "set_document_type")
+    return item.value ? `Set document type to ${valueText(item.value)}` : "Clear document type";
+  if (type === "set_correspondent")
+    return item.value ? `Set correspondent to ${valueText(item.value)}` : "Clear correspondent";
+  if (type === "connect_entity") return `Connect entity (${valueText(item.relation)})`;
+  if (type === "disconnect_entity") return `Disconnect entity (${valueText(item.relation)})`;
+  return type.replaceAll("_", " ");
+}
+
 // specs/07-rules-engine.md §Dry run and backfill: "build it with the first version, not later"
 // — the condition-trace UI a non-technical user needs to understand *why* a rule did or didn't
 // match, per leaf condition.
@@ -20,11 +45,11 @@ function TraceNode({ trace }: { trace: ConditionTrace }) {
           trace.matched ? "border-emerald-200 bg-emerald-50" : "border-border bg-panel"
         }`}
       >
-        <span className="font-mono">
-          {trace.field} {trace.op} {JSON.stringify(trace.expected)}
+        <span>
+          {trace.field} {trace.op} {valueText(trace.expected)}
         </span>
         <span className="font-semibold">
-          {trace.matched ? "✓" : "✗"} {JSON.stringify(trace.actual)}
+          {trace.matched ? "Matched" : "No match"} · {valueText(trace.actual)}
         </span>
       </div>
     );
@@ -69,12 +94,12 @@ export function RuleTestPanel({ ruleId }: { ruleId: string }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-col lg:h-full">
+      <CardHeader className="shrink-0">
         <CardTitle>{t("title")}</CardTitle>
         <p className="text-sm text-muted">{t("description")}</p>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <CardContent className="grid min-h-0 gap-3 lg:overflow-y-auto">
         <div className="flex gap-2">
           <Input
             aria-label={t("documentIdLabel")}
@@ -91,17 +116,36 @@ export function RuleTestPanel({ ruleId }: { ruleId: string }) {
 
         {result ? (
           <div className="grid gap-3">
-            <p className="text-sm font-semibold">{result.matched ? t("matched") : t("notMatched")}</p>
+            <p className="text-sm font-semibold">
+              {result.matched ? t("matched") : t("notMatched")}
+            </p>
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t("trace")}</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                {t("trace")}
+              </p>
               <TraceNode trace={result.conditionsTrace} />
             </div>
             {result.matched ? (
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t("actions")}</p>
-                <pre className="overflow-x-auto rounded-md border border-border bg-panel p-3 text-xs">
-                  {JSON.stringify(result.actions, null, 2)}
-                </pre>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                  {t("actions")}
+                </p>
+                <ul className="grid gap-2">
+                  {result.actions.length === 0 ? (
+                    <li className="rounded-md border border-border bg-panel px-3 py-2 text-sm text-muted">
+                      {t("noActions")}
+                    </li>
+                  ) : (
+                    result.actions.map((action, index) => (
+                      <li
+                        className="rounded-md border border-border bg-panel px-3 py-2 text-sm"
+                        key={index}
+                      >
+                        {actionText(action)}
+                      </li>
+                    ))
+                  )}
+                </ul>
               </div>
             ) : null}
           </div>

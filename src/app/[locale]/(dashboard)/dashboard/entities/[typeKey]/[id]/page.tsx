@@ -14,9 +14,15 @@ import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getConnections } from "@/modules/connections/connections.service";
 import { getEntity } from "@/modules/entities/entities.service";
-import { getEntityTypeByKey, getVisibleFieldSchema } from "@/modules/entity-types/entity-types.service";
+import {
+  getEntityTypeByKey,
+  getVisibleFieldSchema
+} from "@/modules/entity-types/entity-types.service";
 
 export const dynamic = "force-dynamic";
+
+const detailTabClassName =
+  "rounded-none border-b-2 border-transparent bg-transparent px-0.5 pb-2 pt-1 text-sm font-semibold text-muted shadow-none transition-colors data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
 
 export default async function EntityDetailPage({
   params
@@ -53,7 +59,9 @@ export default async function EntityDetailPage({
   const connectionCountsByGroup = new Map<string, number>();
   for (const connection of connections) {
     const label =
-      connection.other.kind === "document" ? t("documents") : (connection.other.entityTypeName ?? t("other"));
+      connection.other.kind === "document"
+        ? t("documents")
+        : (connection.other.entityTypeName ?? t("other"));
     connectionCountsByGroup.set(label, (connectionCountsByGroup.get(label) ?? 0) + 1);
   }
 
@@ -70,10 +78,16 @@ export default async function EntityDetailPage({
       </div>
 
       <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
-          <TabsTrigger value="connections">{t("connections")}</TabsTrigger>
-          <TabsTrigger value="activity">{t("activity")}</TabsTrigger>
+        <TabsList className="h-auto w-full justify-start gap-4 rounded-none border-0 border-b border-border bg-transparent p-0">
+          <TabsTrigger className={detailTabClassName} value="overview">
+            {t("overview")}
+          </TabsTrigger>
+          <TabsTrigger className={detailTabClassName} value="connections">
+            {t("connections")}
+          </TabsTrigger>
+          <TabsTrigger className={detailTabClassName} value="activity">
+            {t("activity")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -141,7 +155,10 @@ export default async function EntityDetailPage({
               ) : (
                 <ul className="grid gap-3 text-sm">
                   {activity.items.map((row) => (
-                    <li className="border-b border-border pb-3 last:border-0 last:pb-0" key={row.id}>
+                    <li
+                      className="border-b border-border pb-3 last:border-0 last:pb-0"
+                      key={row.id}
+                    >
                       <p className="font-semibold">{row.action}</p>
                       <p className="mt-0.5 text-xs text-muted">
                         {new Date(row.created_at).toLocaleString("sl-SI")}
@@ -155,7 +172,10 @@ export default async function EntityDetailPage({
         </TabsContent>
       </Tabs>
 
-      <Link className="text-sm text-muted underline underline-offset-4" href={`/dashboard/entities/${typeKey}`}>
+      <Link
+        className="text-sm text-muted underline underline-offset-4"
+        href={`/dashboard/entities/${typeKey}`}
+      >
         {t("backToList", { typePlural: entityType.name_plural.toLowerCase() })}
       </Link>
     </div>

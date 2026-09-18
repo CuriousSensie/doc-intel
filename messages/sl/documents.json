@@ -12,6 +12,8 @@
     "uncategorized": "Nekategorizirano",
     "pagesCount": "{count} strani",
     "paginationSummary": "Stran {page} od {totalPages} · {totalCount} dokument(ov)",
+    "saveView": "Shrani kot pogled",
+    "saveViewDescription": "Shrani trenutno iskanje, filtre, razvrščanje, postavitev in stolpce kot osebni pogled.",
     "pageSize": "{count} / stran",
     "firstPage": "Prva stran",
     "previousPage": "Nazaj",
@@ -101,7 +103,9 @@
     "unknownError": "neznana napaka",
     "preparingExport": "Priprava izvoza…",
     "exportFailed": "Izvoz ni uspel: {error}",
-    "attributesAssigned": "Uporabljenih {count} posodobitev atributov."
+    "attributesAssigned": "Uporabljenih {count} posodobitev atributov.",
+    "saveStaticView": "Shrani pogled",
+    "saveStaticViewDescription": "Shrani točno izbrane dokumente kot fiksen osebni pogled."
   },
   "bulkAssign": {
     "trigger": "Dodeli atribute",

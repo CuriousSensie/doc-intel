@@ -37,6 +37,10 @@
     "triggerDescription": "Kaj sproži izvajanje tega pravila.",
     "conditionsTitle": "Pogoji",
     "conditionsDescription": "Za katere dokumente velja to pravilo. Izpolnjeni morajo biti vsi pogoji.",
+    "sectionSummary": {
+      "conditions": "{count} pogoj(ev)",
+      "actions": "{count} dejanj"
+    },
     "conditionNumber": "Pogoj {number}",
     "removeCondition": "Odstrani pogoj",
     "conditionFieldLabel": "Polje pogoja",
@@ -132,6 +136,8 @@
     "recentRuns": "Zadnja izvajanja",
     "noRuns": "Ni še izvajanj.",
     "runMatched": "Ujemanje",
+    "runAppliedTo": "Uporabljeno za",
+    "unknownDocument": "Neznan dokument",
     "runNotMatched": "Brez ujemanja",
     "runStatus": "Status: {status}"
   },
@@ -146,6 +152,7 @@
     "notMatched": "Brez ujemanja",
     "trace": "Sled pogojev",
     "actions": "Dejanja, ki bi se izvedla",
+    "noActions": "Nobeno dejanje se ne bi izvedlo.",
     "error": "Preizkusa ni bilo mogoče izvesti"
   },
   "backfill": {

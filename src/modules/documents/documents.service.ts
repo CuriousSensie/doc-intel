@@ -174,6 +174,7 @@ export type ListDocumentsOptions = {
   correspondentId?: number;
   // Business filters — served entirely from our own DB, never sent to Paperless.
   entityId?: string;
+  documentIds?: string[];
   hasNoConnections?: boolean;
   sort?: DocumentSort;
   sortDirection?: DocumentSortDirection;
@@ -319,6 +320,9 @@ export async function listDocuments(
   if (options.hasNoConnections && options.entityId) {
     return emptyDocumentsResult(options.page, pageSize);
   }
+  if (options.documentIds && options.documentIds.length === 0) {
+    return emptyDocumentsResult(options.page, pageSize);
+  }
 
   if (options.hasNoConnections) {
     return listDocumentsWithoutConnections(organizationId, options, pageSize, limit, paperlessIds);
@@ -351,6 +355,7 @@ export async function listDocuments(
   if (options.dateTo) query = query.lt("created_at", nextUtcDate(options.dateTo));
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
   if (entityConnectedDocIds) query = query.in("id", [...entityConnectedDocIds]);
+  if (options.documentIds) query = query.in("id", options.documentIds);
 
   const cursor = decodeDocumentCursor(options.cursor);
   if (cursor) {
@@ -573,13 +578,22 @@ export async function getPaperlessDocumentIdsForUuids(
   if (error) throw error;
 
   const paperlessIdByUuid = new Map((data ?? []).map((row) => [row.id, row.paperless_document_id]));
-  return documentIds.map((id) => paperlessIdByUuid.get(id)).filter((id): id is number => typeof id === "number");
+  return documentIds
+    .map((id) => paperlessIdByUuid.get(id))
+    .filter((id): id is number => typeof id === "number");
 }
 
 export async function recordBulkEditProvenance(
   ctx: ServiceContext,
   documentIds: string[],
-  method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess",
+  method:
+    | "set_correspondent"
+    | "set_document_type"
+    | "add_tag"
+    | "remove_tag"
+    | "modify_custom_fields"
+    | "delete"
+    | "reprocess",
   parameters: Record<string, unknown> | undefined
 ): Promise<void> {
   if (!ctx.actorId || documentIds.length === 0) return;
@@ -601,7 +615,9 @@ export async function recordBulkEditProvenance(
         : Array.isArray(rawAdded)
           ? rawAdded
           : [];
-    const removed = Array.isArray(parameters?.remove_custom_fields) ? parameters.remove_custom_fields : [];
+    const removed = Array.isArray(parameters?.remove_custom_fields)
+      ? parameters.remove_custom_fields
+      : [];
     for (const item of addedFieldIds) {
       const key = keyByPaperlessFieldId.get(Number(item));
       if (key) fieldKeys.push(`document.custom.${key}`);
@@ -636,7 +652,14 @@ export async function recordBulkEditProvenance(
 export async function updateBulkEditMirror(
   organizationId: string,
   documentIds: string[],
-  method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess",
+  method:
+    | "set_correspondent"
+    | "set_document_type"
+    | "add_tag"
+    | "remove_tag"
+    | "modify_custom_fields"
+    | "delete"
+    | "reprocess",
   parameters: Record<string, unknown> | undefined
 ): Promise<void> {
   if (documentIds.length === 0) return;
@@ -999,10 +1022,17 @@ export async function updateDocument(
   if (input.documentTypeId !== undefined) provenanceFieldKeys.push("document.type");
   if (input.correspondentId !== undefined) provenanceFieldKeys.push("document.correspondent");
   if (input.customFieldValues !== undefined) {
-    const defsCtx: ServiceContext = { db: admin, orgId: organizationId, actorId: userId, correlationId: randomUUID() };
+    const defsCtx: ServiceContext = {
+      db: admin,
+      orgId: organizationId,
+      actorId: userId,
+      correlationId: randomUUID()
+    };
     const defs = await listCustomFieldDefs(defsCtx);
     const keyByPaperlessFieldId = new Map(
-      defs.filter((d) => d.paperless_custom_field_id !== null).map((d) => [d.paperless_custom_field_id, d.key])
+      defs
+        .filter((d) => d.paperless_custom_field_id !== null)
+        .map((d) => [d.paperless_custom_field_id, d.key])
     );
     for (const cfv of input.customFieldValues) {
       const key = keyByPaperlessFieldId.get(cfv.field);
@@ -1042,7 +1072,11 @@ export async function updateDocument(
   // protects any field the user just touched from being overwritten by the fired rule (user-edit-
   // wins), so firing on every successful patch here — not just type/date — is safe: a rule can
   // still act on other conditions/fields this edit didn't touch.
-  await enqueue(QUEUE_NAMES.runRule, { orgId: organizationId, documentId, trigger: "document.updated" });
+  await enqueue(QUEUE_NAMES.runRule, {
+    orgId: organizationId,
+    documentId,
+    trigger: "document.updated"
+  });
 
   return updatedRow;
 }

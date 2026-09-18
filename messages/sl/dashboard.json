@@ -18,7 +18,15 @@
     "noUploadsYet": "Ni še nalaganj.",
     "uploadADocument": "Naloži dokument",
     "maxSizePerFile": "Do {size} na datoteko. PDF, PNG, JPEG, TIFF, DOCX, XLSX, ODT.",
-    "noDocumentsYet": "Ni še dokumentov."
+    "noDocumentsYet": "Ni še dokumentov.",
+    "activity": "Dejavnost",
+    "openDocuments": "Dokumenti",
+    "openViews": "Pogledi",
+    "openImports": "Uvozi",
+    "noActivity": "Ni še nedavne dejavnosti.",
+    "documentNeedsAttention": "Dokument zahteva pozornost",
+    "untitledImport": "Uvoz brez naslova",
+    "importRows": "{count} vrstic"
   },
   "layout": {
     "accountFallback": "Račun"

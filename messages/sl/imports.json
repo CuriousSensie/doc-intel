@@ -9,6 +9,13 @@
   "entityOrderWarning": "Najprej uvozite stranke, projekte in druge povezane zapise. Nato z njimi povežite dokumente prek skupnega identifikatorja.",
   "firstImport": "Pripravite prvi uvoz",
   "recentImports": "Nedavni uvozi",
+  "columns": {
+    "file": "Datoteka",
+    "kind": "Vrsta",
+    "rows": "Vrstice",
+    "status": "Status",
+    "open": "Odpri"
+  },
   "historyLimit": "Prikazanih je zadnjih 50 uvozov.",
   "readOnly": "Uvoze lahko pregledujete. Za ustvarjanje ali spreminjanje se obrnite na člana organizacije s pravico pisanja.",
   "untitled": "Uvoz brez naslova",

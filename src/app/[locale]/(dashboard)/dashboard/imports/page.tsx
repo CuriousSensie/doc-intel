@@ -3,6 +3,14 @@ import { Plus, ArrowUpRight } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Status } from "@/components/imports/import-controls";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { getMembership } from "@/modules/organizations/organizations.service";
@@ -50,33 +58,51 @@ export default async function ImportsPage() {
           )}
         </section>
       ) : (
-        <section>
-          <h2 className="mb-4 text-lg font-semibold">{t("recentImports")}</h2>
-          <div className="divide-y divide-border border-y border-border">
-            {jobs.map((job) => (
-              <Link
-                key={job.id}
-                href={`/dashboard/imports/${job.id}`}
-                className="grid gap-3 px-3 py-5 transition-colors hover:bg-panel focus-visible:outline-2 focus-visible:outline-accent sm:grid-cols-[minmax(0,1fr)_10rem_9rem_1rem] sm:items-center"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{job.source_filename ?? t("untitled")}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {t(`kind.${job.kind}`)} ·{" "}
-                    {new Intl.DateTimeFormat(locale, {
-                      dateStyle: "medium",
-                      timeZone: "Europe/Ljubljana"
-                    }).format(new Date(job.created_at))}
-                  </p>
-                </div>
-                <span className="text-sm tabular-nums text-muted">
-                  {t("rowCount", { count: job.total_rows })}
-                </span>
-                <Status status={job.status} />
-                <ArrowUpRight aria-hidden size={16} className="hidden text-muted sm:block" />
-              </Link>
-            ))}
-          </div>
+        <section className="grid gap-3">
+          <h2 className="text-lg font-semibold">{t("recentImports")}</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("columns.file")}</TableHead>
+                <TableHead>{t("columns.kind")}</TableHead>
+                <TableHead>{t("columns.rows")}</TableHead>
+                <TableHead>{t("columns.status")}</TableHead>
+                <TableHead className="w-10 text-right">{t("columns.open")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {jobs.map((job) => (
+                <TableRow key={job.id}>
+                  <TableCell>
+                    <Link
+                      className="font-semibold hover:underline"
+                      href={`/dashboard/imports/${job.id}`}
+                    >
+                      {job.source_filename ?? t("untitled")}
+                    </Link>
+                    <p className="mt-1 text-xs text-muted">
+                      {new Intl.DateTimeFormat(locale, {
+                        dateStyle: "medium",
+                        timeZone: "Europe/Ljubljana"
+                      }).format(new Date(job.created_at))}
+                    </p>
+                  </TableCell>
+                  <TableCell className="text-muted">{t(`kind.${job.kind}`)}</TableCell>
+                  <TableCell className="tabular-nums text-muted">
+                    {t("rowCount", { count: job.total_rows })}
+                  </TableCell>
+                  <TableCell>
+                    <Status status={job.status} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link href={`/dashboard/imports/${job.id}`}>
+                      <ArrowUpRight aria-hidden size={16} className="ml-auto text-muted" />
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
           <p className="mt-3 text-xs text-muted">{t("historyLimit")}</p>
         </section>
       )}

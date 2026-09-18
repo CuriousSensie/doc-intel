@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { ServiceContext } from "@/lib/service-context";
-import { ensureStarterViews } from "@/modules/saved-views/saved-views.service";
+import { createSavedViewSchema } from "@/modules/saved-views/saved-views.schemas";
+import { createSavedView, ensureStarterViews } from "@/modules/saved-views/saved-views.service";
 
 function makeChain(result: unknown) {
   const target: Record<string, unknown> = {};
@@ -72,5 +73,70 @@ describe("ensureStarterViews", () => {
       "Open contracts",
       "Recently added"
     ]);
+  });
+});
+
+describe("createSavedViewSchema", () => {
+  it("defaults dynamic views to personal with no fixed documents", () => {
+    const result = createSavedViewSchema.parse({
+      name: "Invoices",
+      scope: "documents",
+      filters: { documentTypeKey: "invoice" }
+    });
+
+    expect(result.viewKind).toBe("dynamic");
+    expect(result.isShared).toBe(false);
+    expect(result.documentIds).toEqual([]);
+  });
+
+  it("requires fixed document ids for static document views", () => {
+    expect(
+      createSavedViewSchema.safeParse({
+        name: "Picked documents",
+        scope: "documents",
+        viewKind: "static",
+        documentIds: []
+      }).success
+    ).toBe(false);
+
+    expect(
+      createSavedViewSchema.safeParse({
+        name: "Picked documents",
+        scope: "documents",
+        viewKind: "static",
+        documentIds: ["00000000-0000-4000-8000-000000000001"]
+      }).success
+    ).toBe(true);
+  });
+});
+
+describe("createSavedView", () => {
+  it("persists static document views with document ids", async () => {
+    let inserted: Record<string, unknown> | null = null;
+    const db = {
+      from: () => ({
+        insert: (row: Record<string, unknown>) => {
+          inserted = row;
+          return {
+            select: () => ({
+              single: () => Promise.resolve({ data: { id: "view-1", ...row }, error: null })
+            })
+          };
+        }
+      })
+    } as unknown as ServiceContext["db"];
+
+    await createSavedView(makeCtx(db), {
+      name: "Selection",
+      scope: "documents",
+      viewKind: "static",
+      documentIds: ["00000000-0000-4000-8000-000000000001"]
+    });
+
+    expect(inserted).toMatchObject({
+      view_kind: "static",
+      document_ids: ["00000000-0000-4000-8000-000000000001"],
+      is_shared: false
+    });
   });
 });

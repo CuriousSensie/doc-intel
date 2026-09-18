@@ -12,6 +12,8 @@
     "uncategorized": "Uncategorized",
     "pagesCount": "{count} pages",
     "paginationSummary": "Page {page} of {totalPages} · {totalCount} document(s)",
+    "saveView": "Save as view",
+    "saveViewDescription": "Save the current search, filters, sort, layout, and columns as a personal view.",
     "pageSize": "{count} / page",
     "firstPage": "First page",
     "previousPage": "Previous",
@@ -101,7 +103,9 @@
     "unknownError": "unknown error",
     "preparingExport": "Preparing export…",
     "exportFailed": "Export failed: {error}",
-    "attributesAssigned": "Applied {count} attribute update(s)."
+    "attributesAssigned": "Applied {count} attribute update(s).",
+    "saveStaticView": "Save view",
+    "saveStaticViewDescription": "Save exactly these selected documents as a fixed personal view."
   },
   "bulkAssign": {
     "trigger": "Assign attributes",
