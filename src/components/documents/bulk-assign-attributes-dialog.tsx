@@ -105,19 +105,19 @@ export function BulkAssignAttributesDialog({
           });
           operations += 1;
         }
-        const customPairs: Array<[number, unknown]> = [];
+        const customAssignments: Record<string, unknown> = {};
         const removeCustomFields: number[] = [];
         for (const def of selectedCustomDefs) {
           if (!def.paperless_custom_field_id) continue;
           const value = customValues[def.key];
           if (value === null || value === undefined || value === "") removeCustomFields.push(def.paperless_custom_field_id);
-          else customPairs.push([def.paperless_custom_field_id, value]);
+          else customAssignments[String(def.paperless_custom_field_id)] = value;
         }
-        if (customPairs.length > 0 || removeCustomFields.length > 0) {
+        if (Object.keys(customAssignments).length > 0 || removeCustomFields.length > 0) {
           await bulkEditDocumentsAction({
             ...selection,
             method: "modify_custom_fields",
-            parameters: { add_custom_fields: customPairs, remove_custom_fields: removeCustomFields }
+            parameters: { add_custom_fields: customAssignments, remove_custom_fields: removeCustomFields }
           });
           operations += 1;
         }

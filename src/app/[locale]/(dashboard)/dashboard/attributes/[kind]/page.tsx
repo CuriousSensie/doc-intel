@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AttributesTable } from "@/components/attributes/attributes-table";
+import { CustomFieldFormControls } from "@/components/attributes/custom-field-form-controls";
 import { FormMessage } from "@/components/forms/form-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,17 +42,6 @@ const titleKeys = {
 } as const;
 
 const matchingAlgorithms: MatchingAlgorithm[] = ["none", "any", "all", "exact", "regex", "fuzzy"];
-const customFieldDataTypes: CustomFieldDataType[] = [
-  "string",
-  "integer",
-  "float",
-  "monetary",
-  "date",
-  "boolean",
-  "select",
-  "documentlink",
-  "url"
-];
 
 const controlClass =
   "min-h-10 w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-foreground outline-none transition focus:border-foreground focus:ring-2 focus:ring-foreground/15 disabled:cursor-not-allowed disabled:opacity-50";
@@ -81,10 +71,11 @@ function AttributeForm({
     dataTypeImmutableHint: string;
     options: string;
     optionsHint: string;
+    optionPlaceholder: string;
+    addOption: string;
+    removeOption: string;
     appliesTo: string;
     appliesToHint: string;
-    isRequired: string;
-    documentLinkHint: string;
   };
   matchingLabels: Record<MatchingAlgorithm, string>;
   dataTypeLabels: Record<CustomFieldDataType, string>;
@@ -119,44 +110,21 @@ function AttributeForm({
 
       {isCustomField ? (
         <>
-          <label className="grid gap-1.5 text-sm font-medium">
-            <span>{labels.dataType}</span>
-            {editing ? (
-              <>
-                {/* data_type is immutable post-create (custom-field-defs.service.ts's own
-                    rule) — a disabled <select> doesn't submit, so a hidden input carries the
-                    real value through instead. */}
-                <select className={controlClass} defaultValue={editing.dataType ?? "string"} disabled>
-                  {customFieldDataTypes.map((dt) => (
-                    <option key={dt} value={dt}>
-                      {dataTypeLabels[dt]}
-                    </option>
-                  ))}
-                </select>
-                <input name="dataType" type="hidden" value={editing.dataType ?? "string"} />
-                <span className="text-xs text-muted">{labels.dataTypeImmutableHint}</span>
-              </>
-            ) : (
-              <select className={controlClass} defaultValue="string" name="dataType">
-                {customFieldDataTypes.map((dt) => (
-                  <option key={dt} value={dt}>
-                    {dataTypeLabels[dt]}
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-
-          <label className="grid gap-1.5 text-sm font-medium">
-            <span>{labels.options}</span>
-            <textarea
-              className={`${controlClass} min-h-24`}
-              defaultValue={(editing?.options ?? []).map((o) => o.label).join("\n")}
-              name="options"
-              rows={4}
-            />
-            <span className="text-xs text-muted">{labels.optionsHint}</span>
-          </label>
+          <CustomFieldFormControls
+            dataTypeLabels={dataTypeLabels}
+            editing={Boolean(editing)}
+            initialDataType={editing?.dataType ?? "string"}
+            initialOptions={(editing?.options ?? []).map((option) => option.label)}
+            labels={{
+              dataType: labels.dataType,
+              dataTypeImmutableHint: labels.dataTypeImmutableHint,
+              options: labels.options,
+              optionsHint: labels.optionsHint,
+              optionPlaceholder: labels.optionPlaceholder,
+              addOption: labels.addOption,
+              removeOption: labels.removeOption
+            }}
+          />
 
           {documentTypeOptions.length > 0 ? (
             <fieldset className="grid gap-1.5 text-sm font-medium">
@@ -178,12 +146,6 @@ function AttributeForm({
             </fieldset>
           ) : null}
 
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input defaultChecked={editing?.isRequired} name="isRequired" type="checkbox" />
-            {labels.isRequired}
-          </label>
-
-          <p className="text-xs text-muted">{labels.documentLinkHint}</p>
         </>
       ) : (
         <div className="grid gap-4 md:grid-cols-[minmax(13rem,18rem)_minmax(0,1fr)]">
@@ -265,10 +227,11 @@ export default async function AttributePage({
     dataTypeImmutableHint: t("form.dataTypeImmutableHint"),
     options: t("form.options"),
     optionsHint: t("form.optionsHint"),
+    optionPlaceholder: t("form.optionPlaceholder"),
+    addOption: t("form.addOption"),
+    removeOption: t("form.removeOption"),
     appliesTo: t("form.appliesTo"),
-    appliesToHint: t("form.appliesToHint"),
-    isRequired: t("form.isRequired"),
-    documentLinkHint: t("form.documentLinkHint")
+    appliesToHint: t("form.appliesToHint")
   };
   const matchingLabels = {
     none: t("matching.none.option"),
@@ -353,7 +316,7 @@ export default async function AttributePage({
       {attributes.length === 0 ? (
         <EmptyState description={t("emptyDescription")} title={t("emptyTitle")} />
       ) : (
-      <AttributesTable attributes={attributes} kind={kind} />
+        <AttributesTable attributes={attributes} kind={kind} />
       )}
     </div>
   );

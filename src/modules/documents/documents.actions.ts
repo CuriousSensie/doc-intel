@@ -37,6 +37,7 @@ import {
   listDocuments,
   listDocumentIds,
   recordBulkEditProvenance,
+  updateBulkEditMirror,
   updateDocument,
   type ListDocumentsOptions
 } from "@/modules/documents/documents.service";
@@ -175,6 +176,7 @@ export async function bulkEditDocumentsAction(input: BulkEditDocumentsInput) {
     method: input.method,
     parameters: input.parameters
   });
+  await updateBulkEditMirror(ctx.orgId, documentIds, input.method, input.parameters);
 
   if (input.method !== "delete" && input.method !== "reprocess") {
     await recordBulkEditProvenance(ctx, documentIds, input.method, input.parameters);

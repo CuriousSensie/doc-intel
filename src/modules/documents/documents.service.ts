@@ -594,11 +594,16 @@ export async function recordBulkEditProvenance(
         .filter((def) => def.paperless_custom_field_id !== null)
         .map((def) => [def.paperless_custom_field_id, def.key])
     );
-    const added = Array.isArray(parameters?.add_custom_fields) ? parameters.add_custom_fields : [];
+    const rawAdded = parameters?.add_custom_fields;
+    const addedFieldIds =
+      rawAdded && typeof rawAdded === "object" && !Array.isArray(rawAdded)
+        ? Object.keys(rawAdded)
+        : Array.isArray(rawAdded)
+          ? rawAdded
+          : [];
     const removed = Array.isArray(parameters?.remove_custom_fields) ? parameters.remove_custom_fields : [];
-    for (const item of added) {
-      if (!Array.isArray(item)) continue;
-      const key = keyByPaperlessFieldId.get(Number(item[0]));
+    for (const item of addedFieldIds) {
+      const key = keyByPaperlessFieldId.get(Number(item));
       if (key) fieldKeys.push(`document.custom.${key}`);
     }
     for (const item of removed) {
@@ -625,6 +630,46 @@ export async function recordBulkEditProvenance(
     ),
     { onConflict: "document_id,field_key" }
   );
+  if (error) throw error;
+}
+
+export async function updateBulkEditMirror(
+  organizationId: string,
+  documentIds: string[],
+  method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess",
+  parameters: Record<string, unknown> | undefined
+): Promise<void> {
+  if (documentIds.length === 0) return;
+  if (method !== "set_correspondent" && method !== "set_document_type") return;
+
+  const client = await paperlessFor(organizationId);
+  const admin = createAdminClient();
+
+  if (method === "set_correspondent") {
+    const correspondentId = parameters?.correspondent;
+    const correspondentName =
+      typeof correspondentId === "number"
+        ? await getPaperlessCorrespondentName(client, correspondentId)
+        : null;
+    const { error } = await admin
+      .from("documents")
+      .update({ correspondent_name: correspondentName })
+      .eq("organization_id", organizationId)
+      .in("id", documentIds);
+    if (error) throw error;
+    return;
+  }
+
+  const documentTypeId = parameters?.document_type;
+  const documentTypeKey =
+    typeof documentTypeId === "number"
+      ? toDocumentTypeKey(await getPaperlessDocumentTypeName(client, documentTypeId))
+      : null;
+  const { error } = await admin
+    .from("documents")
+    .update({ document_type_key: documentTypeKey })
+    .eq("organization_id", organizationId)
+    .in("id", documentIds);
   if (error) throw error;
 }
 

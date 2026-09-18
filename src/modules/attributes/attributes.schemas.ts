@@ -55,9 +55,9 @@ export const attributeFormSchema = z
     match: z.string().trim().max(256).optional().or(z.literal("")),
     // custom-fields kind only
     dataType: customFieldDataTypeSchema.optional(),
-    // Raw newline-separated textarea text — split/trimmed/filtered server-side, not here, since
-    // the split logic is shared with the update path and simplest kept in one place.
-    options: z.string().optional(),
+    // Repeated inputs from the option editor; a legacy string is also accepted because older
+    // textarea submissions used newline-separated text.
+    options: z.union([z.string(), z.array(z.string())]).optional(),
     appliesTo: z.array(z.string().trim().min(1)).optional(),
     isRequired: z.boolean().optional()
   })
@@ -82,24 +82,21 @@ export const attributeFormSchema = z
       if (!value.dataType) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["dataType"], message: "Choose a data type" });
       } else if (value.dataType === "select") {
-        const lines = (value.options ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
-        if (lines.length === 0) {
+        if (parseAttributeOptionsInput(value.options).length === 0) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["options"],
-            message: "Enter at least one option, one per line"
+            message: "Enter at least one option"
           });
         }
       }
     }
   });
 
-// Shared by create/update — the textarea's raw text to a plain label list.
-export function parseAttributeOptionsInput(raw: string | undefined): string[] {
-  return (raw ?? "")
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+// Shared by create/update — converts repeated option inputs (or the old textarea shape) to labels.
+export function parseAttributeOptionsInput(raw: string | string[] | undefined): string[] {
+  const values = Array.isArray(raw) ? raw : (raw ?? "").split("\n");
+  return values.map((s) => s.trim()).filter(Boolean);
 }
 
 export const deleteAttributeSchema = z.object({

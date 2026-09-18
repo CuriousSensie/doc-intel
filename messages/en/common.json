@@ -80,8 +80,7 @@
       "viewDocuments": "View documents",
       "actions": "Actions",
       "dataType": "Type",
-      "appliesTo": "Applies to",
-      "isRequired": "Required"
+      "appliesTo": "Applies to"
     },
     "form": {
       "name": "Name",
@@ -94,11 +93,12 @@
       "dataType": "Data type",
       "dataTypeImmutableHint": "The data type can't be changed after creation.",
       "options": "Options",
-      "optionsHint": "One option per line.",
+      "optionsHint": "Add each allowed value as its own option.",
+      "optionPlaceholder": "Option label",
+      "addOption": "Add option",
+      "removeOption": "Remove option",
       "appliesTo": "Applies to",
-      "appliesToHint": "Leave all unchecked to allow this field on every document type.",
-      "isRequired": "Required",
-      "documentLinkHint": "A document-link field represents a connection to a business entity — it's never synced to Paperless and has no value input here."
+      "appliesToHint": "Leave all unchecked to allow this field on every document type."
     },
     "dataTypes": {
       "string": "Text",

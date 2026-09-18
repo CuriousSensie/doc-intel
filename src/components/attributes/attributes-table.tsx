@@ -28,9 +28,7 @@ import type { AttributeKind } from "@/modules/attributes/attributes.schemas";
 export function AttributesTable({ attributes, kind }: { attributes: AttributeRow[]; kind: AttributeKind }) {
   const t = useTranslations("common.attributes");
   // Matching/Documents/View-documents are Paperless-tag-shaped columns that are meaningless for
-  // custom fields (no Paperless "matching," no per-field document count) — a dedicated column
-  // set (Type/Applies to/Required) is shown instead, rather than forcing fake zeros through the
-  // tag-shaped columns.
+  // custom fields — a dedicated column set (Type/Applies to) is shown instead.
   const isCustomFields = kind === "custom-fields";
 
   return (
@@ -43,7 +41,6 @@ export function AttributesTable({ attributes, kind }: { attributes: AttributeRow
               <>
                 <TableHead className="w-44">{t("columns.dataType")}</TableHead>
                 <TableHead className="w-56">{t("columns.appliesTo")}</TableHead>
-                <TableHead className="w-28">{t("columns.isRequired")}</TableHead>
               </>
             ) : (
               <>
@@ -84,7 +81,6 @@ export function AttributesTable({ attributes, kind }: { attributes: AttributeRow
                       ? attribute.appliesTo.join(", ")
                       : "—"}
                   </TableCell>
-                  <TableCell className="text-muted">{attribute.isRequired ? t("yes") : t("no")}</TableCell>
                 </>
               ) : (
                 <>

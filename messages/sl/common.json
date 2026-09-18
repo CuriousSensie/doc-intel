@@ -80,8 +80,7 @@
       "viewDocuments": "Prikaži dokumente",
       "actions": "Dejanja",
       "dataType": "Vrsta",
-      "appliesTo": "Velja za",
-      "isRequired": "Obvezno"
+      "appliesTo": "Velja za"
     },
     "form": {
       "name": "Ime",
@@ -94,11 +93,12 @@
       "dataType": "Podatkovna vrsta",
       "dataTypeImmutableHint": "Podatkovne vrste po ustvarjanju ni mogoče spremeniti.",
       "options": "Možnosti",
-      "optionsHint": "Ena možnost na vrstico.",
+      "optionsHint": "Vsako dovoljeno vrednost dodajte kot svojo možnost.",
+      "optionPlaceholder": "Oznaka možnosti",
+      "addOption": "Dodaj možnost",
+      "removeOption": "Odstrani možnost",
       "appliesTo": "Velja za",
-      "appliesToHint": "Če ničesar ne izberete, je polje na voljo za vse vrste dokumentov.",
-      "isRequired": "Obvezno",
-      "documentLinkHint": "Polje za povezavo predstavlja povezavo s poslovnim subjektom — nikoli se ne sinhronizira s Paperless in tukaj nima vnosa vrednosti."
+      "appliesToHint": "Če ničesar ne izberete, je polje na voljo za vse vrste dokumentov."
     },
     "dataTypes": {
       "string": "Besedilo",

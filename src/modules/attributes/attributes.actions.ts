@@ -47,13 +47,13 @@ export async function saveAttributeFormAction(formData: FormData) {
       id: formData.get("id") || undefined,
       kind: rawKind,
       name: formData.get("name"),
-      color: formData.get("color"),
+      color: formData.get("color") || undefined,
       matchingAlgorithm: formData.get("matchingAlgorithm") || undefined,
-      match: formData.get("match"),
+      match: formData.get("match") || undefined,
       dataType: formData.get("dataType") || undefined,
-      options: formData.get("options") || undefined,
+      options: formData.getAll("options").map(String),
       appliesTo: formData.getAll("appliesTo").map(String),
-      isRequired: formData.get("isRequired") === "on"
+      isRequired: false
     });
     kind = parsed.kind;
     const input = {
