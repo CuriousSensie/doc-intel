@@ -141,72 +141,85 @@ export function RuleBackfillPanel({
 
   return (
     <Card className="flex min-h-0 flex-col lg:h-full">
-      <CardHeader className="shrink-0">
-        <CardTitle>{t("title")}</CardTitle>
-        <p className="text-sm text-muted">{t("description")}</p>
-      </CardHeader>
-      <CardContent className="grid min-h-0 gap-4 lg:overflow-y-auto">
-        <form action={startRuleBackfillFormAction} className="grid gap-3 sm:grid-cols-3">
-          <input name="ruleId" type="hidden" value={ruleId} />
-          <Input
-            aria-label={t("documentTypeLabel")}
-            name="documentTypeKey"
-            onChange={(e) => setDocumentTypeKey(e.target.value)}
-            placeholder={t("documentTypeLabel")}
-            value={documentTypeKey}
-          />
-          <Input
-            aria-label={t("dateFromLabel")}
-            name="dateFrom"
-            onChange={(e) => setDateFrom(e.target.value)}
-            placeholder={t("dateFromLabel")}
-            type="date"
-            value={dateFrom}
-          />
-          <Input
-            aria-label={t("dateToLabel")}
-            name="dateTo"
-            onChange={(e) => setDateTo(e.target.value)}
-            placeholder={t("dateToLabel")}
-            type="date"
-            value={dateTo}
-          />
-
-          <div className="flex items-center gap-3 sm:col-span-3">
-            <Button disabled={isPending} onClick={preview} type="button" variant="outline">
-              {isPending ? t("previewing") : t("preview")}
-            </Button>
+      <form action={startRuleBackfillFormAction} className="flex min-h-0 flex-1 flex-col">
+        <CardHeader className="shrink-0 gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>{t("title")}</CardTitle>
+            <p className="mt-1 text-sm text-muted">{t("description")}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {matchedCount !== null ? (
               <span className="text-sm text-muted">
                 {t("matchedCount", { count: matchedCount })}
               </span>
             ) : null}
+            <Button disabled={isPending} onClick={preview} type="button" variant="outline">
+              {isPending ? t("previewing") : t("preview")}
+            </Button>
+            <Button disabled={matchedCount === null || matchedCount === 0} type="submit">
+              {t("start")}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid min-h-0 gap-4 lg:overflow-y-auto">
+          <input name="ruleId" type="hidden" value={ruleId} />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="relative block">
+              <span className="pointer-events-none absolute left-3 top-1 text-[11px] font-semibold text-muted">
+                {t("documentTypeLabel")}
+              </span>
+              <Input
+                aria-label={t("documentTypeLabel")}
+                className="pb-1 pt-5"
+                name="documentTypeKey"
+                onChange={(e) => setDocumentTypeKey(e.target.value)}
+                value={documentTypeKey}
+              />
+            </label>
+            <label className="relative block">
+              <span className="pointer-events-none absolute left-3 top-1 text-[11px] font-semibold text-muted">
+                {t("dateFromLabel")}
+              </span>
+              <Input
+                aria-label={t("dateFromLabel")}
+                className="pb-1 pt-5"
+                name="dateFrom"
+                onChange={(e) => setDateFrom(e.target.value)}
+                type="date"
+                value={dateFrom}
+              />
+            </label>
+            <label className="relative block">
+              <span className="pointer-events-none absolute left-3 top-1 text-[11px] font-semibold text-muted">
+                {t("dateToLabel")}
+              </span>
+              <Input
+                aria-label={t("dateToLabel")}
+                className="pb-1 pt-5"
+                name="dateTo"
+                onChange={(e) => setDateTo(e.target.value)}
+                type="date"
+                value={dateTo}
+              />
+            </label>
           </div>
 
-          {error ? <p className="text-sm text-danger sm:col-span-3">{error}</p> : null}
+          {error ? <p className="text-sm text-danger">{error}</p> : null}
 
-          <Button
-            className="sm:col-span-3"
-            disabled={matchedCount === null || matchedCount === 0}
-            type="submit"
-          >
-            {t("start")}
-          </Button>
-        </form>
-
-        <div className="grid gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-            {t("recentBackfills")}
-          </p>
-          {recentBackfills.length === 0 ? (
-            <p className="text-sm text-muted">{t("noBackfills")}</p>
-          ) : (
-            recentBackfills.map((backfill) => (
-              <BackfillRow backfill={backfill} key={backfill.id} ruleId={ruleId} />
-            ))
-          )}
-        </div>
-      </CardContent>
+          <div className="grid gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              {t("recentBackfills")}
+            </p>
+            {recentBackfills.length === 0 ? (
+              <p className="text-sm text-muted">{t("noBackfills")}</p>
+            ) : (
+              recentBackfills.map((backfill) => (
+                <BackfillRow backfill={backfill} key={backfill.id} ruleId={ruleId} />
+              ))
+            )}
+          </div>
+        </CardContent>
+      </form>
     </Card>
   );
 }

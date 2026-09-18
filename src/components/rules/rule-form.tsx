@@ -96,7 +96,7 @@ function RuleAccordionSection({
   children: ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className={`overflow-hidden ${open ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}`}>
       <CardHeader className="p-0">
         <button
           aria-expanded={open}
@@ -118,7 +118,7 @@ function RuleAccordionSection({
           />
         </button>
       </CardHeader>
-      {open ? children : null}
+      {open ? <div className="min-h-0 flex-1 overflow-y-auto">{children}</div> : null}
     </Card>
   );
 }
@@ -334,11 +334,13 @@ function serializeActionRows(rows: ActionRow[]) {
 export function RuleForm({
   enabled,
   initial,
-  metaOptions: initialMetaOptions
+  metaOptions: initialMetaOptions,
+  showHeader = true
 }: {
   enabled?: boolean;
   initial?: RuleFormValue;
   metaOptions: { tags: MetaOption[]; correspondents: MetaOption[]; documentTypes: MetaOption[] };
+  showHeader?: boolean;
 }) {
   const t = useTranslations("rules.form");
   const tDetail = useTranslations("rules.detail");
@@ -488,10 +490,9 @@ export function RuleForm({
   }
 
   return (
-    <div className="grid gap-4 lg:h-full lg:grid-rows-[auto_minmax(0,1fr)_auto]">
-      {!initial?.id ? <div className="hidden lg:block" /> : null}
-      {initial?.id ? (
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+    <div className="flex min-h-0 flex-col gap-4 lg:h-full">
+      {initial?.id && showHeader ? (
+        <div className="flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:items-start sm:text-left">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="min-w-0 truncate text-3xl font-black">{name || initial.name}</h1>
@@ -503,7 +504,7 @@ export function RuleForm({
               {tList("trigger", { trigger: tTriggers(triggerMessageKey(trigger)) })}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
             {hasChanges ? (
               <Button disabled={isPending || !canSubmit} onClick={handleSubmit} type="button">
                 {isPending ? t("saving") : t("save")}
@@ -528,7 +529,7 @@ export function RuleForm({
         </div>
       ) : null}
 
-      <div className="grid gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         <RuleAccordionSection
           id="basics"
           onOpenChange={setOpenSection}
@@ -543,18 +544,20 @@ export function RuleForm({
               placeholder={t("namePlaceholder")}
               value={name}
             />
-            <select
-              aria-label={t("triggerTitle")}
-              className={controlClass}
-              onChange={(e) => setTrigger(e.target.value as RuleTrigger)}
-              value={trigger}
-            >
-              {RULE_TRIGGERS.map((value) => (
-                <option key={value} value={value}>
-                  {tTriggers(triggerMessageKey(value))}
-                </option>
-              ))}
-            </select>
+            <label className="grid gap-2 text-sm font-semibold">
+              <span>{t("triggerTitle")}</span>
+              <select
+                className="min-h-11 rounded-md border border-border bg-panel px-3 text-base font-normal outline-none transition focus:border-foreground focus:ring-2 focus:ring-foreground/15"
+                onChange={(e) => setTrigger(e.target.value as RuleTrigger)}
+                value={trigger}
+              >
+                {RULE_TRIGGERS.map((value) => (
+                  <option key={value} value={value}>
+                    {tTriggers(triggerMessageKey(value))}
+                  </option>
+                ))}
+              </select>
+            </label>
           </CardContent>
         </RuleAccordionSection>
 
@@ -875,15 +878,25 @@ export function RuleForm({
         </RuleAccordionSection>
       </div>
 
-      <div className="grid gap-2">
+      <div className="grid shrink-0 gap-2">
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {!canSubmit && (conditionRows.length === 0 || actionRows.length === 0) ? (
           <p className="text-sm text-muted">{t("needsConditionAndAction")}</p>
         ) : null}
 
-        {!initial ? (
+        {(!initial || hasChanges) && !showHeader ? (
           <Button
-            className="justify-self-start"
+            className="justify-self-center sm:justify-self-start"
+            disabled={isPending || !canSubmit}
+            onClick={handleSubmit}
+            type="button"
+          >
+            {isPending ? t("saving") : initial ? t("save") : t("create")}
+          </Button>
+        ) : null}
+        {!initial && showHeader ? (
+          <Button
+            className="justify-self-center sm:justify-self-start"
             disabled={isPending || !canSubmit}
             onClick={handleSubmit}
             type="button"

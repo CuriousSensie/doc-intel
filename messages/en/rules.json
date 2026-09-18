@@ -2,6 +2,8 @@
   "list": {
     "title": "Rules",
     "description": "Define once, apply automatically. Deterministic conditions and actions — no AI.",
+    "editDescription": "Edit your rules",
+    "newDescription": "Create a new rule to automate deterministic workflows",
     "newRule": "New rule",
     "empty": "No rules yet.",
     "emptyDescription": "Create a rule to connect documents to entities, set fields, or send reminders automatically.",
@@ -28,8 +30,9 @@
     "manageOnly": "Only an organization owner or admin can manage rules"
   },
   "form": {
-    "basicsTitle": "Name & trigger",
+    "basicsTitle": "Basic",
     "nameLabel": "Name",
+    "triggerLabel": "Trigger",
     "namePlaceholder": "Invoices to ABC d.o.o.",
     "priorityLabel": "Priority",
     "priorityHint": "Lower runs first when rules conflict. Most rules can leave this at 100.",

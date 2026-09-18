@@ -2,6 +2,8 @@
   "list": {
     "title": "Pravila",
     "description": "Določi enkrat, uporabi samodejno. Deterministični pogoji in dejanja — brez UI.",
+    "editDescription": "uredi naše pravilo",
+    "newDescription": "Ustvarite novo pravilo za avtomatizacijo determinističnih potekov dela.",
     "newRule": "Novo pravilo",
     "empty": "Ni še pravil.",
     "emptyDescription": "Ustvarite pravilo za samodejno povezovanje dokumentov z entitetami, nastavljanje polj ali pošiljanje opomnikov.",
@@ -28,8 +30,9 @@
     "manageOnly": "Samo lastnik ali skrbnik organizacije lahko upravlja pravila"
   },
   "form": {
-    "basicsTitle": "Ime in sprožilec",
+    "basicsTitle": "Osnovno",
     "nameLabel": "Ime",
+    "triggerLabel": "Sprožilec",
     "namePlaceholder": "Računi za ABC d.o.o.",
     "priorityLabel": "Prioriteta",
     "priorityHint": "Nižja vrednost se izvede prej, kadar si pravila nasprotujejo. Večina pravil lahko ostane pri 100.",

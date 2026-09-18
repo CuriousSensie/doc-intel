@@ -1,9 +1,13 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
+import { Play } from "lucide-react";
 
 import { FormMessage } from "@/components/forms/form-message";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { RuleBackfillPanel } from "@/components/rules/rule-backfill-panel";
+import { DeleteRuleButton } from "@/components/rules/delete-rule-button";
 import { RuleDetailTabs } from "@/components/rules/rule-detail-tabs";
 import { RuleForm, type RuleFormValue } from "@/components/rules/rule-form";
 import { RuleTestPanel } from "@/components/rules/rule-test-panel";
@@ -18,7 +22,11 @@ import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
-import { listRuleBackfillsForRuleAction } from "@/modules/rules/rules.actions";
+import {
+  listRuleBackfillsForRuleAction,
+  startRuleBackfillFormAction,
+  toggleRuleEnabledFormAction
+} from "@/modules/rules/rules.actions";
 import { type RuleAction } from "@/modules/rules/rules.schemas";
 import { getRule, listRuleRunsForRule } from "@/modules/rules/rules.service";
 
@@ -135,17 +143,46 @@ export default async function RuleDetailPage({
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-[1800px] gap-4 px-1">
+    <div className="mx-auto grid w-full max-w-[1800px] gap-4 overflow-hidden px-1 lg:h-[calc(100vh-8rem)] lg:grid-rows-[auto_minmax(0,1fr)]">
       <FormMessage error={search.error} message={search.message} />
 
       <RuleDetailTabs
+        actions={
+          <>
+            <form action={startRuleBackfillFormAction}>
+              <input name="ruleId" type="hidden" value={rule.id} />
+              <Button type="submit" variant="outline">
+                <Play aria-hidden className="size-4" />
+                {t("detail.trigger")}
+              </Button>
+            </form>
+            <form action={toggleRuleEnabledFormAction}>
+              <input name="ruleId" type="hidden" value={rule.id} />
+              <input name="enabled" type="hidden" value={(!rule.enabled).toString()} />
+              <Button type="submit" variant="outline">
+                {rule.enabled ? t("detail.disable") : t("detail.enable")}
+              </Button>
+            </form>
+            <DeleteRuleButton ruleId={rule.id} />
+          </>
+        }
         backfill={<RuleBackfillPanel recentBackfills={recentBackfills} ruleId={rule.id} />}
         rule={
           <RuleForm
             enabled={rule.enabled}
             initial={formValue}
             metaOptions={{ tags, correspondents, documentTypes }}
+            showHeader={false}
           />
+        }
+        subtitle={<p className="mt-1 text-sm text-muted">{t("list.editDescription")}</p>}
+        title={
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-3 sm:justify-start">
+            <h1 className="min-w-0 truncate text-3xl font-black">{rule.name}</h1>
+            <Badge variant={rule.enabled ? "accent" : "muted"}>
+              {rule.enabled ? t("list.enabled") : t("list.disabled")}
+            </Badge>
+          </div>
         }
         runs={
           <Card className="flex min-h-0 flex-col lg:h-full">
