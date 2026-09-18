@@ -23,19 +23,35 @@ import {
 } from "@/components/ui/table";
 import { deleteAttributeFormAction } from "@/modules/attributes/attributes.actions";
 import type { AttributeRow } from "@/modules/attributes/attributes.service";
+import type { AttributeKind } from "@/modules/attributes/attributes.schemas";
 
-export function AttributesTable({ attributes }: { attributes: AttributeRow[] }) {
+export function AttributesTable({ attributes, kind }: { attributes: AttributeRow[]; kind: AttributeKind }) {
   const t = useTranslations("common.attributes");
+  // Matching/Documents/View-documents are Paperless-tag-shaped columns that are meaningless for
+  // custom fields (no Paperless "matching," no per-field document count) — a dedicated column
+  // set (Type/Applies to/Required) is shown instead, rather than forcing fake zeros through the
+  // tag-shaped columns.
+  const isCustomFields = kind === "custom-fields";
 
   return (
     <div className="min-w-0 overflow-x-auto">
       <Table className="min-w-[920px] table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[38%]">{t("columns.name")}</TableHead>
-            <TableHead className="w-44">{t("columns.matching")}</TableHead>
-            <TableHead className="w-40">{t("columns.documents")}</TableHead>
-            <TableHead className="w-44">{t("columns.viewDocuments")}</TableHead>
+            <TableHead className="w-[30%]">{t("columns.name")}</TableHead>
+            {isCustomFields ? (
+              <>
+                <TableHead className="w-44">{t("columns.dataType")}</TableHead>
+                <TableHead className="w-56">{t("columns.appliesTo")}</TableHead>
+                <TableHead className="w-28">{t("columns.isRequired")}</TableHead>
+              </>
+            ) : (
+              <>
+                <TableHead className="w-44">{t("columns.matching")}</TableHead>
+                <TableHead className="w-40">{t("columns.documents")}</TableHead>
+                <TableHead className="w-44">{t("columns.viewDocuments")}</TableHead>
+              </>
+            )}
             <TableHead className="w-24">
               <span className="sr-only">{t("columns.actions")}</span>
             </TableHead>
@@ -58,27 +74,43 @@ export function AttributesTable({ attributes }: { attributes: AttributeRow[] }) 
                   </span>
                 </div>
               </TableCell>
-              <TableCell>
-                <Badge variant={attribute.matchingAlgorithm === "none" ? "muted" : "outline"}>
-                  {t(`matching.${attribute.matchingAlgorithm}.label`)}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted tabular-nums">{attribute.documentCount}</TableCell>
-              <TableCell>
-                {attribute.canViewDocuments ? (
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={attribute.viewDocumentsHref}>
-                      <Eye aria-hidden className="size-4" />
-                      {t("viewDocuments")}
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button disabled size="sm" variant="outline">
-                    <Eye aria-hidden className="size-4" />
-                    {t("viewDocuments")}
-                  </Button>
-                )}
-              </TableCell>
+              {isCustomFields ? (
+                <>
+                  <TableCell className="text-muted">
+                    {attribute.dataType ? t(`dataTypes.${attribute.dataType}`) : ""}
+                  </TableCell>
+                  <TableCell className="text-muted">
+                    {attribute.appliesTo && attribute.appliesTo.length > 0
+                      ? attribute.appliesTo.join(", ")
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-muted">{attribute.isRequired ? t("yes") : t("no")}</TableCell>
+                </>
+              ) : (
+                <>
+                  <TableCell>
+                    <Badge variant={attribute.matchingAlgorithm === "none" ? "muted" : "outline"}>
+                      {t(`matching.${attribute.matchingAlgorithm}.label`)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted tabular-nums">{attribute.documentCount}</TableCell>
+                  <TableCell>
+                    {attribute.canViewDocuments ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={attribute.viewDocumentsHref}>
+                          <Eye aria-hidden className="size-4" />
+                          {t("viewDocuments")}
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button disabled size="sm" variant="outline">
+                        <Eye aria-hidden className="size-4" />
+                        {t("viewDocuments")}
+                      </Button>
+                    )}
+                  </TableCell>
+                </>
+              )}
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

@@ -10,6 +10,7 @@ import { DocumentsPagination } from "@/components/documents/documents-pagination
 import { Button } from "@/components/ui/button";
 import {
   getPaperlessContentSnippets,
+  getPaperlessDocumentCustomFields,
   getPaperlessDocumentTags,
   toDocumentTypeKey,
   type PaperlessTag
@@ -23,6 +24,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
+import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
+import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
 import {
   documentsViewSearchParamSchema,
   parseDocumentListFields,
@@ -70,21 +73,29 @@ export default async function DocumentsPage({
   const rawView = Array.isArray(rawSearch.view) ? rawSearch.view[0] : rawSearch.view;
   const viewParse = documentsViewSearchParamSchema.safeParse({ view: rawView });
   const view = (viewParse.success ? viewParse.data.view : undefined) ?? "list";
-  const visibleFields = parseDocumentListFields(rawSearch);
+  const parsedVisibleFields = parseDocumentListFields(rawSearch);
 
   const client = await paperlessFor(organizationId);
+  const defsCtx = {
+    db: await createClient(),
+    orgId: organizationId,
+    actorId: context.user.id,
+    correlationId: randomUUID()
+  };
 
   const [
     { items: documents, totalCount, page, pageSize, totalPages },
     tags,
     correspondents,
     documentTypes,
+    customFieldDefs,
     selectedEntity
   ] = await Promise.all([
     listDocuments(organizationId, filter),
     getCachedTags(client, organizationId),
     getCachedCorrespondents(client, organizationId),
     getCachedDocumentTypes(client, organizationId),
+    listCustomFieldDefs(defsCtx),
     filter.entityId
       ? getEntity(
           {
@@ -97,6 +108,12 @@ export default async function DocumentsPage({
         ).catch(() => null)
       : Promise.resolve(null)
   ]);
+  const customFieldDefByKey = new Map(customFieldDefs.map((def) => [def.key, def]));
+  const visibleFields = parsedVisibleFields.filter((field) => {
+    if (!field.startsWith("custom:")) return true;
+    const def = customFieldDefByKey.get(field.slice("custom:".length));
+    return Boolean(def && def.data_type !== "documentlink");
+  });
 
   if (documents.length === 0 && page > 1 && totalPages > 0) {
     const params = new URLSearchParams();
@@ -114,9 +131,14 @@ export default async function DocumentsPage({
   const needsTags = visibleFields.includes("tags") && documents.length > 0;
   const needsConnections = visibleFields.includes("connections") && documents.length > 0;
   const needsContent = view === "largeCards" && documents.length > 0;
+  const visibleCustomFieldDefs = visibleFields
+    .filter((field) => field.startsWith("custom:"))
+    .map((field) => customFieldDefByKey.get(field.slice("custom:".length)))
+    .filter((def): def is (typeof customFieldDefs)[number] => Boolean(def));
+  const needsCustomFields = visibleCustomFieldDefs.length > 0 && documents.length > 0;
   const tagById = new Map(tags.map((tg) => [tg.id, tg]));
 
-  const [contentByPaperlessId, tagsByPaperlessId, connectionCountsByDocumentId] = await Promise.all(
+  const [contentByPaperlessId, tagsByPaperlessId, connectionCountsByDocumentId, customFieldsByPaperlessId] = await Promise.all(
     [
       needsContent
         ? getPaperlessContentSnippets(
@@ -135,7 +157,13 @@ export default async function DocumentsPage({
             organizationId,
             documents.map((d) => d.id)
           )
-        : Promise.resolve({} as Record<string, number>)
+        : Promise.resolve({} as Record<string, number>),
+      needsCustomFields
+        ? getPaperlessDocumentCustomFields(
+            client,
+            documents.map((d) => d.paperless_document_id)
+          )
+        : Promise.resolve(new Map<number, Array<{ field: number; value: unknown }>>())
     ]
   );
 
@@ -145,6 +173,12 @@ export default async function DocumentsPage({
       (tagsByPaperlessId.get(d.paperless_document_id) ?? [])
         .map((tagId) => tagById.get(tagId))
         .filter((tag): tag is PaperlessTag => Boolean(tag))
+    ])
+  );
+  const customFieldValuesByDocumentId = Object.fromEntries(
+    documents.map((d) => [
+      d.id,
+      mapRawCustomFieldValues(customFieldsByPaperlessId.get(d.paperless_document_id), customFieldDefs)
     ])
   );
 
@@ -170,7 +204,8 @@ export default async function DocumentsPage({
           documentTypes: documentTypes.map((dt) => ({
             key: toDocumentTypeKey(dt.name),
             name: dt.name
-          }))
+          })),
+          customFields: customFieldDefs.filter((def) => def.data_type !== "documentlink")
         }}
         key={JSON.stringify(rawSearch)}
         selectedEntity={
@@ -196,6 +231,8 @@ export default async function DocumentsPage({
           <DocumentsBulkList
             connectionCountsByDocumentId={connectionCountsByDocumentId}
             contentByPaperlessId={contentByPaperlessId}
+            customFieldDefs={visibleCustomFieldDefs}
+            customFieldValuesByDocumentId={customFieldValuesByDocumentId}
             documents={documents}
             filter={filter}
             tagsByDocumentId={tagsByDocumentId}

@@ -11,6 +11,7 @@ import type { DocumentsViewMode } from "@/components/documents/documents-filter-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PaperlessTag } from "@/lib/paperless/documents";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import {
   bulkConnectDocumentsAction,
@@ -38,6 +39,8 @@ export function DocumentsBulkList({
   contentByPaperlessId = {},
   tagsByDocumentId = {},
   connectionCountsByDocumentId = {},
+  customFieldDefs = [],
+  customFieldValuesByDocumentId = {},
   visibleFields
 }: {
   documents: Document[];
@@ -46,6 +49,8 @@ export function DocumentsBulkList({
   contentByPaperlessId?: Record<number, string>;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
   connectionCountsByDocumentId?: Record<string, number>;
+  customFieldDefs?: CustomFieldDef[];
+  customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -318,6 +323,8 @@ export function DocumentsBulkList({
           ctxQuery={ctxQuery}
           documents={documents}
           connectionCountsByDocumentId={connectionCountsByDocumentId}
+          customFieldDefs={customFieldDefs}
+          customFieldValuesByDocumentId={customFieldValuesByDocumentId}
           onToggle={toggle}
           selectedIds={selectedIds}
           tagsByDocumentId={tagsByDocumentId}
@@ -328,6 +335,8 @@ export function DocumentsBulkList({
           connectionCountsByDocumentId={connectionCountsByDocumentId}
           contentByPaperlessId={contentByPaperlessId}
           ctxQuery={ctxQuery}
+          customFieldDefs={customFieldDefs}
+          customFieldValuesByDocumentId={customFieldValuesByDocumentId}
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}
@@ -338,6 +347,8 @@ export function DocumentsBulkList({
         <DocumentListView
           connectionCountsByDocumentId={connectionCountsByDocumentId}
           ctxQuery={ctxQuery}
+          customFieldDefs={customFieldDefs}
+          customFieldValuesByDocumentId={customFieldValuesByDocumentId}
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}

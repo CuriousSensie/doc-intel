@@ -9,7 +9,7 @@ import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { withStatus } from "@/modules/auth/redirects";
 
-import { attributeFormSchema, deleteAttributeSchema } from "./attributes.schemas";
+import { attributeFormSchema, deleteAttributeSchema, parseAttributeOptionsInput } from "./attributes.schemas";
 import { createAttribute, deleteAttribute, updateAttribute } from "./attributes.service";
 
 type Translator = Awaited<ReturnType<typeof getTranslations>>;
@@ -48,15 +48,23 @@ export async function saveAttributeFormAction(formData: FormData) {
       kind: rawKind,
       name: formData.get("name"),
       color: formData.get("color"),
-      matchingAlgorithm: formData.get("matchingAlgorithm"),
-      match: formData.get("match")
+      matchingAlgorithm: formData.get("matchingAlgorithm") || undefined,
+      match: formData.get("match"),
+      dataType: formData.get("dataType") || undefined,
+      options: formData.get("options") || undefined,
+      appliesTo: formData.getAll("appliesTo").map(String),
+      isRequired: formData.get("isRequired") === "on"
     });
     kind = parsed.kind;
     const input = {
       name: parsed.name,
       color: parsed.color || undefined,
       matchingAlgorithm: parsed.matchingAlgorithm,
-      match: parsed.match || ""
+      match: parsed.match || "",
+      dataType: parsed.dataType,
+      options: parseAttributeOptionsInput(parsed.options),
+      appliesTo: parsed.appliesTo,
+      isRequired: parsed.isRequired
     };
 
     if (parsed.id) {

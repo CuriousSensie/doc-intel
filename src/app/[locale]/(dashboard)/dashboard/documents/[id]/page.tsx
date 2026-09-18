@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { notFound } from "next/navigation";
 
 import { ConnectionPicker } from "@/components/connections/connection-picker";
@@ -10,6 +12,8 @@ import { paperlessFor } from "@/lib/paperless/client";
 import { getCachedCorrespondents, getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
+import { createClient } from "@/lib/supabase/server";
+import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { listDocumentsFilterSchema } from "@/modules/documents/documents.schemas";
 import { getAdjacentDocumentId, getDocument } from "@/modules/documents/documents.service";
 
@@ -26,7 +30,11 @@ export default async function DocumentDetailPage({
   // Only `params` and auth are needed up front — getDocument() no longer needs a pre-resolved
   // active org (see its own doc comment): one fewer sequential round trip before the document
   // itself even starts loading.
-  const [{ id }, search] = await Promise.all([params, searchParams, requireUser("/dashboard/documents")]);
+  const [{ id }, search, context] = await Promise.all([
+    params,
+    searchParams,
+    requireUser("/dashboard/documents")
+  ]);
 
   // specs/03-api.md: cross-tenant access is 404, never 403 — getDocument()'s own RLS-scoped
   // query already returns this as "not found" rather than a distinguishable denial.
@@ -55,10 +63,17 @@ export default async function DocumentDetailPage({
 
   const client = await paperlessFor(document.organization_id);
 
-  const [tags, correspondents, documentTypes, previousId, nextId] = await Promise.all([
+  const defsCtx = {
+    db: await createClient(),
+    orgId: document.organization_id,
+    actorId: context.user.id,
+    correlationId: randomUUID()
+  };
+  const [tags, correspondents, documentTypes, customFieldDefs, previousId, nextId] = await Promise.all([
     getCachedTags(client, document.organization_id),
     getCachedCorrespondents(client, document.organization_id),
     getCachedDocumentTypes(client, document.organization_id),
+    listCustomFieldDefs(defsCtx),
     getAdjacentDocumentId(document.organization_id, document, filter, "previous"),
     getAdjacentDocumentId(document.organization_id, document, filter, "next")
   ]);
@@ -76,6 +91,7 @@ export default async function DocumentDetailPage({
         }
         contentTab={<DocumentContentTab document={document} />}
         ctxQuery={ctxQuery}
+        customFieldDefs={customFieldDefs}
         filterOptions={{ tags, correspondents, documentTypes }}
         historyTab={<DocumentHistoryTab history={document.history} />}
         initialDocument={document}

@@ -9,6 +9,8 @@ import { DocumentRowActions } from "@/components/documents/document-row-actions"
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentTagChips } from "@/components/documents/document-tag-chips";
 import type { PaperlessTag } from "@/lib/paperless/documents";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
+import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-values";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import type { Document } from "@/modules/documents/documents.service";
 
@@ -44,6 +46,8 @@ export function DocumentLargeCardsView({
   ctxQuery = "",
   tagsByDocumentId = {},
   connectionCountsByDocumentId = {},
+  customFieldDefs = [],
+  customFieldValuesByDocumentId = {},
   visibleFields
 }: {
   documents: Document[];
@@ -53,6 +57,8 @@ export function DocumentLargeCardsView({
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
   connectionCountsByDocumentId?: Record<string, number>;
+  customFieldDefs?: CustomFieldDef[];
+  customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
 }) {
   const t = useTranslations("documents");
@@ -167,6 +173,16 @@ export function DocumentLargeCardsView({
                     <dd className="mt-0.5">{new Date(document.created_at).toLocaleString()}</dd>
                   </div>
                 ) : null}
+                {customFieldDefs.map((def) => (
+                  <div key={def.id}>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
+                      {def.label}
+                    </dt>
+                    <dd className="mt-0.5 min-w-0 truncate">
+                      {formatCustomFieldValue(def, customFieldValuesByDocumentId[document.id]?.[def.key])}
+                    </dd>
+                  </div>
+                ))}
               </dl>
               {snippet ? <p className="mt-1 line-clamp-3 text-sm text-muted">{snippet}</p> : null}
               <div className="mt-auto pt-2">

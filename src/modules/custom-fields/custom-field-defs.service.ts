@@ -12,6 +12,12 @@ import type { Database } from "@/types/database";
 
 export type CustomFieldDef = Database["public"]["Tables"]["custom_field_defs"]["Row"];
 export type CustomFieldDataType = CustomFieldDef["data_type"];
+// A select field's options are Paperless-generated {id, label} pairs, not bare strings — a
+// document's value for the field must reference the Paperless-assigned `id`, never the label
+// (confirmed live: Paperless rejects a label passed as a value). `id` is optional here since a
+// caller minting a brand-new option (not yet round-tripped through Paperless) won't have one
+// yet — Paperless assigns it, and by the time a def is persisted every option has one.
+export type CustomFieldSelectOption = { id?: string; label: string };
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -66,7 +72,7 @@ export async function createCustomFieldDef(
     key: string;
     label: string;
     dataType: CustomFieldDataType;
-    options?: string[];
+    options?: CustomFieldSelectOption[];
     appliesTo?: string[];
     paperlessCustomFieldId?: number | null;
     isRequired?: boolean;
@@ -114,7 +120,7 @@ export async function createCustomFieldDef(
 export async function updateCustomFieldDef(
   ctx: ServiceContext,
   id: string,
-  input: { label?: string; options?: string[]; appliesTo?: string[]; isRequired?: boolean }
+  input: { label?: string; options?: CustomFieldSelectOption[]; appliesTo?: string[]; isRequired?: boolean }
 ): Promise<CustomFieldDef> {
   await fetchCustomFieldDef(ctx, id);
 

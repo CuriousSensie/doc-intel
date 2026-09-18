@@ -9,6 +9,8 @@ import { DocumentRowActions } from "@/components/documents/document-row-actions"
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentTagChips } from "@/components/documents/document-tag-chips";
 import type { PaperlessTag } from "@/lib/paperless/documents";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
+import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-values";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import type { Document } from "@/modules/documents/documents.service";
 
@@ -42,6 +44,8 @@ export function DocumentSmallCardsView({
   ctxQuery = "",
   tagsByDocumentId = {},
   connectionCountsByDocumentId = {},
+  customFieldDefs = [],
+  customFieldValuesByDocumentId = {},
   visibleFields
 }: {
   documents: Document[];
@@ -50,6 +54,8 @@ export function DocumentSmallCardsView({
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
   connectionCountsByDocumentId?: Record<string, number>;
+  customFieldDefs?: CustomFieldDef[];
+  customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
 }) {
   const t = useTranslations("documents");
@@ -138,6 +144,14 @@ export function DocumentSmallCardsView({
                     <dd>{new Date(document.created_at).toLocaleDateString()}</dd>
                   </div>
                 ) : null}
+                {customFieldDefs.map((def) => (
+                  <div className="flex justify-between gap-2" key={def.id}>
+                    <dt className="min-w-0 truncate text-muted">{def.label}</dt>
+                    <dd className="truncate text-right">
+                      {formatCustomFieldValue(def, customFieldValuesByDocumentId[document.id]?.[def.key])}
+                    </dd>
+                  </div>
+                ))}
               </dl>
               <div className="mt-1 flex items-center gap-1">
                 <DocumentStatusBadge status={document.status} />

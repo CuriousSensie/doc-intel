@@ -32,6 +32,20 @@ export type PaperlessTask = {
   owner: number | null;
 };
 
+// Confirmed live against the pinned instance: a `select`-typed field's `extra_data.select_options`
+// is `Array<{id: string, label: string}>` — `id` is a Paperless-generated random string, not
+// something we choose, and a document's *value* for a select field must be one of these `id`s,
+// never the label (Paperless validates this server-side, rejecting a label passed as a value).
+export type PaperlessCustomFieldSelectOption = { id: string; label: string };
+
+export type PaperlessCustomField = {
+  id: number;
+  name: string;
+  data_type: string;
+  extra_data: { select_options?: PaperlessCustomFieldSelectOption[]; default_currency?: string | null } | null;
+  document_count?: number;
+};
+
 // page_count/mime_type/deleted_at/versions confirmed live against the pinned instance
 // (2026-09-12) — page_count and mime_type are direct fields; there is no byte_size field
 // anywhere on this response (checked both the list and detail shapes), so that still has to

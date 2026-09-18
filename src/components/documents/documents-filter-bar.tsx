@@ -32,7 +32,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { PaperlessCorrespondent, PaperlessTag } from "@/lib/paperless/documents";
-import type { DocumentListField } from "@/modules/documents/documents.schemas";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
+import type { DocumentListField, StaticDocumentListField } from "@/modules/documents/documents.schemas";
 import type { DocumentSort, DocumentSortDirection } from "@/modules/documents/documents.service";
 import { DocumentUploadDialogButton } from "@/components/documents/document-upload-dialog-button";
 
@@ -44,6 +45,7 @@ type FilterOptions = {
   // Pre-slugified server-side (toDocumentTypeKey()) so the option value matches
   // documents.document_type_key exactly — never the raw Paperless name.
   documentTypes: Array<{ key: string; name: string }>;
+  customFields: CustomFieldDef[];
 };
 
 type Props = {
@@ -66,7 +68,7 @@ type Props = {
   };
 };
 
-const FIELD_VALUES: DocumentListField[] = [
+const FIELD_VALUES: StaticDocumentListField[] = [
   "title",
   "tags",
   "correspondent",
@@ -110,7 +112,13 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
     if (next.has(field) && next.size > 1) next.delete(field);
     else next.add(field);
     navigate(
-      (params) => setOrDelete(params, "fields", FIELD_VALUES.filter((f) => next.has(f)).join(",")),
+      (params) => {
+        const staticFields = FIELD_VALUES.filter((f) => next.has(f));
+        const customFields = filterOptions.customFields
+          .map((def) => `custom:${def.key}` as DocumentListField)
+          .filter((fieldKey) => next.has(fieldKey));
+        setOrDelete(params, "fields", [...staticFields, ...customFields].join(","));
+      },
       false
     );
   }
@@ -239,6 +247,24 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
               {t(`field_${field}`)}
             </DropdownMenuCheckboxItem>
           ))}
+          {filterOptions.customFields.length > 0 ? (
+            <>
+              <DropdownMenuSeparator />
+              {filterOptions.customFields.map((def) => {
+                const field = `custom:${def.key}` as DocumentListField;
+                return (
+                  <DropdownMenuCheckboxItem
+                    checked={(current.fields ?? FIELD_VALUES).includes(field)}
+                    key={def.id}
+                    onCheckedChange={() => toggleField(field)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {def.label}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </>

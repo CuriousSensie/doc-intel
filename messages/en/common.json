@@ -67,6 +67,8 @@
     "emptyTitle": "No attributes yet",
     "emptyDescription": "Create the first attribute above.",
     "viewDocuments": "View documents",
+    "yes": "Yes",
+    "no": "No",
     "openActions": "Open attribute actions",
     "edit": "Edit",
     "delete": "Delete",
@@ -76,7 +78,10 @@
       "matching": "Matching",
       "documents": "Documents",
       "viewDocuments": "View documents",
-      "actions": "Actions"
+      "actions": "Actions",
+      "dataType": "Type",
+      "appliesTo": "Applies to",
+      "isRequired": "Required"
     },
     "form": {
       "name": "Name",
@@ -85,7 +90,26 @@
       "match": "Matching text",
       "create": "Create attribute",
       "save": "Save changes",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "dataType": "Data type",
+      "dataTypeImmutableHint": "The data type can't be changed after creation.",
+      "options": "Options",
+      "optionsHint": "One option per line.",
+      "appliesTo": "Applies to",
+      "appliesToHint": "Leave all unchecked to allow this field on every document type.",
+      "isRequired": "Required",
+      "documentLinkHint": "A document-link field represents a connection to a business entity — it's never synced to Paperless and has no value input here."
+    },
+    "dataTypes": {
+      "string": "Text",
+      "integer": "Whole number",
+      "float": "Decimal number",
+      "monetary": "Monetary amount",
+      "date": "Date",
+      "boolean": "Yes / No",
+      "select": "Select (one of a list)",
+      "documentlink": "Connection to an entity",
+      "url": "URL"
     },
     "matching": {
       "none": {

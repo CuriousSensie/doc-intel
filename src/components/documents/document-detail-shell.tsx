@@ -18,12 +18,19 @@ import {
 } from "@/lib/paperless/documents";
 import { updateDocumentAction } from "@/modules/documents/documents.actions";
 import type { DocumentDetails } from "@/modules/documents/documents.service";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
+import {
+  isCustomFieldApplicable,
+  mapRawCustomFieldValues,
+  type KeyedCustomFieldValues
+} from "@/modules/custom-fields/custom-field-values";
 
 export type DocumentDraft = {
   title: string;
   documentTypeId: number | null;
   correspondentId: number | null;
   tagIds: number[];
+  customFieldValues: KeyedCustomFieldValues;
 };
 
 function sameTagIds(a: number[], b: number[]): boolean {
@@ -31,20 +38,30 @@ function sameTagIds(a: number[], b: number[]): boolean {
 }
 
 function draftsEqual(a: DocumentDraft, b: DocumentDraft): boolean {
+  const aCustomKeys = Object.keys(a.customFieldValues);
+  const bCustomKeys = Object.keys(b.customFieldValues);
   return (
     a.title === b.title &&
     a.documentTypeId === b.documentTypeId &&
     a.correspondentId === b.correspondentId &&
-    sameTagIds(a.tagIds, b.tagIds)
+    sameTagIds(a.tagIds, b.tagIds) &&
+    aCustomKeys.length === bCustomKeys.length &&
+    aCustomKeys.every((key) => Object.is(a.customFieldValues[key], b.customFieldValues[key]))
   );
 }
 
-function draftFrom(document: DocumentDetails, typeId: number | null, correspondentId: number | null): DocumentDraft {
+function draftFrom(
+  document: DocumentDetails,
+  typeId: number | null,
+  correspondentId: number | null,
+  customFieldDefs: CustomFieldDef[]
+): DocumentDraft {
   return {
     title: document.title,
     documentTypeId: typeId,
     correspondentId: correspondentId,
-    tagIds: document.paperless?.tagIds ?? []
+    tagIds: document.paperless?.tagIds ?? [],
+    customFieldValues: mapRawCustomFieldValues(document.paperless?.customFields, customFieldDefs)
   };
 }
 
@@ -63,6 +80,7 @@ export function DocumentDetailShell({
   previousId,
   nextId,
   ctxQuery,
+  customFieldDefs,
   contentTab,
   historyTab,
   connectionsTab
@@ -76,6 +94,7 @@ export function DocumentDetailShell({
   previousId: string | null;
   nextId: string | null;
   ctxQuery: string;
+  customFieldDefs: CustomFieldDef[];
   // Async Server Components (getTranslations, etc.) — must be constructed in the server-side
   // page.tsx and passed down as already-rendered elements. Building `<DocumentContentTab/>` (or
   // ConnectionsPanel/DocumentHistoryTab) directly inside this "use client" file's own render
@@ -109,7 +128,7 @@ export function DocumentDetailShell({
   );
 
   const [baseline, setBaseline] = useState<DocumentDraft>(() =>
-    draftFrom(document, initialTypeId, initialCorrespondentId)
+    draftFrom(document, initialTypeId, initialCorrespondentId, customFieldDefs)
   );
   const [draft, setDraft] = useState<DocumentDraft>(baseline);
   const isDirty = !draftsEqual(draft, baseline);
@@ -129,6 +148,18 @@ export function DocumentDetailShell({
     if (draft.documentTypeId !== baseline.documentTypeId) input.documentTypeId = draft.documentTypeId;
     if (draft.correspondentId !== baseline.correspondentId) input.correspondentId = draft.correspondentId;
     if (!sameTagIds(draft.tagIds, baseline.tagIds)) input.tagIds = draft.tagIds;
+    const customFieldChanged = !draftsEqual(
+      { ...baseline, title: draft.title, documentTypeId: draft.documentTypeId, correspondentId: draft.correspondentId, tagIds: draft.tagIds },
+      draft
+    );
+    if (customFieldChanged) {
+      const applicableDefs = customFieldDefs.filter(
+        (def) => def.data_type !== "documentlink" && isCustomFieldApplicable(def, document.document_type_key)
+      );
+      input.customFieldValues = applicableDefs
+        .filter((def) => draft.customFieldValues[def.key] !== undefined)
+        .map((def) => ({ key: def.key, value: draft.customFieldValues[def.key] }));
+    }
     if (Object.keys(input).length === 0) return;
 
     startTransition(async () => {
@@ -203,6 +234,9 @@ export function DocumentDetailShell({
                   document={document}
                   documentTypeOptions={documentTypeOptions}
                   draft={draft}
+                  customFieldDefs={customFieldDefs.filter(
+                    (def) => def.data_type !== "documentlink" && isCustomFieldApplicable(def, document.document_type_key)
+                  )}
                   onCorrespondentCreated={(c) => setCorrespondentOptions((prev) => [...prev, c])}
                   onDocumentTypeCreated={(dt) => setDocumentTypeOptions((prev) => [...prev, dt])}
                   onDraftChange={handleDraftChange}

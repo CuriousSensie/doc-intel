@@ -1,5 +1,7 @@
 import type { OwnedObjectPermissions, PaperlessClient } from "./client";
 import type {
+  PaperlessCustomField,
+  PaperlessCustomFieldSelectOption,
   PaperlessDocument,
   PaperlessDocumentHistoryEntry,
   PaperlessListEnvelope
@@ -246,6 +248,56 @@ export function deletePaperlessCorrespondent(client: PaperlessClient, id: number
 export function deletePaperlessDocumentType(client: PaperlessClient, id: number): Promise<void> {
   return client.delete(`/api/document_types/${id}/`);
 }
+
+// Confirmed live against the pinned instance: a bare `{name, data_type}` body works for every
+// type except `select`, which requires `extra_data.select_options` to be a non-empty list of
+// `{label}` objects (a plain string list 500s — the serializer calls `.get("label")` on each
+// entry unconditionally). Paperless assigns each option's `id` itself if not supplied; that id,
+// not the label, is what a document's value for this field must reference.
+export function createPaperlessCustomField(
+  client: PaperlessClient,
+  input: {
+    name: string;
+    data_type: string;
+    extra_data?: { select_options?: Array<{ label: string }> };
+  },
+  ownership: OwnedObjectPermissions
+): Promise<PaperlessCustomField> {
+  return client.createOwnedObject("/api/custom_fields/", input, ownership);
+}
+
+export function updatePaperlessCustomField(
+  client: PaperlessClient,
+  id: number,
+  patch: { name?: string; extra_data?: { select_options?: Array<{ id?: string; label: string }> } }
+): Promise<PaperlessCustomField> {
+  return client.patch<PaperlessCustomField>(`/api/custom_fields/${id}/`, patch);
+}
+
+export function deletePaperlessCustomField(client: PaperlessClient, id: number): Promise<void> {
+  return client.delete(`/api/custom_fields/${id}/`);
+}
+
+// Same page-scoped id__in pattern as getPaperlessDocumentTags — custom field *values* aren't
+// mirrored locally, only definitions are (custom_field_defs), so this is always a live,
+// page-scoped read, never cached across pages.
+export async function getPaperlessDocumentCustomFields(
+  client: PaperlessClient,
+  paperlessDocumentIds: number[]
+): Promise<Map<number, Array<{ field: number; value: unknown }>>> {
+  if (paperlessDocumentIds.length === 0) return new Map();
+
+  const params = new URLSearchParams({
+    id__in: paperlessDocumentIds.join(","),
+    page_size: String(paperlessDocumentIds.length)
+  });
+  const envelope = await client.get<
+    PaperlessListEnvelope<{ id: number; custom_fields: Array<{ field: number; value: unknown }> }>
+  >(`/api/documents/?${params.toString()}`);
+  return new Map(envelope.results.map((r) => [r.id, r.custom_fields]));
+}
+
+export type { PaperlessCustomField, PaperlessCustomFieldSelectOption };
 
 // Large-cards view mode only: a page-scoped read of `content` for the ~25 documents currently
 // on screen. Confirmed live against the pinned instance (2026-09-16) that the list endpoint

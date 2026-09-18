@@ -15,6 +15,8 @@ import {
   TableRow
 } from "@/components/ui/table";
 import type { PaperlessTag } from "@/lib/paperless/documents";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
+import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-values";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import type { Document } from "@/modules/documents/documents.service";
 
@@ -27,6 +29,8 @@ export function DocumentListView({
   ctxQuery = "",
   tagsByDocumentId = {},
   connectionCountsByDocumentId = {},
+  customFieldDefs = [],
+  customFieldValuesByDocumentId = {},
   visibleFields
 }: {
   documents: Document[];
@@ -35,6 +39,8 @@ export function DocumentListView({
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
   connectionCountsByDocumentId?: Record<string, number>;
+  customFieldDefs?: CustomFieldDef[];
+  customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
 }) {
   const t = useTranslations("documents");
@@ -90,6 +96,11 @@ export function DocumentListView({
             {visible.has("createdAt") ? (
               <TableHead className="w-48">{tFilters("field_createdAt")}</TableHead>
             ) : null}
+            {customFieldDefs.map((def) => (
+              <TableHead className="w-48" key={def.id}>
+                {def.label}
+              </TableHead>
+            ))}
             <TableHead className="w-36">
               <span className="sr-only">{t("detail.actions.open")}</span>
             </TableHead>
@@ -148,6 +159,11 @@ export function DocumentListView({
                   {new Date(document.created_at).toLocaleString()}
                 </TableCell>
               ) : null}
+              {customFieldDefs.map((def) => (
+                <TableCell className="w-48 truncate text-muted" key={def.id}>
+                  {formatCustomFieldValue(def, customFieldValuesByDocumentId[document.id]?.[def.key])}
+                </TableCell>
+              ))}
               <TableCell className="w-36">
                 <DocumentRowActions documentId={document.id} detailHref={detailHref(document.id)} />
               </TableCell>

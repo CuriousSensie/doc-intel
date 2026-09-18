@@ -25,6 +25,10 @@ export const documentListFieldSchema = z.enum([
   "pages",
   "createdAt"
 ]);
+export const customDocumentListFieldSchema = z.string().regex(/^custom:[a-z][a-z0-9_]*$/);
+export const anyDocumentListFieldSchema = z.union([documentListFieldSchema, customDocumentListFieldSchema]);
+export type StaticDocumentListField = z.infer<typeof documentListFieldSchema>;
+export type DocumentListField = StaticDocumentListField | `custom:${string}`;
 export const DEFAULT_DOCUMENT_LIST_FIELDS: DocumentListField[] = [
   "title",
   "tags",
@@ -67,11 +71,10 @@ export const listDocumentsFilterSchema = z.object({
 // reload keeps it and a shared link reproduces exactly what the sender saw.
 export const documentsViewSearchParamSchema = z.object({
   view: documentViewModeSchema.optional(),
-  fields: z.array(documentListFieldSchema).optional()
+  fields: z.array(anyDocumentListFieldSchema).optional()
 });
 
 export type ListDocumentsFilter = z.infer<typeof listDocumentsFilterSchema>;
-export type DocumentListField = z.infer<typeof documentListFieldSchema>;
 
 // Parses the raw `searchParams` object Next.js hands a Server Component page — string/undefined
 // for everything, comma-joined for the one array field, "true"/"false" for booleans. Invalid
@@ -120,7 +123,7 @@ export function parseDocumentListFields(
     .filter(Boolean);
   const result = documentsViewSearchParamSchema.safeParse({ fields });
   return result.success && result.data.fields?.length
-    ? result.data.fields
+    ? (result.data.fields as DocumentListField[])
     : DEFAULT_DOCUMENT_LIST_FIELDS;
 }
 
@@ -134,7 +137,10 @@ export const updateDocumentSchema = z.object({
     .optional(),
   documentTypeId: z.number().int().positive().nullable().optional(),
   correspondentId: z.number().int().positive().nullable().optional(),
-  tagIds: z.array(z.number().int().positive()).optional()
+  tagIds: z.array(z.number().int().positive()).optional(),
+  customFieldValues: z
+    .array(z.object({ key: z.string().trim().min(1), value: z.unknown() }))
+    .optional()
 });
 
 export const paperlessMetaKindSchema = z.enum(["tag", "correspondent", "documentType"]);

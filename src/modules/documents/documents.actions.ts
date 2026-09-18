@@ -14,8 +14,10 @@ import {
   addCachedTag
 } from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
+import { ValidationError } from "@/lib/errors";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
+import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import {
   createBackgroundOperation,
   completeBackgroundOperation
@@ -73,7 +75,21 @@ export async function updateDocumentAction(documentId: string, input: unknown) {
   const parsed = updateDocumentSchema.parse(input);
   const ctx = await buildRequestContext();
   if (!ctx.actorId) throw new Error("updateDocumentAction requires an authenticated actor");
-  return updateDocument(ctx.actorId, ctx.orgId, documentId, parsed);
+
+  let customFieldValues: Array<{ field: number; value: unknown }> | undefined;
+  if (parsed.customFieldValues !== undefined) {
+    const defs = await listCustomFieldDefs(ctx);
+    const defByKey = new Map(defs.map((def) => [def.key, def]));
+    customFieldValues = parsed.customFieldValues.map(({ key, value }) => {
+      const def = defByKey.get(key);
+      if (!def?.paperless_custom_field_id) {
+        throw new ValidationError(`Custom field "${key}" is not backed by Paperless`);
+      }
+      return { field: def.paperless_custom_field_id, value };
+    });
+  }
+
+  return updateDocument(ctx.actorId, ctx.orgId, documentId, { ...parsed, customFieldValues });
 }
 
 // specs/03-api.md DELETE /documents/:id, wired to the document detail page's "Delete" action.

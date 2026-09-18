@@ -3,8 +3,10 @@
 import { useTranslations } from "next-intl";
 
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
+import { DocumentCustomFieldInput } from "@/components/documents/document-custom-field-input";
 import { Input } from "@/components/ui/input";
 import type { PaperlessCorrespondent, PaperlessDocumentType, PaperlessTag } from "@/lib/paperless/documents";
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type { DocumentDetails } from "@/modules/documents/documents.service";
 import type { DocumentDraft } from "@/components/documents/document-detail-shell";
 
@@ -25,6 +27,7 @@ export function DocumentDetailsTab({
   tagOptions,
   correspondentOptions,
   documentTypeOptions,
+  customFieldDefs,
   onTagCreated,
   onCorrespondentCreated,
   onDocumentTypeCreated
@@ -35,6 +38,7 @@ export function DocumentDetailsTab({
   tagOptions: PaperlessTag[];
   correspondentOptions: PaperlessCorrespondent[];
   documentTypeOptions: PaperlessDocumentType[];
+  customFieldDefs: CustomFieldDef[];
   onTagCreated: (tag: PaperlessTag) => void;
   onCorrespondentCreated: (c: PaperlessCorrespondent) => void;
   onDocumentTypeCreated: (dt: PaperlessDocumentType) => void;
@@ -98,6 +102,30 @@ export function DocumentDetailsTab({
           value={draft.tagIds}
         />
       </div>
+
+      {customFieldDefs.length > 0 ? (
+        <div className="grid gap-3 border-t border-border pt-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {t("customFields")}
+          </span>
+          <div className="grid gap-3">
+            {customFieldDefs.map((def) => (
+              <label className="grid gap-1.5 text-sm font-medium" key={def.id}>
+                <span>{def.label}</span>
+                <DocumentCustomFieldInput
+                  def={def}
+                  onChange={(next) =>
+                    onDraftChange({
+                      customFieldValues: { ...draft.customFieldValues, [def.key]: next }
+                    })
+                  }
+                  value={draft.customFieldValues[def.key]}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 border-t border-border pt-4 text-sm">
         <div>
