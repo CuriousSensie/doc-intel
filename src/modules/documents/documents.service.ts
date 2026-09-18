@@ -556,6 +556,78 @@ export async function listDocumentIds(
   return ids.slice(0, cap);
 }
 
+export async function getPaperlessDocumentIdsForUuids(
+  organizationId: string,
+  documentIds: string[]
+): Promise<number[]> {
+  if (documentIds.length === 0) return [];
+
+  const db = await createClient();
+  const { data, error } = await db
+    .from("documents")
+    .select("id,paperless_document_id")
+    .eq("organization_id", organizationId)
+    .in("id", documentIds)
+    .is("deleted_at", null);
+
+  if (error) throw error;
+
+  const paperlessIdByUuid = new Map((data ?? []).map((row) => [row.id, row.paperless_document_id]));
+  return documentIds.map((id) => paperlessIdByUuid.get(id)).filter((id): id is number => typeof id === "number");
+}
+
+export async function recordBulkEditProvenance(
+  ctx: ServiceContext,
+  documentIds: string[],
+  method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess",
+  parameters: Record<string, unknown> | undefined
+): Promise<void> {
+  if (!ctx.actorId || documentIds.length === 0) return;
+
+  const fieldKeys: string[] = [];
+  if (method === "set_document_type") fieldKeys.push("document.type");
+  if (method === "set_correspondent") fieldKeys.push("document.correspondent");
+  if (method === "modify_custom_fields") {
+    const defs = await listCustomFieldDefs(ctx);
+    const keyByPaperlessFieldId = new Map(
+      defs
+        .filter((def) => def.paperless_custom_field_id !== null)
+        .map((def) => [def.paperless_custom_field_id, def.key])
+    );
+    const added = Array.isArray(parameters?.add_custom_fields) ? parameters.add_custom_fields : [];
+    const removed = Array.isArray(parameters?.remove_custom_fields) ? parameters.remove_custom_fields : [];
+    for (const item of added) {
+      if (!Array.isArray(item)) continue;
+      const key = keyByPaperlessFieldId.get(Number(item[0]));
+      if (key) fieldKeys.push(`document.custom.${key}`);
+    }
+    for (const item of removed) {
+      const key = keyByPaperlessFieldId.get(Number(item));
+      if (key) fieldKeys.push(`document.custom.${key}`);
+    }
+  }
+
+  const uniqueFieldKeys = [...new Set(fieldKeys)];
+  if (uniqueFieldKeys.length === 0) return;
+
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+  const { error } = await admin.from("field_provenance").upsert(
+    documentIds.flatMap((documentId) =>
+      uniqueFieldKeys.map((fieldKey) => ({
+        organization_id: ctx.orgId,
+        document_id: documentId,
+        field_key: fieldKey,
+        updated_by: "user" as const,
+        source_id: ctx.actorId,
+        updated_at: now
+      }))
+    ),
+    { onConflict: "document_id,field_key" }
+  );
+  if (error) throw error;
+}
+
 export async function countConnectionsForDocuments(
   organizationId: string,
   documentIds: string[]

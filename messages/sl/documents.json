@@ -100,7 +100,23 @@
     "bulkConnectFailed": "Množično povezovanje ni uspelo: {error}",
     "unknownError": "neznana napaka",
     "preparingExport": "Priprava izvoza…",
-    "exportFailed": "Izvoz ni uspel: {error}"
+    "exportFailed": "Izvoz ni uspel: {error}",
+    "attributesAssigned": "Uporabljenih {count} posodobitev atributov."
+  },
+  "bulkAssign": {
+    "trigger": "Dodeli atribute",
+    "title": "Dodeli atribute",
+    "description": "Uporabite enake spremembe atributov za vse izbrane dokumente.",
+    "addTags": "Oznake za dodajanje",
+    "removeTags": "Oznake za odstranjevanje",
+    "correspondent": "Korespondent",
+    "documentType": "Vrsta dokumenta",
+    "chooseCustomField": "Izberite polje po meri",
+    "nothingSelected": "Izberite vsaj en atribut za uporabo.",
+    "failed": "Atributov ni bilo mogoče dodeliti",
+    "cancel": "Prekliči",
+    "apply": "Uporabi spremembe",
+    "saving": "Uveljavljanje…"
   },
   "detail": {
     "metadata": "Metapodatki",

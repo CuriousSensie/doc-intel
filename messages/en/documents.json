@@ -100,7 +100,23 @@
     "bulkConnectFailed": "Bulk connect failed: {error}",
     "unknownError": "unknown error",
     "preparingExport": "Preparing export…",
-    "exportFailed": "Export failed: {error}"
+    "exportFailed": "Export failed: {error}",
+    "attributesAssigned": "Applied {count} attribute update(s)."
+  },
+  "bulkAssign": {
+    "trigger": "Assign attributes",
+    "title": "Assign attributes",
+    "description": "Apply the same attribute changes to every selected document.",
+    "addTags": "Tags to add",
+    "removeTags": "Tags to remove",
+    "correspondent": "Correspondent",
+    "documentType": "Document type",
+    "chooseCustomField": "Choose a custom field",
+    "nothingSelected": "Choose at least one attribute to apply.",
+    "failed": "Could not assign attributes",
+    "cancel": "Cancel",
+    "apply": "Apply changes",
+    "saving": "Applying…"
   },
   "detail": {
     "metadata": "Metadata",

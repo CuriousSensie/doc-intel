@@ -33,7 +33,10 @@ import {
   getDocument,
   getDocumentHistory,
   getDocumentRow,
+  getPaperlessDocumentIdsForUuids,
   listDocuments,
+  listDocumentIds,
+  recordBulkEditProvenance,
   updateDocument,
   type ListDocumentsOptions
 } from "@/modules/documents/documents.service";
@@ -146,29 +149,39 @@ export async function getAdjacentDocumentAction(
 // Paperless applies these atomically server-side, so this is one synchronous round trip; the
 // background_operations row exists only so this shows up in the same history/audit surface
 // as our own bulk-connect operations, not to track async progress.
-export async function bulkEditDocumentsAction(input: {
-  paperlessDocumentIds: number[];
+export type BulkEditDocumentsInput = {
+  documentIds?: string[];
+  filter?: ListDocumentsOptions;
   method: Parameters<typeof bulkEditPaperlessDocuments>[1]["method"];
   parameters?: Record<string, unknown>;
-}) {
+};
+
+export async function bulkEditDocumentsAction(input: BulkEditDocumentsInput) {
   requireFeature("documents");
   const ctx = await buildRequestContext();
+  const parsedFilter = listDocumentsFilterSchema.parse(input.filter ?? {});
+  const documentIds = input.documentIds ?? (await listDocumentIds(ctx.orgId, parsedFilter));
+  const paperlessDocumentIds = await getPaperlessDocumentIdsForUuids(ctx.orgId, documentIds);
 
   const operation = await createBackgroundOperation(ctx, {
     kind: "bulk_paperless_edit",
     params: { method: input.method, parameters: input.parameters },
-    totalCount: input.paperlessDocumentIds.length
+    totalCount: paperlessDocumentIds.length
   });
 
   const client = await paperlessFor(ctx.orgId);
   await bulkEditPaperlessDocuments(client, {
-    documentIds: input.paperlessDocumentIds,
+    documentIds: paperlessDocumentIds,
     method: input.method,
     parameters: input.parameters
   });
 
+  if (input.method !== "delete" && input.method !== "reprocess") {
+    await recordBulkEditProvenance(ctx, documentIds, input.method, input.parameters);
+  }
+
   await completeBackgroundOperation(ctx, operation.id, {
-    successCount: input.paperlessDocumentIds.length,
+    successCount: paperlessDocumentIds.length,
     failureCount: 0
   });
 
@@ -178,7 +191,7 @@ export async function bulkEditDocumentsAction(input: {
     entityType: "document",
     entityId: operation.id,
     organizationId: ctx.orgId,
-    metadata: { method: input.method, count: input.paperlessDocumentIds.length }
+    metadata: { method: input.method, count: paperlessDocumentIds.length }
   });
 
   return { operationId: operation.id };

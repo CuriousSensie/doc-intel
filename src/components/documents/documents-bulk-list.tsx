@@ -7,10 +7,11 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { DocumentLargeCardsView } from "@/components/documents/document-large-cards-view";
 import { DocumentListView } from "@/components/documents/document-list-view";
 import { DocumentSmallCardsView } from "@/components/documents/document-small-cards-view";
+import { BulkAssignAttributesDialog } from "@/components/documents/bulk-assign-attributes-dialog";
 import type { DocumentsViewMode } from "@/components/documents/documents-filter-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { PaperlessTag } from "@/lib/paperless/documents";
+import type { PaperlessCorrespondent, PaperlessDocumentType, PaperlessTag } from "@/lib/paperless/documents";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import {
@@ -41,6 +42,7 @@ export function DocumentsBulkList({
   connectionCountsByDocumentId = {},
   customFieldDefs = [],
   customFieldValuesByDocumentId = {},
+  attributeOptions,
   visibleFields
 }: {
   documents: Document[];
@@ -51,6 +53,12 @@ export function DocumentsBulkList({
   connectionCountsByDocumentId?: Record<string, number>;
   customFieldDefs?: CustomFieldDef[];
   customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
+  attributeOptions: {
+    tags: PaperlessTag[];
+    correspondents: PaperlessCorrespondent[];
+    documentTypes: PaperlessDocumentType[];
+    customFields: CustomFieldDef[];
+  };
   visibleFields: DocumentListField[];
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -257,6 +265,21 @@ export function DocumentsBulkList({
           >
             {t("bulk.connectToEntity")}
           </Button>
+          <BulkAssignAttributesDialog
+            customFieldDefs={attributeOptions.customFields}
+            disabled={isPending}
+            onComplete={(operationCount) => {
+              clearSelection();
+              setStatus(t("bulk.attributesAssigned", { count: operationCount }));
+              router.refresh();
+            }}
+            options={{
+              tags: attributeOptions.tags,
+              correspondents: attributeOptions.correspondents,
+              documentTypes: attributeOptions.documentTypes
+            }}
+            selection={selectAllMatching ? { filter } : { documentIds: [...selectedIds] }}
+          />
           <Button
             disabled={isPending}
             onClick={() => handleExport("csv")}

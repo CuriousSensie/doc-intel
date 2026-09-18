@@ -229,6 +229,14 @@ export default async function DocumentsPage({
       ) : (
         <>
           <DocumentsBulkList
+            attributeOptions={{
+              tags,
+              correspondents,
+              documentTypes,
+              customFields: customFieldDefs.filter(
+                (def) => def.data_type !== "documentlink" && def.paperless_custom_field_id !== null
+              )
+            }}
             connectionCountsByDocumentId={connectionCountsByDocumentId}
             contentByPaperlessId={contentByPaperlessId}
             customFieldDefs={visibleCustomFieldDefs}
