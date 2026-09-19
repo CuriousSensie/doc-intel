@@ -53,8 +53,16 @@
     "openDocument": "Odpri dokument",
     "markRead": "Označi kot prebrano",
     "new": "Novo",
+    "read": "Prebrano",
     "empty": "Nimate še nobenega obvestila.",
+    "emptyDescription": "Nova obvestila o dokumentih, organizaciji in potekih dela bodo prikazana tukaj.",
     "nextPage": "Naslednja stran",
+    "columns": {
+      "notification": "Obvestilo",
+      "created": "Ustvarjeno",
+      "status": "Status",
+      "actions": "Dejanja"
+    },
     "errors": {
       "missingNotification": "Manjka obvestilo"
     }

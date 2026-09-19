@@ -4,7 +4,16 @@ import { Link } from "@/i18n/navigation";
 
 import { FormMessage } from "@/components/forms/form-message";
 import { OrganizationSwitcher } from "@/components/layout/organization-switcher";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
@@ -28,56 +37,72 @@ export default async function OrganizationsPage({
   ]);
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-5">
-      <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+    <div className="grid min-w-0 gap-5">
+      <section className="rounded-lg border border-border bg-panel p-5 shadow-sm">
+        <div className="flex flex-col justify-between gap-4 md:flex-row">
+          <FormMessage error={params.error} message={params.message} />
           <div>
             <h1 className="text-3xl font-black">{t("list.title")}</h1>
           </div>
-          <Button asChild>
-            <Link href="/organizations/new">{t("list.create")}</Link>
-          </Button>
-        </div>
-        <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <OrganizationSwitcher
-            activeOrganizationId={activeOrganizationId}
-            next="/organizations"
-            organizations={memberships.map((membership) => membership.organization)}
-          />
-          <FormMessage error={params.error} message={params.message} />
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <div className="max-w-sm">
+              <OrganizationSwitcher
+                activeOrganizationId={activeOrganizationId}
+                next="/organizations"
+                organizations={memberships.map((membership) => membership.organization)}
+              />
+            </div>
+            <Button className="max-w-sm" variant={"outline"} asChild>
+              <Link href="/organizations/new">{t("list.create")}</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
-      <section className="grid gap-3">
+      <section className="min-w-0">
         {memberships.length === 0 ? (
-          <p className="rounded-lg border border-border bg-panel p-6 text-muted">
+          <p className="rounded-lg border border-dashed border-border bg-panel p-6 text-muted">
             {t("list.empty")}
           </p>
         ) : (
-          memberships.map(({ organization, role }) => (
-            <div
-              className="flex flex-col justify-between gap-3 rounded-lg border border-border bg-panel p-4 shadow-sm sm:flex-row sm:items-center"
-              key={organization.id}
-            >
-              <div>
-                <p className="font-semibold">
-                  {organization.name}
-                  {organization.id === activeOrganizationId ? (
-                    <span className="ml-2 rounded-full bg-panel-strong px-2 py-0.5 text-xs font-semibold text-muted">
-                      {t("list.active")}
-                    </span>
-                  ) : null}
-                </p>
-                <p className="text-sm capitalize text-muted">{role}</p>
-              </div>
-              <form action={leaveOrganizationAction}>
-                <input name="organizationId" type="hidden" value={organization.id} />
-                <Button type="submit" variant="outline">
-                  {t("list.leave")}
-                </Button>
-              </form>
-            </div>
-          ))
+          <Table className="min-w-[48rem] table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("list.organization")}</TableHead>
+                <TableHead className="w-40">{t("list.role")}</TableHead>
+                <TableHead className="w-32">{t("list.status")}</TableHead>
+                <TableHead className="w-28">
+                  <span className="sr-only">{t("list.actions")}</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {memberships.map(({ organization, role }) => (
+                <TableRow key={organization.id}>
+                  <TableCell>
+                    <p className="font-semibold">{organization.name}</p>
+                    <p className="text-xs text-muted">{organization.slug}</p>
+                  </TableCell>
+                  <TableCell className="capitalize text-muted">{role}</TableCell>
+                  <TableCell>
+                    {organization.id === activeOrganizationId ? (
+                      <Badge variant="accent">{t("list.active")}</Badge>
+                    ) : (
+                      <Badge variant="muted">{t("list.inactive")}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <form action={leaveOrganizationAction}>
+                      <input name="organizationId" type="hidden" value={organization.id} />
+                      <Button size="sm" type="submit" variant="outline">
+                        {t("list.leave")}
+                      </Button>
+                    </form>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </section>
     </div>

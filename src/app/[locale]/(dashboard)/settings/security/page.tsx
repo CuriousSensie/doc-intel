@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { FormMessage } from "@/components/forms/form-message";
 import { TextField } from "@/components/forms/text-field";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   changePasswordAction,
   disableMfaAction,
@@ -29,64 +31,94 @@ export default async function SecuritySettingsPage({
   const totpFactors = factors.data?.totp ?? [];
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-5">
-      <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
+    <div className="grid w-full gap-5">
+      <div>
         <h1 className="text-3xl font-black">{t("security.title")}</h1>
-        <div className="mt-6">
+        <div className="mt-3 max-w-2xl">
           <FormMessage error={params.error} message={params.message} />
         </div>
-      </section>
+      </div>
 
-      <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <h2 className="text-xl font-black">{t("security.changePassword")}</h2>
-        <form action={changePasswordAction} className="mt-5 grid gap-4">
-          <TextField label={t("security.newPassword")} name="password" required type="password" />
-          <TextField
-            label={t("security.confirmPassword")}
-            name="confirmPassword"
-            required
-            type="password"
-          />
-          <Button type="submit">{t("security.changePassword")}</Button>
-        </form>
-      </section>
-
-      <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <h2 className="text-xl font-black">{t("security.mfa")}</h2>
-        <p className="mt-2 leading-7 text-muted">{t("security.mfaDescription")}</p>
-        <div className="mt-5 grid gap-3">
-          {totpFactors.length === 0 ? (
-            <form action={startMfaEnrollmentAction}>
-              <Button type="submit">{t("security.enableMfa")}</Button>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("security.changePassword")}</CardTitle>
+            <CardDescription>{t("security.passwordDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={changePasswordAction} className="grid gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  label={t("security.newPassword")}
+                  name="password"
+                  required
+                  type="password"
+                />
+                <TextField
+                  label={t("security.confirmPassword")}
+                  name="confirmPassword"
+                  required
+                  type="password"
+                />
+              </div>
+              <Button className="justify-self-start" type="submit">
+                {t("security.changePassword")}
+              </Button>
             </form>
-          ) : (
-            totpFactors.map((factor) => (
-              <form
-                action={disableMfaAction}
-                className="flex items-center justify-between gap-4"
-                key={factor.id}
-              >
-                <input name="factorId" type="hidden" value={factor.id} />
-                <span className="text-sm font-semibold">
-                  {factor.friendly_name ?? t("security.authenticatorAppFallback")}
-                </span>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>{t("security.mfa")}</CardTitle>
+                <Badge variant={totpFactors.length === 0 ? "muted" : "accent"}>
+                  {totpFactors.length === 0 ? t("security.disabled") : t("security.enabled")}
+                </Badge>
+              </div>
+              <CardDescription>{t("security.mfaDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              {totpFactors.length === 0 ? (
+                <form action={startMfaEnrollmentAction}>
+                  <Button type="submit">{t("security.enableMfa")}</Button>
+                </form>
+              ) : (
+                totpFactors.map((factor) => (
+                  <form
+                    action={disableMfaAction}
+                    className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2"
+                    key={factor.id}
+                  >
+                    <input name="factorId" type="hidden" value={factor.id} />
+                    <span className="truncate text-sm font-semibold">
+                      {factor.friendly_name ?? t("security.authenticatorAppFallback")}
+                    </span>
+                    <Button size="sm" type="submit" variant="outline">
+                      {t("security.disable")}
+                    </Button>
+                  </form>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("security.session")}</CardTitle>
+              <CardDescription>{t("security.sessionDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={logoutAction}>
                 <Button type="submit" variant="outline">
-                  {t("security.disable")}
+                  {t("security.logout")}
                 </Button>
               </form>
-            ))
-          )}
+            </CardContent>
+          </Card>
         </div>
-      </section>
-
-      <section className="rounded-lg border border-border bg-panel p-6 shadow-sm">
-        <h2 className="text-xl font-black">{t("security.session")}</h2>
-        <form action={logoutAction} className="mt-5">
-          <Button type="submit" variant="outline">
-            {t("security.logout")}
-          </Button>
-        </form>
-      </section>
+      </div>
     </div>
   );
 }

@@ -53,8 +53,16 @@
     "openDocument": "Open document",
     "markRead": "Mark read",
     "new": "New",
+    "read": "Read",
     "empty": "You have no notifications yet.",
+    "emptyDescription": "New document, organization, and workflow updates will appear here.",
     "nextPage": "Next page",
+    "columns": {
+      "notification": "Notification",
+      "created": "Created",
+      "status": "Status",
+      "actions": "Actions"
+    },
     "errors": {
       "missingNotification": "Missing notification"
     }

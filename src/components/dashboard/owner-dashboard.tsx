@@ -38,14 +38,24 @@ async function OrgStatsGroup({ organizationId }: { organizationId: string }) {
   ]);
 
   const rows: StatRow[] = [
-    { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" },
+    {
+      key: "documents",
+      label: t("stats.documents"),
+      value: stats.documents,
+      href: "/dashboard/documents"
+    },
     {
       key: "noConnections",
       label: t("stats.noConnections"),
       value: stats.noConnections,
       href: "/dashboard/documents?hasNoConnections=true"
     },
-    { key: "entities", label: t("stats.entities"), value: stats.entities, href: "/dashboard/entities" },
+    {
+      key: "entities",
+      label: t("stats.entities"),
+      value: stats.entities,
+      href: "/dashboard/entities"
+    },
     { key: "connections", label: t("stats.connections"), value: stats.connections },
     { key: "tags", label: t("stats.tags"), value: stats.tags },
     { key: "correspondents", label: t("stats.correspondents"), value: stats.correspondents },
@@ -79,8 +89,18 @@ async function MemberStatsRows({
   ]);
 
   const rows: StatRow[] = [
-    { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" },
-    { key: "entities", label: t("stats.entities"), value: stats.entities, href: "/dashboard/entities" },
+    {
+      key: "documents",
+      label: t("stats.documents"),
+      value: stats.documents,
+      href: "/dashboard/documents"
+    },
+    {
+      key: "entities",
+      label: t("stats.entities"),
+      value: stats.entities,
+      href: "/dashboard/entities"
+    },
     { key: "connections", label: t("stats.connections"), value: stats.connections }
   ];
 
@@ -102,7 +122,14 @@ async function PendingInvitesCard({ organizationId }: { organizationId: string }
       </CardHeader>
       <CardContent>
         <StatsList
-          rows={[{ key: "pendingInvites", label: t("pendingInvites"), value: count, href: "/settings/team" }]}
+          rows={[
+            {
+              key: "pendingInvites",
+              label: t("pendingInvites"),
+              value: count,
+              href: "/organizations/team"
+            }
+          ]}
         />
       </CardContent>
     </Card>

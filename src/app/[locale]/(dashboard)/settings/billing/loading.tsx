@@ -1,11 +1,13 @@
-import { HeaderCardSkeleton } from "@/components/layout/loading-skeleton";
+import { HeaderCardSkeleton, PageHeaderSkeleton } from "@/components/layout/loading-skeleton";
 
 export default function Loading() {
   return (
-    <div className="mx-auto grid max-w-3xl gap-5">
-      <HeaderCardSkeleton lines={2} />
-      <HeaderCardSkeleton lines={2} />
-      <HeaderCardSkeleton lines={1} />
+    <div className="grid w-full gap-5">
+      <PageHeaderSkeleton action />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <HeaderCardSkeleton lines={4} />
+        <HeaderCardSkeleton lines={5} />
+      </div>
     </div>
   );
 }

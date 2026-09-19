@@ -18,6 +18,10 @@
   },
   "profile": {
     "title": "Profile",
+    "avatarTitle": "Avatar",
+    "avatarDescription": "Shown in the app header and team views.",
+    "detailsTitle": "Profile details",
+    "detailsDescription": "Keep your display details current for teammates.",
     "avatarAlt": "Your avatar",
     "noAvatar": "No avatar",
     "uploadAvatar": "Upload avatar",
@@ -29,14 +33,18 @@
   "security": {
     "title": "Security",
     "changePassword": "Change password",
+    "passwordDescription": "Update the password for your account.",
     "newPassword": "New password",
     "confirmPassword": "Confirm password",
     "mfa": "Multi-factor authentication",
     "mfaDescription": "TOTP factors are managed through Supabase Auth and can be required for sensitive actions.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
     "enableMfa": "Enable MFA",
     "authenticatorAppFallback": "Authenticator app",
     "disable": "Disable",
     "session": "Session",
+    "sessionDescription": "End your current session on this device.",
     "logout": "Logout"
   },
   "team": {
@@ -59,6 +67,8 @@
     "roleReadOnly": "Read-only",
     "sendInvite": "Send invite",
     "pendingInvitations": "Pending invitations",
+    "expiresLabel": "Expires",
+    "actionsLabel": "Actions",
     "expiresOn": "{role} · expires {date}",
     "resend": "Resend",
     "revoke": "Revoke",

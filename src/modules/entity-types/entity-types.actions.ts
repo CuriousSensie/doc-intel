@@ -96,7 +96,7 @@ export async function removeFieldAction(entityTypeId: string, input: unknown) {
 }
 
 // Plain-form variants (native <form action>, redirect on completion) for the entity-types admin
-// page — matches this codebase's existing form convention (e.g. settings/team) rather than
+// page — matches this codebase's existing form convention (e.g. organizations/team) rather than
 // introducing a client-side dialog pattern for a first, simple pass at this UI.
 
 export async function createEntityTypeFormAction(formData: FormData) {
@@ -117,7 +117,10 @@ export async function createEntityTypeFormAction(formData: FormData) {
 
   // See createEntityFormAction's comment (src/modules/entities/entities.actions.ts) — a bare
   // redirect back to the same page doesn't change the URL, so Next.js won't refetch stale data.
-  return redirect({ href: withStatus("/dashboard/entity-types", "message", t("actions.created")), locale });
+  return redirect({
+    href: withStatus("/dashboard/entity-types", "message", t("actions.created")),
+    locale
+  });
 }
 
 export async function addFieldFormAction(formData: FormData) {
@@ -158,7 +161,11 @@ export async function removeFieldFormAction(formData: FormData) {
   }
 
   return redirect({
-    href: withStatus(`/dashboard/entity-types/${entityTypeId}`, "message", t("actions.fieldHidden")),
+    href: withStatus(
+      `/dashboard/entity-types/${entityTypeId}`,
+      "message",
+      t("actions.fieldHidden")
+    ),
     locale
   });
 }

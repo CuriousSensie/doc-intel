@@ -12,7 +12,7 @@ export function SettingsTabs({ items }: { items: NavigationLinkItem[] }) {
 
   return (
     <nav aria-label={t("settingsTabs.ariaLabel")} className="border-b border-border">
-      <div className="mx-auto flex max-w-3xl gap-1 overflow-x-auto">
+      <div className="flex w-full gap-1 overflow-x-auto">
         {items.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);
 

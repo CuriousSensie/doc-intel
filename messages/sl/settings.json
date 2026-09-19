@@ -18,6 +18,10 @@
   },
   "profile": {
     "title": "Profil",
+    "avatarTitle": "Profilna slika",
+    "avatarDescription": "Prikazana je v glavi aplikacije in pogledih ekipe.",
+    "detailsTitle": "Podrobnosti profila",
+    "detailsDescription": "Poskrbite, da so vaši prikazni podatki za ekipo posodobljeni.",
     "avatarAlt": "Vaša profilna slika",
     "noAvatar": "Ni profilne slike",
     "uploadAvatar": "Naloži profilno sliko",
@@ -29,14 +33,18 @@
   "security": {
     "title": "Varnost",
     "changePassword": "Spremeni geslo",
+    "passwordDescription": "Posodobite geslo za svoj račun.",
     "newPassword": "Novo geslo",
     "confirmPassword": "Potrdi geslo",
     "mfa": "Večfaktorska avtentikacija",
     "mfaDescription": "Dejavniki TOTP se upravljajo prek Supabase Auth in so lahko obvezni za občutljiva dejanja.",
+    "enabled": "Omogočeno",
+    "disabled": "Onemogočeno",
     "enableMfa": "Omogoči MFA",
     "authenticatorAppFallback": "Aplikacija za avtentikacijo",
     "disable": "Onemogoči",
     "session": "Seja",
+    "sessionDescription": "Končajte trenutno sejo v tej napravi.",
     "logout": "Odjava"
   },
   "team": {
@@ -59,6 +67,8 @@
     "roleReadOnly": "Samo za branje",
     "sendInvite": "Pošlji povabilo",
     "pendingInvitations": "Čakajoča povabila",
+    "expiresLabel": "Poteče",
+    "actionsLabel": "Dejanja",
     "expiresOn": "{role} · poteče {date}",
     "resend": "Ponovno pošlji",
     "revoke": "Prekliči",

@@ -10,9 +10,9 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div>
+    <div className="grid gap-5">
       <SettingsTabs items={items} />
-      <div className="pt-6">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
