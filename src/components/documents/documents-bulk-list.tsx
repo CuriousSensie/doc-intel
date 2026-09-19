@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 
 import { DocumentLargeCardsView } from "@/components/documents/document-large-cards-view";
 import { DocumentListView } from "@/components/documents/document-list-view";
@@ -48,7 +49,8 @@ export function DocumentsBulkList({
   customFieldDefs = [],
   customFieldValuesByDocumentId = {},
   attributeOptions,
-  visibleFields
+  visibleFields,
+  sharedDocumentIds = []
 }: {
   documents: Document[];
   filter: ListDocumentsOptions;
@@ -65,7 +67,10 @@ export function DocumentsBulkList({
     customFields: CustomFieldDef[];
   };
   visibleFields: DocumentListField[];
+  // Documents in this page that someone else created and shared with the viewer (not the owner).
+  sharedDocumentIds?: string[];
 }) {
+  const sharedIds = useMemo(() => new Set(sharedDocumentIds), [sharedDocumentIds]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [matchingCount, setMatchingCount] = useState<number | null>(null);
@@ -194,9 +199,15 @@ export function DocumentsBulkList({
                   })
                 : t("bulk.connected", { count: summary.created })
         );
+        if (summary.notPermitted > 0) {
+          toast.warning(t("bulk.notPermitted", { count: summary.notPermitted }));
+        }
         setLastOperationId(summary.operationId);
         router.refresh();
       } else {
+        if (summary.notPermitted > 0) {
+          toast.warning(t("bulk.notPermitted", { count: summary.notPermitted }));
+        }
         setStatus(t("bulk.connecting", { count: summary.total }));
         pollOperation(summary.operationId);
       }
@@ -364,6 +375,7 @@ export function DocumentsBulkList({
           customFieldValuesByDocumentId={customFieldValuesByDocumentId}
           onToggle={toggle}
           selectedIds={selectedIds}
+          sharedIds={sharedIds}
           tagsByDocumentId={tagsByDocumentId}
           visibleFields={visibleFields}
         />
@@ -377,6 +389,7 @@ export function DocumentsBulkList({
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}
+          sharedIds={sharedIds}
           tagsByDocumentId={tagsByDocumentId}
           visibleFields={visibleFields}
         />
@@ -389,6 +402,7 @@ export function DocumentsBulkList({
           documents={documents}
           onToggle={toggle}
           selectedIds={selectedIds}
+          sharedIds={sharedIds}
           tagsByDocumentId={tagsByDocumentId}
           visibleFields={visibleFields}
         />

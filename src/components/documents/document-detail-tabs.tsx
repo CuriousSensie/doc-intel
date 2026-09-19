@@ -12,12 +12,14 @@ export function DocumentDetailTabs({
   details,
   content,
   connections,
-  history
+  history,
+  permissions
 }: {
   details: ReactNode;
   content: ReactNode;
   connections: ReactNode;
   history: ReactNode;
+  permissions: ReactNode;
 }) {
   const t = useTranslations("documents.detail.tabs");
 
@@ -44,7 +46,7 @@ export function DocumentDetailTabs({
         <TabsTrigger className={triggerClassName} value="history">
           {t("history")}
         </TabsTrigger>
-        <TabsTrigger className={triggerClassName} disabled value="permissions">
+        <TabsTrigger className={triggerClassName} value="permissions">
           {t("permissions")}
         </TabsTrigger>
       </TabsList>
@@ -62,6 +64,9 @@ export function DocumentDetailTabs({
       </TabsContent>
       <TabsContent className="min-h-0 flex-1 overflow-y-auto" value="history">
         {history}
+      </TabsContent>
+      <TabsContent className="min-h-0 flex-1 overflow-y-auto" value="permissions">
+        {permissions}
       </TabsContent>
     </Tabs>
   );

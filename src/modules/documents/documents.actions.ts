@@ -14,10 +14,11 @@ import {
   addCachedTag
 } from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
-import { ValidationError } from "@/lib/errors";
+import { AuthorizationError, ValidationError } from "@/lib/errors";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
+import { getMembership } from "@/modules/organizations/organizations.service";
 import {
   createBackgroundOperation,
   completeBackgroundOperation
@@ -29,6 +30,7 @@ import {
 } from "@/modules/documents/documents.schemas";
 import {
   deleteDocument,
+  filterDocumentIds,
   getAdjacentDocumentId,
   getDocument,
   getDocumentHistory,
@@ -157,11 +159,29 @@ export type BulkEditDocumentsInput = {
   parameters?: Record<string, unknown>;
 };
 
+// Documents the caller can't edit (view-only shares, or not shared at all) are skipped rather
+// than failing the whole request — `skipped` tells the UI how many, so nothing is silently lost.
+// 'delete' needs manage rights (creator/owner), everything else needs edit.
 export async function bulkEditDocumentsAction(input: BulkEditDocumentsInput) {
   requireFeature("documents");
   const ctx = await buildRequestContext();
+  if (!ctx.actorId) throw new Error("bulkEditDocumentsAction requires an authenticated actor");
+
+  const membership = await getMembership(ctx.orgId, ctx.actorId);
+  if (!membership || membership.role === "read-only") {
+    throw new AuthorizationError("You do not have write access to this organization");
+  }
+
   const parsedFilter = listDocumentsFilterSchema.parse(input.filter ?? {});
-  const documentIds = input.documentIds ?? (await listDocumentIds(ctx.orgId, parsedFilter));
+  const requestedIds = input.documentIds ?? (await listDocumentIds(ctx.orgId, parsedFilter));
+  const documentIds = await filterDocumentIds(
+    ctx.orgId,
+    requestedIds,
+    input.method === "delete" ? "manage" : "edit"
+  );
+  const skipped = requestedIds.length - documentIds.length;
+  if (documentIds.length === 0) return { operationId: null, applied: 0, skipped };
+
   const paperlessDocumentIds = await getPaperlessDocumentIdsForUuids(ctx.orgId, documentIds);
 
   const operation = await createBackgroundOperation(ctx, {
@@ -193,8 +213,8 @@ export async function bulkEditDocumentsAction(input: BulkEditDocumentsInput) {
     entityType: "document",
     entityId: operation.id,
     organizationId: ctx.orgId,
-    metadata: { method: input.method, count: paperlessDocumentIds.length }
+    metadata: { method: input.method, count: paperlessDocumentIds.length, skipped }
   });
 
-  return { operationId: operation.id };
+  return { operationId: operation.id, applied: paperlessDocumentIds.length, skipped };
 }

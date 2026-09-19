@@ -98,6 +98,7 @@
     "connected": "Connected {count} document(s).",
     "connectedWithFailures": "Connected {count} document(s), {failed} failed.",
     "connectedWithSkipped": "Connected {count} document(s), {skipped} already connected.",
+    "notPermitted": "{count} selected document(s) skipped — you only have view access.",
     "connectedWithSkippedAndFailures": "Connected {count} document(s), {skipped} already connected, {failed} failed.",
     "bulkConnectFailed": "Bulk connect failed: {error}",
     "unknownError": "unknown error",
@@ -117,6 +118,7 @@
     "documentType": "Document type",
     "chooseCustomField": "Choose a custom field",
     "nothingSelected": "Choose at least one attribute to apply.",
+    "skipped": "{count, plural, one {# document was skipped — you only have view access.} other {# documents were skipped — you only have view access.}}",
     "failed": "Could not assign attributes",
     "cancel": "Cancel",
     "apply": "Apply changes",
@@ -159,7 +161,6 @@
       "download": "Download",
       "delete": "Delete",
       "share": "Share",
-      "comingSoon": "Coming soon",
       "deleteConfirmTitle": "Delete this document?",
       "deleteConfirmDescription": "This deletes the file in Paperless and removes it from your document list. Connections to it are kept, shown as \"connected document was deleted\".",
       "deleteConfirmAction": "Delete document",
@@ -174,9 +175,6 @@
       "unavailable": "Content is unavailable right now.",
       "empty": "No text was extracted from this document."
     },
-    "permissions": {
-      "comingSoon": "Sharing and per-document permissions are coming soon."
-    },
     "picker": {
       "add": "Add",
       "done": "Done",
@@ -187,5 +185,45 @@
       "saveFailed": "Could not save this change",
       "createFailed": "Could not create this"
     }
+  },
+  "share": {
+    "ownerTitle": "Owner",
+    "ownerBadge": "Owner",
+    "ownerNote": "Organization owners can always access every document.",
+    "editTitle": "Can edit",
+    "everyoneEdit": "Everyone in the organization can edit",
+    "everyoneEditHint": "Read-only members can still only view.",
+    "noEditors": "No one has been given edit access.",
+    "viewTitle": "Can view",
+    "everyoneView": "Everyone in the organization can view",
+    "everyoneViewImplied": "Included, because everyone can already edit.",
+    "noViewers": "No one has been given view access.",
+    "searchMembers": "Search members to add…",
+    "noMatches": "No matching members.",
+    "readOnlyMember": "read-only",
+    "remove": "Remove access",
+    "yourAccess": "Your access",
+    "yourAccessValue": "You {permission}",
+    "everyoneNotice": {
+      "view": "Everyone in the organization can view this document.",
+      "edit": "Everyone in the organization can edit this document."
+    },
+    "permission": {
+      "view": "can view",
+      "edit": "can edit"
+    },
+    "shared": "Shared with {name}",
+    "removed": "Access removed",
+    "loadFailed": "Could not load permissions",
+    "shareFailed": "Could not update sharing",
+    "removeFailed": "Could not remove access",
+    "sharedWithYou": "Shared with you",
+    "viewOnly": "You have view-only access to this document.",
+    "notificationTitle": "A document was shared with you",
+    "notificationMessage": "{name} shared \"{title}\" with you (you {permission}).",
+    "someone": "Someone",
+    "createdByTitle": "Created by",
+    "createdByBadge": "Creator",
+    "unknown": "Unknown"
   }
 }

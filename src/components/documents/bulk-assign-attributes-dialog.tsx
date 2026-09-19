@@ -3,6 +3,7 @@
 import { Tags } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 import { DocumentCustomFieldInput } from "@/components/documents/document-custom-field-input";
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
@@ -81,16 +82,21 @@ export function BulkAssignAttributesDialog({
     startTransition(async () => {
       try {
         let operations = 0;
+        let skipped = 0;
+        const run = async (input: Parameters<typeof bulkEditDocumentsAction>[0]) => {
+          const result = await bulkEditDocumentsAction(input);
+          skipped = Math.max(skipped, result.skipped);
+        };
         for (const tagId of tagsToAdd) {
-          await bulkEditDocumentsAction({ ...selection, method: "add_tag", parameters: { tag: tagId } });
+          await run({ ...selection, method: "add_tag", parameters: { tag: tagId } });
           operations += 1;
         }
         for (const tagId of tagsToRemove) {
-          await bulkEditDocumentsAction({ ...selection, method: "remove_tag", parameters: { tag: tagId } });
+          await run({ ...selection, method: "remove_tag", parameters: { tag: tagId } });
           operations += 1;
         }
         if (correspondentId !== null) {
-          await bulkEditDocumentsAction({
+          await run({
             ...selection,
             method: "set_correspondent",
             parameters: { correspondent: correspondentId }
@@ -98,7 +104,7 @@ export function BulkAssignAttributesDialog({
           operations += 1;
         }
         if (documentTypeId !== null) {
-          await bulkEditDocumentsAction({
+          await run({
             ...selection,
             method: "set_document_type",
             parameters: { document_type: documentTypeId }
@@ -114,7 +120,7 @@ export function BulkAssignAttributesDialog({
           else customAssignments[String(def.paperless_custom_field_id)] = value;
         }
         if (Object.keys(customAssignments).length > 0 || removeCustomFields.length > 0) {
-          await bulkEditDocumentsAction({
+          await run({
             ...selection,
             method: "modify_custom_fields",
             parameters: { add_custom_fields: customAssignments, remove_custom_fields: removeCustomFields }
@@ -125,6 +131,7 @@ export function BulkAssignAttributesDialog({
           setError(t("nothingSelected"));
           return;
         }
+        if (skipped > 0) toast.warning(t("skipped", { count: skipped }));
         reset();
         setOpen(false);
         onComplete(operations);

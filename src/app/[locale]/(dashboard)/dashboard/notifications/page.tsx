@@ -14,6 +14,12 @@ import { getUnreadCount, listNotifications } from "@/modules/notifications/notif
 
 export const dynamic = "force-dynamic";
 
+function documentIdOf(metadata: unknown): string | null {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return null;
+  const id = (metadata as { documentId?: unknown }).documentId;
+  return typeof id === "string" ? id : null;
+}
+
 export default async function NotificationsPage({
   searchParams
 }: {
@@ -75,6 +81,14 @@ export default async function NotificationsPage({
                   ) : null}
                 </p>
                 <p className="mt-1 text-sm text-muted">{notification.message}</p>
+                {documentIdOf(notification.metadata) ? (
+                  <Link
+                    className="mt-1 inline-block text-sm font-semibold underline underline-offset-4"
+                    href={`/dashboard/documents/${documentIdOf(notification.metadata)}`}
+                  >
+                    {t("notifications.openDocument")}
+                  </Link>
+                ) : null}
                 <p className="mt-2 text-xs text-muted">
                   {new Date(notification.created_at).toLocaleString()}
                 </p>

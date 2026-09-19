@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition, type ReactNode } from "rea
 import { DocumentActionsBar } from "@/components/documents/document-actions-bar";
 import { DocumentDetailsTab } from "@/components/documents/document-details-tab";
 import { DocumentDetailTabs } from "@/components/documents/document-detail-tabs";
+import { DocumentPermissionsTab } from "@/components/documents/document-permissions-tab";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { PdfJsViewer } from "@/components/documents/pdf-js-viewer";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   type PaperlessTag
 } from "@/lib/paperless/documents";
 import { updateDocumentAction } from "@/modules/documents/documents.actions";
+import type { PermissionsResult } from "@/modules/documents/document-shares.service";
 import type { DocumentDetails } from "@/modules/documents/documents.service";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import {
@@ -84,7 +86,10 @@ export function DocumentDetailShell({
   customFieldDefs,
   contentTab,
   historyTab,
-  connectionsTab
+  connectionsTab,
+  canEdit,
+  canManage,
+  permissions
 }: {
   initialDocument: DocumentDetails;
   filterOptions: {
@@ -104,8 +109,15 @@ export function DocumentDetailShell({
   contentTab: ReactNode;
   historyTab: ReactNode;
   connectionsTab: ReactNode;
+  // Rendering hints only — every write is re-checked server-side (can_edit_document /
+  // can_manage_document). canManage = creator or owner (share + delete).
+  canEdit: boolean;
+  canManage: boolean;
+  // Started (not awaited) by the page so it runs in parallel with the rest of the page load.
+  permissions: Promise<PermissionsResult>;
 }) {
   const t = useTranslations("documents.detail");
+  const tShare = useTranslations("documents.share");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -196,11 +208,18 @@ export function DocumentDetailShell({
           </div>
           <DocumentActionsBar
             ctxQuery={ctxQuery}
+            canManage={canManage}
             documentId={document.id}
             nextId={nextId}
             previousId={previousId}
           />
         </div>
+
+        {!canEdit ? (
+          <p className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted">
+            {tShare("viewOnly")}
+          </p>
+        ) : null}
 
         {isDirty ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-panel p-3 shadow-sm">
@@ -238,6 +257,7 @@ export function DocumentDetailShell({
               content={contentTab}
               details={
                 <DocumentDetailsTab
+                  readOnly={!canEdit}
                   correspondentOptions={correspondentOptions}
                   document={document}
                   documentTypeOptions={documentTypeOptions}
@@ -253,6 +273,7 @@ export function DocumentDetailShell({
                 />
               }
               history={historyTab}
+              permissions={<DocumentPermissionsTab documentId={document.id} permissions={permissions} />}
             />
           </CardContent>
         </Card>

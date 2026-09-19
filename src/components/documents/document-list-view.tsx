@@ -1,5 +1,6 @@
 "use client";
 
+import { SharedWithYouBadge } from "@/components/documents/shared-with-you-badge";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useRef } from "react";
@@ -25,6 +26,7 @@ import type { Document } from "@/modules/documents/documents.service";
 export function DocumentListView({
   documents,
   selectedIds,
+  sharedIds,
   onToggle,
   ctxQuery = "",
   tagsByDocumentId = {},
@@ -35,6 +37,7 @@ export function DocumentListView({
 }: {
   documents: Document[];
   selectedIds: Set<string>;
+  sharedIds?: Set<string>;
   onToggle: (id: string) => void;
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
@@ -128,6 +131,7 @@ export function DocumentListView({
                   <p className="truncate font-semibold" title={document.title}>
                     {document.title}
                   </p>
+                  {sharedIds?.has(document.id) ? <SharedWithYouBadge /> : null}
                   <p className="mt-1 truncate text-xs text-muted">{document.mime_type ?? "—"}</p>
                 </TableCell>
               ) : null}

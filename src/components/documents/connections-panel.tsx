@@ -23,7 +23,13 @@ function hrefFor(connection: ConnectionWithOther): string {
   return "#";
 }
 
-export async function ConnectionsPanel({ connections }: { connections: ConnectionWithOther[] }) {
+export async function ConnectionsPanel({
+  connections,
+  readOnly = false
+}: {
+  connections: ConnectionWithOther[];
+  readOnly?: boolean;
+}) {
   const t = await getTranslations("connections");
 
   if (connections.length === 0) {
@@ -79,7 +85,7 @@ export async function ConnectionsPanel({ connections }: { connections: Connectio
                   {connection.createdVia !== "manual" ? (
                     <Badge variant="muted">{t("panel.via", { source: connection.createdVia })}</Badge>
                   ) : null}
-                  <DisconnectConnectionButton connectionId={connection.id} />
+                  {readOnly ? null : <DisconnectConnectionButton connectionId={connection.id} />}
                 </div>
               </li>
             ))}

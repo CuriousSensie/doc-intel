@@ -30,7 +30,8 @@ export function DocumentDetailsTab({
   customFieldDefs,
   onTagCreated,
   onCorrespondentCreated,
-  onDocumentTypeCreated
+  onDocumentTypeCreated,
+  readOnly = false
 }: {
   document: DocumentDetails;
   draft: DocumentDraft;
@@ -42,6 +43,8 @@ export function DocumentDetailsTab({
   onTagCreated: (tag: PaperlessTag) => void;
   onCorrespondentCreated: (c: PaperlessCorrespondent) => void;
   onDocumentTypeCreated: (dt: PaperlessDocumentType) => void;
+  // View-only access (a 'view' share, or a read-only member): fields render but can't change.
+  readOnly?: boolean;
 }) {
   const t = useTranslations("documents.detail");
 
@@ -49,7 +52,7 @@ export function DocumentDetailsTab({
     <div className="grid gap-5 pb-4">
       <div className="grid gap-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("titleField")}</span>
-        <Input onChange={(e) => onDraftChange({ title: e.target.value })} value={draft.title} />
+        <Input disabled={readOnly} onChange={(e) => onDraftChange({ title: e.target.value })} value={draft.title} />
       </div>
 
       <div className="grid gap-1.5">
@@ -62,6 +65,7 @@ export function DocumentDetailsTab({
       <div className="grid gap-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("type")}</span>
         <PaperlessMetaPicker
+          disabled={readOnly}
           kind="documentType"
           mode="single"
           onChange={(ids, created) => {
@@ -76,6 +80,7 @@ export function DocumentDetailsTab({
       <div className="grid gap-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("correspondent")}</span>
         <PaperlessMetaPicker
+          disabled={readOnly}
           kind="correspondent"
           mode="single"
           onChange={(ids, created) => {
@@ -90,6 +95,7 @@ export function DocumentDetailsTab({
       <div className="grid gap-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("tags")}</span>
         <PaperlessMetaPicker
+          disabled={readOnly}
           kind="tag"
           mode="multi"
           onChange={(ids, created) => {
@@ -108,7 +114,7 @@ export function DocumentDetailsTab({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted">
             {t("customFields")}
           </span>
-          <div className="grid gap-3">
+          <fieldset className="m-0 grid min-w-0 gap-3 border-0 p-0" disabled={readOnly}>
             {customFieldDefs.map((def) => (
               <label className="grid gap-1.5 text-sm font-medium" key={def.id}>
                 <span>{def.label}</span>
@@ -123,7 +129,7 @@ export function DocumentDetailsTab({
                 />
               </label>
             ))}
-          </div>
+          </fieldset>
         </div>
       ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Download, Share2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useState, useTransition } from "react";
@@ -15,15 +15,17 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { deleteDocumentAction } from "@/modules/documents/documents.actions";
 
 export function DocumentActionsBar({
+  canManage,
   documentId,
   previousId,
   nextId,
   ctxQuery
 }: {
+  // Creator or owner: only they can share or delete (an 'edit' share can't).
+  canManage: boolean;
   documentId: string;
   previousId: string | null;
   nextId: string | null;
@@ -81,41 +83,31 @@ export function DocumentActionsBar({
         </a>
       </Button>
 
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button disabled variant="outline">
-              <Share2 className="size-4" />
-              {t("share")}
+      {canManage ? (
+        <Dialog onOpenChange={setOpen} open={open}>
+          <DialogTrigger asChild>
+            <Button variant="outline">
+              <Trash2 className="size-4" />
+              {t("delete")}
             </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t("comingSoon")}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <Dialog onOpenChange={setOpen} open={open}>
-        <DialogTrigger asChild>
-          <Button variant="outline">
-            <Trash2 className="size-4" />
-            {t("delete")}
-          </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("deleteConfirmTitle")}</DialogTitle>
-            <DialogDescription>{t("deleteConfirmDescription")}</DialogDescription>
-          </DialogHeader>
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <DialogFooter>
-            <Button onClick={() => setOpen(false)} variant="outline">
-              {t("cancel")}
-            </Button>
-            <Button disabled={isPending} onClick={handleDelete}>
-              {t("deleteConfirmAction")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("deleteConfirmTitle")}</DialogTitle>
+              <DialogDescription>{t("deleteConfirmDescription")}</DialogDescription>
+            </DialogHeader>
+            {error ? <p className="text-sm text-danger">{error}</p> : null}
+            <DialogFooter>
+              <Button onClick={() => setOpen(false)} variant="outline">
+                {t("cancel")}
+              </Button>
+              <Button disabled={isPending} onClick={handleDelete}>
+                {t("deleteConfirmAction")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

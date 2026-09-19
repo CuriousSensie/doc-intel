@@ -98,6 +98,7 @@
     "connected": "Povezanih {count} dokument(ov).",
     "connectedWithFailures": "Povezanih {count} dokument(ov), {failed} neuspešnih.",
     "connectedWithSkipped": "Povezanih {count} dokument(ov), {skipped} že povezanih.",
+    "notPermitted": "Preskočenih {count} izbranih dokumentov — imate samo dostop za ogled.",
     "connectedWithSkippedAndFailures": "Povezanih {count} dokument(ov), {skipped} že povezanih, {failed} neuspešnih.",
     "bulkConnectFailed": "Množično povezovanje ni uspelo: {error}",
     "unknownError": "neznana napaka",
@@ -117,6 +118,7 @@
     "documentType": "Vrsta dokumenta",
     "chooseCustomField": "Izberite polje po meri",
     "nothingSelected": "Izberite vsaj en atribut za uporabo.",
+    "skipped": "{count, plural, one {# dokument je bil preskočen — imate samo dostop za ogled.} two {# dokumenta sta bila preskočena — imate samo dostop za ogled.} few {# dokumenti so bili preskočeni — imate samo dostop za ogled.} other {# dokumentov je bilo preskočenih — imate samo dostop za ogled.}}",
     "failed": "Atributov ni bilo mogoče dodeliti",
     "cancel": "Prekliči",
     "apply": "Uporabi spremembe",
@@ -159,7 +161,6 @@
       "download": "Prenesi",
       "delete": "Izbriši",
       "share": "Deli",
-      "comingSoon": "Kmalu na voljo",
       "deleteConfirmTitle": "Izbrišem ta dokument?",
       "deleteConfirmDescription": "S tem izbrišete datoteko v Paperless in jo odstranite s seznama dokumentov. Povezave nanjo ostanejo, prikazane kot \"povezan dokument je bil izbrisan\".",
       "deleteConfirmAction": "Izbriši dokument",
@@ -174,9 +175,6 @@
       "unavailable": "Vsebina trenutno ni na voljo.",
       "empty": "Iz tega dokumenta ni bilo izluščeno nobeno besedilo."
     },
-    "permissions": {
-      "comingSoon": "Deljenje in dovoljenja po dokumentih bodo kmalu na voljo."
-    },
     "picker": {
       "add": "Dodaj",
       "done": "Končano",
@@ -187,5 +185,45 @@
       "saveFailed": "Spremembe ni bilo mogoče shraniti",
       "createFailed": "Ni bilo mogoče ustvariti"
     }
+  },
+  "share": {
+    "ownerTitle": "Lastnik",
+    "ownerBadge": "Lastnik",
+    "ownerNote": "Lastniki organizacije imajo vedno dostop do vseh dokumentov.",
+    "editTitle": "Lahko ureja",
+    "everyoneEdit": "Vsi v organizaciji lahko urejajo",
+    "everyoneEditHint": "Člani samo za branje lahko še vedno samo ogledujejo.",
+    "noEditors": "Nihče nima dostopa za urejanje.",
+    "viewTitle": "Lahko ogleda",
+    "everyoneView": "Vsi v organizaciji lahko ogledujejo",
+    "everyoneViewImplied": "Vključeno, ker lahko vsi že urejajo.",
+    "noViewers": "Nihče nima dostopa za ogled.",
+    "searchMembers": "Poiščite člane za dodajanje…",
+    "noMatches": "Ni ujemajočih članov.",
+    "readOnlyMember": "samo za branje",
+    "remove": "Odstrani dostop",
+    "yourAccess": "Vaš dostop",
+    "yourAccessValue": "{permission}",
+    "everyoneNotice": {
+      "view": "Vsi v organizaciji lahko ogledujejo ta dokument.",
+      "edit": "Vsi v organizaciji lahko urejajo ta dokument."
+    },
+    "permission": {
+      "view": "Lahko ogledujete",
+      "edit": "Lahko urejate"
+    },
+    "shared": "Deljeno z {name}",
+    "removed": "Dostop odstranjen",
+    "loadFailed": "Dovoljenj ni bilo mogoče naložiti",
+    "shareFailed": "Deljenja ni bilo mogoče posodobiti",
+    "removeFailed": "Dostopa ni bilo mogoče odstraniti",
+    "sharedWithYou": "Deljeno z vami",
+    "viewOnly": "Do tega dokumenta imate dostop samo za ogled.",
+    "notificationTitle": "Z vami je bil deljen dokument",
+    "notificationMessage": "{name} je z vami delil(a) »{title}« ({permission}).",
+    "someone": "Nekdo",
+    "createdByTitle": "Ustvaril",
+    "createdByBadge": "Ustvarjalec",
+    "unknown": "Neznano"
   }
 }

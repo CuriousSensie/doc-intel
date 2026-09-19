@@ -50,6 +50,7 @@
     "unreadCount": "{count} unread",
     "caughtUp": "You're all caught up.",
     "markAllAsRead": "Mark all as read",
+    "openDocument": "Open document",
     "markRead": "Mark read",
     "new": "New",
     "empty": "You have no notifications yet.",

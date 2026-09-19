@@ -122,14 +122,22 @@ export async function syncPaperlessDocument(
           document_date: doc.created ? doc.created.slice(0, 10) : null,
           correspondent_name: correspondentName,
           page_count: doc.page_count,
-          byte_size: byteSize,
           mime_type: doc.mime_type,
           checksum,
           status: "ready",
-          source: isFromImport ? "import" : "upload",
-          import_job_id: importJobId,
-          created_by: createdBy,
-          synced_at: new Date().toISOString()
+          synced_at: new Date().toISOString(),
+          // Only our own upload row knows these. A resync from the webhook/reconciliation has no
+          // upload, and sending nulls here would overwrite the real values on conflict — that is
+          // how a document lost its creator (and with it, access) after any later resync. Omitted
+          // columns are left untouched by the upsert.
+          ...(uploadId
+            ? {
+                byte_size: byteSize,
+                created_by: createdBy,
+                source: isFromImport ? ("import" as const) : ("upload" as const),
+                import_job_id: importJobId
+              }
+            : {})
         },
         { onConflict: "organization_id,paperless_document_id" }
       )

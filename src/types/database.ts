@@ -632,6 +632,35 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Written only via share_document/unshare_document (no insert/update/delete RLS policies).
+      document_shares: {
+        Row: {
+          id: string;
+          organization_id: string;
+          document_id: string;
+          // null = everyone in the organization
+          shared_with: string | null;
+          permission: "view" | "edit";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          document_id: string;
+          shared_with?: string | null;
+          permission: "view" | "edit";
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          permission?: "view" | "edit";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       // Pomočnik Level 1 Phase 3 — import job, materialized rows, reusable mappings.
       import_jobs: {
         Row: {
@@ -1465,6 +1494,34 @@ export type Database = {
       };
       merge_entities: {
         Args: { p_keep_id: string; p_merge_id: string };
+        Returns: undefined;
+      };
+      can_manage_document: {
+        Args: { p_document_id: string };
+        Returns: boolean;
+      };
+      can_edit_document: {
+        Args: { p_document_id: string };
+        Returns: boolean;
+      };
+      is_document_shared_with_me: {
+        Args: { p_document_id: string };
+        Returns: boolean;
+      };
+      filter_document_ids: {
+        Args: { p_organization_id: string; p_ids: string[]; p_required: "edit" | "manage" };
+        Returns: string[];
+      };
+      get_document_permissions: {
+        Args: { p_document_id: string };
+        Returns: Json;
+      };
+      share_document: {
+        Args: { p_document_id: string; p_user_id: string | null; p_permission: "view" | "edit" };
+        Returns: undefined;
+      };
+      unshare_document: {
+        Args: { p_document_id: string; p_user_id: string | null };
         Returns: undefined;
       };
       get_org_dashboard_counts: {

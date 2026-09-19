@@ -32,9 +32,15 @@ function makeChain(result: unknown) {
   return proxy;
 }
 
-function makeQueryClient(responses: Record<string, unknown[]>) {
+// `rpcResults` maps a function name to its `data`; anything unlisted resolves `true`, i.e. the
+// permission functions (can_edit_document, can_manage_document) allow by default.
+function makeQueryClient(
+  responses: Record<string, unknown[]>,
+  rpcResults: Record<string, unknown> = {}
+) {
   const counters: Record<string, number> = {};
   return {
+    rpc: (name: string) => Promise.resolve({ data: name in rpcResults ? rpcResults[name] : true, error: null }),
     from: (table: string) => {
       const idx = counters[table] ?? 0;
       counters[table] = idx + 1;
@@ -314,6 +320,28 @@ describe("updateDocument", () => {
     expect(paperlessFor).not.toHaveBeenCalled();
   });
 
+  it("rejects a member who can see the document but lacks edit access (view share)", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () =>
+        makeQueryClient(
+          { documents: [{ data: DOC_ROW, error: null }] },
+          { can_edit_document: false }
+        )
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "member" })
+    }));
+    const paperlessFor = vi.fn();
+    vi.doMock("@/lib/paperless/client", () => ({ paperlessFor }));
+
+    const { updateDocument } = await import("@/modules/documents/documents.service");
+    await expect(
+      updateDocument("user-2", "org-1", "doc-1", { title: "New title" })
+    ).rejects.toThrow(/edit access/);
+
+    expect(paperlessFor).not.toHaveBeenCalled();
+  });
+
   it("writes the title through to Paperless, then mirrors Paperless's own response", async () => {
     vi.doMock("@/lib/supabase/server", () => ({
       createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
@@ -475,6 +503,27 @@ describe("deleteDocument", () => {
 
     const { deleteDocument } = await import("@/modules/documents/documents.service");
     await expect(deleteDocument("user-1", "org-1", "doc-1")).rejects.toThrow(/write access/);
+    expect(paperlessFor).not.toHaveBeenCalled();
+  });
+
+  it("rejects a member who can edit but is not the creator or owner", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () =>
+        makeQueryClient(
+          { documents: [{ data: DOC_ROW, error: null }] },
+          { can_manage_document: false }
+        )
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role: "member" })
+    }));
+    const paperlessFor = vi.fn();
+    vi.doMock("@/lib/paperless/client", () => ({ paperlessFor }));
+
+    const { deleteDocument } = await import("@/modules/documents/documents.service");
+    await expect(deleteDocument("user-2", "org-1", "doc-1")).rejects.toThrow(
+      /creator or an owner/
+    );
     expect(paperlessFor).not.toHaveBeenCalled();
   });
 
@@ -783,5 +832,69 @@ describe("listDocumentIds", () => {
     expect(page).toBeGreaterThan(1);
     expect(get).toHaveBeenCalledTimes(1);
     expect(ids.length).toBeGreaterThan(0);
+  });
+});
+
+describe("filterDocumentIds", () => {
+  it("keeps only the ids the database says the caller may act on, in request order", async () => {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () =>
+        makeQueryClient({}, { filter_document_ids: ["doc-3", "doc-1"] })
+    }));
+
+    const { filterDocumentIds } = await import("@/modules/documents/documents.service");
+    await expect(filterDocumentIds("org-1", ["doc-1", "doc-2", "doc-3"], "edit")).resolves.toEqual([
+      "doc-1",
+      "doc-3"
+    ]);
+  });
+
+  it("returns an empty list without a database call when nothing was requested", async () => {
+    const createClient = vi.fn();
+    vi.doMock("@/lib/supabase/server", () => ({ createClient }));
+
+    const { filterDocumentIds } = await import("@/modules/documents/documents.service");
+    await expect(filterDocumentIds("org-1", [], "manage")).resolves.toEqual([]);
+    expect(createClient).not.toHaveBeenCalled();
+  });
+});
+
+describe("getDocumentAccess", () => {
+  const DOC = { id: "doc-1", organization_id: "org-1", created_by: "creator" };
+
+  async function accessFor(role: string, userId: string, share: { permission: string } | null) {
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => makeQueryClient({ document_shares: [{ data: share, error: null }] })
+    }));
+    vi.doMock("@/modules/organizations/organizations.service", () => ({
+      getMembership: vi.fn().mockResolvedValue({ role })
+    }));
+    const { getDocumentAccess } = await import("@/modules/documents/documents.service");
+    return getDocumentAccess(DOC, userId);
+  }
+
+  it("lets the creator and the owner manage and edit", async () => {
+    expect(await accessFor("member", "creator", null)).toEqual({ canManage: true, canEdit: true });
+    vi.resetModules();
+    expect(await accessFor("owner", "someone", null)).toEqual({ canManage: true, canEdit: true });
+  });
+
+  it("gives a sharee edit only for an edit share, never manage", async () => {
+    expect(await accessFor("member", "sharee", { permission: "edit" })).toEqual({
+      canManage: false,
+      canEdit: true
+    });
+    vi.resetModules();
+    expect(await accessFor("member", "sharee", { permission: "view" })).toEqual({
+      canManage: false,
+      canEdit: false
+    });
+  });
+
+  it("never lets a read-only member edit, even with an edit share", async () => {
+    expect(await accessFor("read-only", "sharee", { permission: "edit" })).toEqual({
+      canManage: false,
+      canEdit: false
+    });
   });
 });

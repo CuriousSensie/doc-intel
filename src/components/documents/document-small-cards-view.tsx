@@ -1,5 +1,6 @@
 "use client";
 
+import { SharedWithYouBadge } from "@/components/documents/shared-with-you-badge";
 import { FileText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
@@ -40,6 +41,7 @@ function Thumbnail({ documentId, title }: { documentId: string; title: string })
 export function DocumentSmallCardsView({
   documents,
   selectedIds,
+  sharedIds,
   onToggle,
   ctxQuery = "",
   tagsByDocumentId = {},
@@ -50,6 +52,7 @@ export function DocumentSmallCardsView({
 }: {
   documents: Document[];
   selectedIds: Set<string>;
+  sharedIds?: Set<string>;
   onToggle: (id: string) => void;
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
@@ -107,9 +110,12 @@ export function DocumentSmallCardsView({
             </div>
             <div>
               {visible.has("title") ? (
-                <p className="truncate text-sm font-semibold" title={document.title}>
-                  {document.title}
-                </p>
+                <>
+                  <p className="truncate text-sm font-semibold" title={document.title}>
+                    {document.title}
+                  </p>
+                  {sharedIds?.has(document.id) ? <SharedWithYouBadge /> : null}
+                </>
               ) : null}
               <dl className="mt-2 grid gap-1 text-xs">
                 {visible.has("documentType") ? (

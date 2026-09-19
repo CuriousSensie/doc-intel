@@ -561,6 +561,66 @@ export async function listDocumentIds(
   return ids.slice(0, cap);
 }
 
+type DbClient = Awaited<ReturnType<typeof createClient>>;
+
+async function assertCanEditDocument(db: DbClient, documentId: string): Promise<void> {
+  const { data, error } = await db.rpc("can_edit_document", { p_document_id: documentId });
+  if (error) throw error;
+  if (!data) throw new AuthorizationError("You do not have edit access to this document");
+}
+
+// Bulk paths resolve their target ids through this so every downstream write (Paperless call,
+// mirror update, provenance) sees the identical set. 'manage' is for delete, 'edit' for the rest.
+export async function filterDocumentIds(
+  organizationId: string,
+  documentIds: string[],
+  required: "edit" | "manage"
+): Promise<string[]> {
+  if (documentIds.length === 0) return [];
+
+  const db = await createClient();
+  const { data, error } = await db.rpc("filter_document_ids", {
+    p_organization_id: organizationId,
+    p_ids: documentIds,
+    p_required: required
+  });
+  if (error) throw error;
+
+  const allowed = new Set(data ?? []);
+  return documentIds.filter((id) => allowed.has(id));
+}
+
+export type DocumentAccess = {
+  // Creator or owner: can share, change sharing, and delete.
+  canManage: boolean;
+  canEdit: boolean;
+};
+
+// UI hint only (which controls to render) — the SQL functions can_manage_document /
+// can_edit_document are what actually enforce this on every write.
+export async function getDocumentAccess(
+  document: Pick<Document, "id" | "organization_id" | "created_by">,
+  userId: string
+): Promise<DocumentAccess> {
+  const membership = await getMembership(document.organization_id, userId);
+  if (!membership) return { canManage: false, canEdit: false };
+
+  const canManage = membership.role === "owner" || document.created_by === userId;
+  if (membership.role === "read-only") return { canManage, canEdit: false };
+  if (canManage) return { canManage, canEdit: true };
+
+  const db = await createClient();
+  const { data, error } = await db
+    .from("document_shares")
+    .select("permission")
+    .eq("document_id", document.id)
+    .eq("shared_with", userId)
+    .maybeSingle();
+  if (error) throw error;
+
+  return { canManage: false, canEdit: data?.permission === "edit" };
+}
+
 export async function getPaperlessDocumentIdsForUuids(
   organizationId: string,
   documentIds: string[]
@@ -960,6 +1020,8 @@ export async function updateDocument(
   if (!membership || membership.role === "read-only") {
     throw new AuthorizationError("You do not have write access to this organization");
   }
+  // The RLS read above also passes for a 'view' share — edit needs the explicit check.
+  await assertCanEditDocument(db, documentId);
 
   const patch: Parameters<typeof updatePaperlessDocument>[2] = {};
   if (input.title !== undefined) patch.title = input.title;
@@ -1105,6 +1167,14 @@ export async function deleteDocument(
   const membership = await getMembership(organizationId, userId);
   if (!membership || membership.role === "read-only") {
     throw new AuthorizationError("You do not have write access to this organization");
+  }
+  // Only the creator or an owner can delete — an 'edit' share does not include delete.
+  const { data: canManage, error: canManageError } = await db.rpc("can_manage_document", {
+    p_document_id: documentId
+  });
+  if (canManageError) throw canManageError;
+  if (!canManage) {
+    throw new AuthorizationError("Only the document creator or an owner can delete it");
   }
 
   const client = await paperlessFor(organizationId);

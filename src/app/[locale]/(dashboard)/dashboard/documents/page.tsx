@@ -24,6 +24,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
+import { getMembership } from "@/modules/organizations/organizations.service";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
 import {
@@ -143,7 +144,8 @@ export default async function DocumentsPage({
     correspondents,
     documentTypes,
     customFieldDefs,
-    selectedEntity
+    selectedEntity,
+    membership
   ] = await Promise.all([
     listDocuments(organizationId, filter),
     getCachedTags(client, organizationId),
@@ -160,8 +162,14 @@ export default async function DocumentsPage({
           },
           filter.entityId
         ).catch(() => null)
-      : Promise.resolve(null)
+      : Promise.resolve(null),
+    getMembership(organizationId, context.user.id)
   ]);
+  // Owners see every document, so "shared with you" only means something for other roles.
+  const sharedDocumentIds =
+    membership?.role === "owner"
+      ? []
+      : documents.filter((doc) => doc.created_by !== context.user.id).map((doc) => doc.id);
   const customFieldDefByKey = new Map(customFieldDefs.map((def) => [def.key, def]));
   const visibleFields = parsedVisibleFields.filter((field) => {
     if (!field.startsWith("custom:")) return true;
@@ -304,6 +312,7 @@ export default async function DocumentsPage({
             customFieldValuesByDocumentId={customFieldValuesByDocumentId}
             documents={documents}
             filter={filter}
+            sharedDocumentIds={sharedDocumentIds}
             tagsByDocumentId={tagsByDocumentId}
             visibleFields={visibleFields}
             viewMode={view}

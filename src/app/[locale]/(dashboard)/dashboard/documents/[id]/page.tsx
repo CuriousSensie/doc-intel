@@ -15,7 +15,12 @@ import { requireUser } from "@/modules/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { listDocumentsFilterSchema } from "@/modules/documents/documents.schemas";
-import { getAdjacentDocumentId, getDocument } from "@/modules/documents/documents.service";
+import { loadDocumentPermissions } from "@/modules/documents/document-shares.service";
+import {
+  getAdjacentDocumentId,
+  getDocument,
+  getDocumentAccess
+} from "@/modules/documents/documents.service";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +40,10 @@ export default async function DocumentDetailPage({
     searchParams,
     requireUser("/dashboard/documents")
   ]);
+
+  // Permissions tab data: started now, never awaited here (loadDocumentPermissions can't reject),
+  // so it runs in parallel with the document fetch below and streams into the tab.
+  const permissions = loadDocumentPermissions(id);
 
   // specs/03-api.md: cross-tenant access is 404, never 403 — getDocument()'s own RLS-scoped
   // query already returns this as "not found" rather than a distinguishable denial.
@@ -69,24 +78,29 @@ export default async function DocumentDetailPage({
     actorId: context.user.id,
     correlationId: randomUUID()
   };
-  const [tags, correspondents, documentTypes, customFieldDefs, previousId, nextId] = await Promise.all([
+  const [tags, correspondents, documentTypes, customFieldDefs, previousId, nextId, access] = await Promise.all([
     getCachedTags(client, document.organization_id),
     getCachedCorrespondents(client, document.organization_id),
     getCachedDocumentTypes(client, document.organization_id),
     listCustomFieldDefs(defsCtx),
     getAdjacentDocumentId(document.organization_id, document, filter, "previous"),
-    getAdjacentDocumentId(document.organization_id, document, filter, "next")
+    getAdjacentDocumentId(document.organization_id, document, filter, "next"),
+    getDocumentAccess(document, context.user.id)
   ]);
 
   return (
     <div className="mx-auto grid w-full max-w-[1800px] gap-4 px-1">
       <DocumentDetailShell
+        canEdit={access.canEdit}
+        canManage={access.canManage}
         connectionsTab={
           <div className="grid gap-4">
-            <div className="flex items-center justify-end">
-              <ConnectionPicker sourceId={document.id} sourceKind="document" />
-            </div>
-            <ConnectionsPanel connections={document.connections} />
+            {access.canEdit ? (
+              <div className="flex items-center justify-end">
+                <ConnectionPicker sourceId={document.id} sourceKind="document" />
+              </div>
+            ) : null}
+            <ConnectionsPanel connections={document.connections} readOnly={!access.canEdit} />
           </div>
         }
         contentTab={<DocumentContentTab document={document} />}
@@ -96,6 +110,7 @@ export default async function DocumentDetailPage({
         historyTab={<DocumentHistoryTab history={document.history} />}
         initialDocument={document}
         nextId={nextId}
+        permissions={permissions}
         previousId={previousId}
       />
     </div>
