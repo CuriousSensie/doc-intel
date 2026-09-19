@@ -11,7 +11,7 @@ import {
 } from "./helpers/test-fixtures";
 
 // Milestone 6 (specs/05 Dashboard IA) — entity types, entities, views, and the connection
-// picker, all pure-Pomočnik-DB flows with no Paperless dependency, so this drives them through
+// picker, all pure-Documenti-DB flows with no Paperless dependency, so this drives them through
 // the real browser against the real Supabase Cloud project rather than mocking anything.
 //
 // Form-submission assertions use a longer-than-default timeout: ADR-0013 measured every simple
@@ -69,9 +69,7 @@ test.describe("entities UI", () => {
     const uniqueName = `Acme detail ${Date.now()}`;
     await page.getByLabel("Name", { exact: true }).fill(uniqueName);
     await page.getByRole("button", { name: "Create" }).click();
-    await page
-      .getByRole("link", { name: uniqueName })
-      .click({ timeout: FORM_SUBMIT_TIMEOUT });
+    await page.getByRole("link", { name: uniqueName }).click({ timeout: FORM_SUBMIT_TIMEOUT });
 
     // Same Supabase Cloud round-trip latency as the create-form assertions above (ADR-0013) —
     // this one was missed when Milestone 6 first wrote this test, unlike its neighbors.
@@ -104,9 +102,7 @@ test.describe("entities UI", () => {
     await page.goto("/dashboard/entities/project");
     await page.getByLabel("Name", { exact: true }).fill(projectName);
     await page.getByRole("button", { name: "Create" }).click();
-    await page
-      .getByRole("link", { name: projectName })
-      .click({ timeout: FORM_SUBMIT_TIMEOUT });
+    await page.getByRole("link", { name: projectName }).click({ timeout: FORM_SUBMIT_TIMEOUT });
 
     await page.getByRole("tab", { name: "Connections" }).click();
     await page.getByRole("button", { name: "+ Connect" }).click();
@@ -156,7 +152,9 @@ test.describe("entities UI", () => {
     await page.goto("/dashboard/views");
 
     await expect(page.getByRole("heading", { name: "All documents" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Documents with no connections" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Documents with no connections" })
+    ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Invoices this year" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Open contracts" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Recently added" })).toBeVisible();

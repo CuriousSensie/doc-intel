@@ -5,11 +5,11 @@
       "start": "Začni"
     },
     "hero": {
-      "eyebrow": "Temelj za produkcijski SaaS",
-      "title": "Zgradite izdelek, ne iste infrastrukture znova.",
-      "description": "Resen celovit SaaS okvir za avtentikacijo, obračunavanje, organizacije, e-pošto, datoteke, administratorska orodja in vse operativne poti, ki jih potrebuje vsak izdelek.",
+      "eyebrow": "Delovni prostor za dokumentno inteligenco",
+      "title": "Documenti",
+      "description": "Pretvorite Paperless dokumente v povezane zapise, poglede, entitete, pravila, uvoze in ekipne delovne tokove.",
       "openDashboard": "Odpri nadzorno ploščo",
-      "viewPricing": "Poglej primer cenika"
+      "viewPricing": "Poglej cenik"
     },
     "stats": {
       "defaultBilling": "Privzeto obračunavanje",
@@ -19,24 +19,24 @@
     },
     "pillars": {
       "auth": {
-        "title": "Avtentikacija in varnost računa",
-        "body": "Supabase Auth, SSR seje, zaščita poti, nastavitve profila, procesi, pripravljeni na MFA, in varno brisanje računa."
+        "title": "Varen dostop ekipe",
+        "body": "Delajte v organizacijah z zaščitenimi sejami, povabili, nastavitvami profila, procesi, pripravljenimi na MFA, in jasnimi kontrolami računa."
       },
       "organizations": {
-        "title": "Organizacije, ko jih potrebujete",
-        "body": "Privzeto usmerjeno k uporabniku, z izbirnimi delovnimi prostori, RBAC, povabili in obračunavanjem organizacij za B2B izdelke."
+        "title": "Povezani delovni prostori",
+        "body": "Vsaki ekipi omogočite skupen dokumentni prostor s člani, vlogami, shranjenimi pogledi, entitetami in dejavnostjo tam, kjer delo poteka."
       },
       "billing": {
-        "title": "Obračunavanje in upravičenja",
-        "body": "Stripe Checkout, Customer Portal, naročnine, enkratni dobropisi, omejitve uporabe in idempotentni webhooki."
+        "title": "Dokumentni delovni tokovi",
+        "body": "Uporabite pravila, naknadne obdelave, uvoze in množična dejanja, da dokumente povežete z osebami, projekti in zapisi, kamor spadajo."
       },
       "messaging": {
-        "title": "Transakcijska sporočila",
-        "body": "Zamenljiva abstrakcija ponudnika e-pošte SMTP/konzola, predloge React Email, nastavitve obvestil in varen razvojni način e-pošte."
+        "title": "Pomembna obvestila",
+        "body": "Uporabniki ostanejo obveščeni o deljenju dokumentov, uvozih, spremembah ekipe in operativnih dogodkih brez nepotrebnega hrupa."
       },
       "guardrails": {
-        "title": "Produkcijske varovalke",
-        "body": "RLS, tipizirana konfiguracija, strukturirane napake, revizijski dnevniki, lastništvo datotek, testiranje in dokumentacija od prvega dne."
+        "title": "Operativne varovalke",
+        "body": "RLS, revizijski dnevniki, preverjanje lastništva, tipizirana konfiguracija, strukturirane napake in ozadnji delavci ohranjajo stabilen delovni prostor."
       }
     }
   },

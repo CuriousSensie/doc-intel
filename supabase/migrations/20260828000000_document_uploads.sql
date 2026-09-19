@@ -1,4 +1,4 @@
--- Pomočnik Level 0 — the `documents` mirror table (specs/02-data-model.md) and
+-- Documenti Level 0 — the `documents` mirror table (specs/02-data-model.md) and
 -- document_uploads (specs/01-architecture.md §Upload), together since document_uploads.
 -- document_id references documents.
 

@@ -661,7 +661,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      // Pomočnik Level 1 Phase 3 — import job, materialized rows, reusable mappings.
+      // Documenti Level 1 Phase 3 — import job, materialized rows, reusable mappings.
       import_jobs: {
         Row: {
           id: string;
@@ -821,7 +821,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      // Pomočnik Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md).
+      // Documenti Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md).
       entities: {
         Row: {
           id: string;
@@ -1019,7 +1019,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      // Pomočnik Level 1 Milestone 7 (specs/05-level-1-structure.md §Bulk business actions/§Export).
+      // Documenti Level 1 Milestone 7 (specs/05-level-1-structure.md §Bulk business actions/§Export).
       background_operations: {
         Row: {
           id: string;

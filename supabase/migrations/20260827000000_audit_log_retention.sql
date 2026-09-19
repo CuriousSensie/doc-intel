@@ -1,5 +1,5 @@
 -- ADR-0005: purge_old_audit_logs()'s original 30-day window was sized for admin logs only;
--- business audit (Pomočnik) requires 2-year retention per specs/10-nonfunctional.md, and a
+-- business audit (Documenti) requires 2-year retention per specs/10-nonfunctional.md, and a
 -- single global window is simpler than a category-split retention policy.
 create or replace function public.purge_old_audit_logs()
 returns void

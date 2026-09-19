@@ -6,8 +6,8 @@ describe("parseEnv", () => {
   it("applies safe development defaults", () => {
     const env = parseEnv({});
 
-    expect(env.NEXT_PUBLIC_APP_URL).toBe("http://localhost:3000");
-    expect(env.NEXT_PUBLIC_APP_NAME).toBe("MVP Boilerplate");
+    expect(env.NEXT_PUBLIC_APP_URL).toBe("https://www.documenti.net");
+    expect(env.NEXT_PUBLIC_APP_NAME).toBe("Documenti");
     expect(env.EMAIL_PROVIDER).toBe("console");
     expect(env.SMTP_SECURE).toBe(false);
   });

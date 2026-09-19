@@ -31,7 +31,7 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Event bridge spike listener on http://0.0.0.0:${PORT}`);
   console.log(
-    "Point infra/.env's POMOCNIK_INTERNAL_URL at this host:port temporarily (e.g. " +
+    "Point infra/.env's DOCUMENTI_INTERNAL_URL at this host:port temporarily (e.g. " +
       "http://host.docker.internal:" +
       PORT +
       "), restart paperless-webserver so PAPERLESS_POST_CONSUME_SCRIPT picks up the new env, " +

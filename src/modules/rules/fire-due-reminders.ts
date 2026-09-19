@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/modules/notifications/notifications.service";
 
-// specs/07-rules-engine.md §Actions: create_reminder is delivered via "the boilerplate's
+// specs/07-rules-engine.md §Actions: create_reminder is delivered via "Documenti's
 // notification and email infrastructure" — no new task system. Global sweep (not tenant-scoped),
 // same shape as expire-abandoned-uploads.ts: selects every due, unfired reminder across every
 // tenant and notifies its assignee role's members.
@@ -32,7 +32,11 @@ export async function fireDueReminders(): Promise<number> {
             type: "reminder.due",
             title: "Reminder",
             message: reminder.message,
-            metadata: { reminderId: reminder.id, documentId: reminder.document_id, entityId: reminder.entity_id }
+            metadata: {
+              reminderId: reminder.id,
+              documentId: reminder.document_id,
+              entityId: reminder.entity_id
+            }
           })
         )
       );

@@ -4,7 +4,7 @@ import type { RenderedEmail } from "@/lib/email/types";
 
 const baseMessage: RenderedEmail = {
   to: "member@example.com",
-  from: "MVP Boilerplate <no-reply@example.com>",
+  from: "Documenti <no-reply@documenti.net>",
   subject: "Original subject",
   html: "<p>Hello</p>",
   text: "Hello"

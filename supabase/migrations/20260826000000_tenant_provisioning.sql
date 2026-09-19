@@ -1,4 +1,4 @@
--- Pomočnik Level 0/1 — entity_types (specs/02-data-model.md, specs/05-level-1-structure.md),
+-- Documenti Level 0/1 — entity_types (specs/02-data-model.md, specs/05-level-1-structure.md),
 -- audit_logs.actor_type (ADR-0005), and the two provisioning-outcome functions (ADR-0008:
 -- tenant provisioning's audit record must be atomic with the domain write, not best-effort
 -- logEvent()). organization_id naming throughout (docs/adr/0004).

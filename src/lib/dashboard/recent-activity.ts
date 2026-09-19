@@ -2,7 +2,7 @@
 // only, per-browser, no Supabase table or write path (temp.md decision: avoid adding load for a
 // feature with no server-side consumer). Capped, deduped-by-id, most-recent first.
 
-const STORAGE_KEY = "pomocnik:recentActivity:v1";
+const STORAGE_KEY = "documenti:recentActivity:v1";
 const MAX_ITEMS = 10;
 
 export type RecentItem = { id: string; label: string; href: string; openedAt: number };

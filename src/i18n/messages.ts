@@ -11,7 +11,7 @@ const namespaces = [
   "admin",
   "billing",
   "emails",
-  // Pomočnik Level 1 — not part of the upstream boilerplate.
+  // Documenti Level 1 — not part of the upstream Documenti.
   "documents",
   "entities",
   "entityTypes",

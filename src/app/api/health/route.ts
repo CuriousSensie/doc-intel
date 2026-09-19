@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export function GET() {
   return NextResponse.json({
     ok: true,
-    service: "mvp-boilerplate",
+    service: "documenti",
     timestamp: new Date().toISOString()
   });
 }

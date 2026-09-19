@@ -1,4 +1,4 @@
-// Pomočnik document uploads. Direct-to-storage (specs/01-architecture.md §Upload), not
+// Documenti document uploads. Direct-to-storage (specs/01-architecture.md §Upload), not
 // server-buffered like avatar upload.
 export const documentsConfig = {
   bucket: "document-uploads",

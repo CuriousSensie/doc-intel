@@ -5,11 +5,11 @@
       "start": "Start"
     },
     "hero": {
-      "eyebrow": "Production SaaS foundation",
-      "title": "Build the product, not the same plumbing again.",
-      "description": "A serious full-stack SaaS starter for authentication, billing, organizations, emails, files, admin tooling, and the operational paths every product needs.",
+      "eyebrow": "Document intelligence workspace",
+      "title": "Documenti",
+      "description": "Turn Paperless documents into connected records, views, entities, rules, imports, and team workflows.",
       "openDashboard": "Open dashboard",
-      "viewPricing": "View pricing shell"
+      "viewPricing": "View pricing"
     },
     "stats": {
       "defaultBilling": "Default billing",
@@ -19,24 +19,24 @@
     },
     "pillars": {
       "auth": {
-        "title": "Auth and account security",
-        "body": "Supabase Auth, SSR sessions, route protection, profile settings, MFA-ready flows, and safe account deletion."
+        "title": "Secure team access",
+        "body": "Work across organizations with protected sessions, invitations, profile settings, MFA-ready flows, and clear account controls."
       },
       "organizations": {
-        "title": "Organizations when needed",
-        "body": "User-first by default, with optional workspaces, RBAC, invitations, and organization billing for B2B products."
+        "title": "Connected workspaces",
+        "body": "Give every team a shared document workspace with members, roles, saved views, entities, and activity where the work happens."
       },
       "billing": {
-        "title": "Billing and entitlements",
-        "body": "Stripe Checkout, Customer Portal, subscriptions, one-time credits, usage limits, and idempotent webhooks."
+        "title": "Document workflows",
+        "body": "Use rules, backfills, imports, and bulk actions to keep documents connected to the people, projects, and records they belong to."
       },
       "messaging": {
-        "title": "Transactional messaging",
-        "body": "Pluggable SMTP/console email provider abstraction, React Email templates, notification preferences, and safe development email mode."
+        "title": "Notifications that matter",
+        "body": "Keep users aware of document shares, imports, team changes, and operational events without burying them in noise."
       },
       "guardrails": {
-        "title": "Production guardrails",
-        "body": "RLS, typed config, structured errors, audit logs, file ownership, testing, and documentation from day one."
+        "title": "Operational guardrails",
+        "body": "RLS, audit logs, ownership checks, typed configuration, structured errors, and background workers keep the workspace steady."
       }
     }
   },

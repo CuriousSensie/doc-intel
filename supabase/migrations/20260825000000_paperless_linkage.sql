@@ -1,4 +1,4 @@
--- Pomočnik Level 0 — Paperless linkage tables (specs/02-data-model.md). organization_id naming
+-- Documenti Level 0 — Paperless linkage tables (specs/02-data-model.md). organization_id naming
 -- (docs/adr/0004). Admin-client only — api_token_encrypted must never reach a browser, and
 -- paperless_object_map is for server-side tenant resolution only.
 

@@ -5,7 +5,7 @@ export const routing = defineRouting({
   defaultLocale: "en",
   // Explicit, not inherited from next-intl's default — every locale gets a URL prefix,
   // including English (/en/dashboard, /sl/dashboard). Chosen to match the upstream
-  // boilerplate's own (unset, but equivalent) behavior.
+  // Documenti's own (unset, but equivalent) behavior.
   localePrefix: "always"
 });
 

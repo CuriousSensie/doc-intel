@@ -11,5 +11,5 @@ test("health endpoint returns ok", async ({ request }) => {
   const response = await request.get("/api/health");
 
   expect(response.ok()).toBe(true);
-  await expect(response.json()).resolves.toMatchObject({ ok: true, service: "mvp-boilerplate" });
+  await expect(response.json()).resolves.toMatchObject({ ok: true, service: "documenti" });
 });

@@ -1,4 +1,4 @@
--- Pomočnik Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md). entity_types
+-- Documenti Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md). entity_types
 -- already exists (20260826000000_tenant_provisioning.sql) — this adds entities,
 -- entity_identifiers, connections, custom_field_defs, saved_views, and merge_entities().
 -- organization_id naming throughout (docs/adr/0004), has_organization_write_access() for write

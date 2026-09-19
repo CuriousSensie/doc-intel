@@ -1,5 +1,5 @@
--- Removes the boilerplate's generic "files" and "projects" modules entirely — neither is part of
--- Pomočnik's product (Documents/Paperless supersedes files; the `project` entity type, specs/05,
+-- Removes Documenti's generic "files" and "projects" modules entirely — neither is part of
+-- Documenti's product (Documents/Paperless supersedes files; the `project` entity type, specs/05,
 -- supersedes the projects stub). Policies/indexes on both tables drop automatically with the
 -- table. public.has_organization_write_access() (introduced alongside the files RLS fix) is kept
 -- — it's now load-bearing for entity_types/document_uploads RLS, not files-specific anymore.

@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 const MIGRATIONS_DIR = join(process.cwd(), "supabase", "migrations");
 
-// Pre-Pomočnik migrations, already reviewed — some tables are owner-polymorphic or use an
+// Pre-Documenti migrations, already reviewed — some tables are owner-polymorphic or use an
 // indexing choice this regex can't see. Baseline for "new tables going forward," not a loophole.
 const EXEMPT_MIGRATIONS = new Set([
   "20260813180000_initial_schema.sql",

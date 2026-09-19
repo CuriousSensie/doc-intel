@@ -7,9 +7,7 @@ export default function NotFound() {
       <div className="max-w-md text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-muted">404</p>
         <h1 className="mt-4 text-4xl font-black">Page not found</h1>
-        <p className="mt-4 leading-7 text-muted">
-          The requested page does not exist in this boilerplate.
-        </p>
+        <p className="mt-4 leading-7 text-muted">The requested page does not exist in Documenti.</p>
         <Button asChild className="mt-8">
           <Link href="/">Return home</Link>
         </Button>

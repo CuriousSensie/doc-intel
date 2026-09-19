@@ -1,4 +1,4 @@
--- Pomočnik Level 1 — Milestone 7: async bulk actions + export progress tracking.
+-- Documenti Level 1 — Milestone 7: async bulk actions + export progress tracking.
 -- specs/05-level-1-structure.md §Bulk business actions/§Export: "async execution above 50
 -- items with progress" and "exports over 5,000 rows are always async" both need a row a
 -- worker can update and the browser can poll — same shape as document_uploads (Phase 0).

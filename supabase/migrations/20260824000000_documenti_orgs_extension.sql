@@ -1,4 +1,4 @@
--- Pomočnik Level 0 — orgs extension columns + read-only role (docs/adr/0004: organization_id
+-- Documenti Level 0 — orgs extension columns + read-only role (docs/adr/0004: organization_id
 -- naming, not the spec's org_id).
 
 alter table public.organizations add column timezone text not null default 'Europe/Ljubljana';

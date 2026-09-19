@@ -1,8 +1,8 @@
 {
-  "name": "mvp-boilerplate",
+  "name": "documenti",
   "version": "0.1.0",
   "private": true,
-  "description": "Production-ready full-stack SaaS boilerplate built with Next.js, Supabase, Stripe, SMTP email, and TypeScript.",
+  "description": "Documenti document intelligence workspace built with Next.js, Supabase, Paperless, Stripe, SMTP email, and TypeScript.",
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
