@@ -163,7 +163,7 @@ cap and MIME allowlist. The `avatars` bucket is deliberately **public** (profile
 sensitive and are meant to be displayed inline without a signed-URL round trip on every page
 load).
 
-## Documents (Paperless integration) — Pomočnik
+## Documents (Paperless integration) — Documenti
 
 Three separate defenses apply before a tenant's uploaded file ever reaches Paperless, each
 independent of the others:
@@ -203,11 +203,37 @@ ever fixes it, rather than either failing CI forever or silently passing).
 **The Paperless post-consume webhook**
 (`src/app/api/internal/paperless/document-consumed/route.ts`) is HMAC-SHA256-verified over
 `body+timestamp` (`src/lib/paperless/webhook-signature.ts`), matching `infra/scripts/
-notify-pomocnik.sh` exactly — a timing-safe comparison, plus a 5-minute maximum clock skew that
+notify-documenti.sh` exactly — a timing-safe comparison, plus a 5-minute maximum clock skew that
 doubles as replay protection (a captured, correctly-signed request replayed after that window is
 rejected). Deduplication reuses the existing `webhook_events` table (see
 [Billing](#billing) above for the same mechanism's other user), keyed by the signature itself
 as the event id, since the webhook's payload carries no event id of its own.
+
+## Document visibility and sharing
+
+Documents are **not** org-wide readable. `documents_select_member` limits reads to the creator, the
+organization owner and share recipients, and `document_uploads` follows the same rule
+([ADR-0017](adr/0017-per-document-visibility-and-sharing.md)). Paperless cannot enforce this (one
+service user per tenant), so the RLS policy is the single enforcement point. Rules for anyone touching
+document code:
+
+- Resolve every document read/write/bulk path through the RLS-scoped client before using the admin
+  client for the privileged Paperless call. Worker jobs that receive ids must not widen access.
+- Shares are written only by `share_document()`/`unshare_document()` (audit in the same
+  transaction). `document_shares` has no write policies. Read-only members never gain edit via a share.
+- `created_by` is protected by `preserve_document_creator()`; a re-sync must never null or reassign it.
+- Cross-tenant and not-visible resources return 404, never 403.
+- Entities, connections, tags, correspondents, document types, custom fields, rules and views are
+  intentionally org-shared. Confirm new features do not leak document titles through them.
+
+## Deployment security posture
+
+Known gaps to close before production are tracked in [RELEASE_PLAN.md](RELEASE_PLAN.md) §3
+(HTTPS in nginx, CSP/security headers, audit-log purge scheduling). Network rules that must hold in
+production: only nginx binds public ports; Paperless (`:8010`) and `redis-app`/`clamav` bind
+localhost or the Docker network only; `/api/internal/*` is denied by nginx and only reachable inside
+the Docker network. Secrets live only in `infra/.env` on the host, never in the repo or image;
+`NEXT_PUBLIC_*` values are public by definition and are baked into the client bundle at build time.
 
 ## Admin
 
@@ -264,7 +290,7 @@ never-throws-back guarantee is exactly why it's the *wrong* mechanism for one ca
 mutation — see below.
 
 **Organization permission changes are the one exception to `logEvent()`.** `update_member_role`,
-`remove_member`, `leave_organization`, and `transfer_organization_ownership` (Pomočnik,
+`remove_member`, `leave_organization`, and `transfer_organization_ownership` (Documenti,
 ADR-0008) write their audit row *inside the same Postgres transaction* as the mutation itself,
 as a SECURITY DEFINER function, rather than via a plain RLS-scoped mutation plus a separate
 `logEvent()` call from the action layer. The reason is the guarantee described in the paragraph
@@ -278,7 +304,7 @@ has to happen there instead) rather than relying on the caller having already pa
 policy.
 
 `audit_logs` rows are retained for **2 years** (extended from the original 30-day admin-only
-window, ADR-0005, once this table started also carrying Pomočnik's business audit —
+window, ADR-0005, once this table started also carrying Documenti's business audit —
 `supabase/migrations/20260827000000_audit_log_retention.sql`). `purge_old_audit_logs()` (added in
 `20260823090000_admin.sql`) deletes anything older than that, but **no scheduler invokes it
 yet** — this is a deliberate, known gap: wiring up `pg_cron` (or an external scheduler hitting an

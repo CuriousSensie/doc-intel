@@ -14,7 +14,7 @@ type Args = { docs: number; execute: boolean; keep: boolean; concurrency: number
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 // specs/07-rules-engine.md definition-of-done #3: "Backfill applies it to 5,000 existing
-// documents, with progress, and can be undone." Mirrors scripts/verify-phase3-m9.ts's own
+// documents, with progress, and can be undone." Mirrors scripts/loadtest-import.ts's own
 // precedent exactly: build the script capable of the full number, actually run it at a scale
 // this session can complete, and document the gap honestly rather than fake the larger number.
 // The expensive part is identical to M9's finding too — real Paperless consumption, not our own

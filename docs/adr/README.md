@@ -39,3 +39,7 @@ ADR that says so and links back; the old one stays as a record of what was true 
 | [0011](0011-decline-mistral-ocr-pipeline.md) | Decline a Mistral OCR/LLM document pipeline for now | Accepted |
 | [0012](0012-clamav-scan-service.md) | `clamd` over TCP for the upload AV scan | Accepted |
 | [0013](0013-defer-middleware-page-auth-dedup.md) | Defer deduplicating middleware/page session verification | Deferred |
+| [0014](0014-paperless-task-poller-isolation.md) | Paperless task poller isolation | Accepted |
+| [0015](0015-decline-xls-support.md) | Decline legacy `.xls` import support | Accepted |
+| [0016](0016-defer-custom-field-document-matching.md) | Defer the `custom_field` document-matching strategy | Deferred |
+| [0017](0017-per-document-visibility-and-sharing.md) | Per-document visibility and sharing inside an organization | Accepted |

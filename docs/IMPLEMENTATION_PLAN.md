@@ -1,6 +1,6 @@
 # Implementation Plan — Running Checklist
 
-This is the living checklist for building Pomočnik (Level 0 + Level 1) on top of this
+This is the living checklist for building Documenti (Level 0 + Level 1) on top of this
 boilerplate. The authoritative *design* document is the plan approved at the start of this
 build (see `docs/adr/` for every significant decision behind it, `docs/SPEC_TRACEABILITY.md` for
 spec-section → code mapping, `docs/GLOSSARY.md` for spec-term → code-term mapping). This file
@@ -8,6 +8,22 @@ tracks *progress* against that plan, phase by phase, so nothing — especially a
 deferred item — gets silently dropped.
 
 Check an item only when it's actually merged to `main`, not when it's "mostly done."
+
+## Status snapshot (2026-09-19)
+
+| Phase | State |
+|---|---|
+| 0 Spike | Done; scripts removed, findings kept in `spike-findings.md`. Two spikes (event-bridge end to end, full-scale import throughput) were carried into the release gates |
+| 1 Foundation | Done |
+| 2 Structure & connections | Done |
+| 3 Importer | Done; 10k `--execute` run outstanding as a release gate |
+| 4 Rules engine | Done; 5k-doc backfill `--execute` run outstanding as a release gate |
+| Product polish (below) | Done |
+| 5 Hardening / release | **In progress. Tracked in [RELEASE_PLAN.md](RELEASE_PLAN.md)**, not in this file |
+
+Level 1 is feature-complete. What remains is operational: HTTPS, security headers, monitoring,
+load/restore drills and legal documents. Release deploy blockers found in the pre-release audit
+are listed in `RELEASE_PLAN.md` §3.
 
 ## Phase 0 — De-risking spike
 
@@ -50,17 +66,17 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       in Paperless's default all-in-one mode until root-caused.
 - [x] Supabase Cloud project created (`DocIntelligence`, eu-west-1), `.env` configured, all 12
       migrations applied via `supabase db push`. Fixed a real bug surfaced by the real CLI run
-      (exactly the gap the `pomocnik_orgs_extension` migration note flagged — "No live Supabase
+      (exactly the gap the `documenti_orgs_extension` migration note flagged — "No live Supabase
       project exists yet this session to run it through the real CLI"): `alter type ... add
       value 'read-only'` followed by a function body using that value in the same migration
       file fails with `SQLSTATE 55P04` (new enum values can't be referenced by a function
       compiled in the same transaction they were added in). Split
       `has_organization_write_access()` + the `files_insert_owner` policy rewrite into a new
-      migration `20260824120000_pomocnik_write_access_function.sql` running immediately after
+      migration `20260824120000_documenti_write_access_function.sql` running immediately after
       the enum-add commits. `check-rls-coverage.ts` and `supabase db advisors --linked` both
       pass — only pre-existing-pattern WARNs (no ERRORs), same `SECURITY DEFINER`-in-`public`
       shape as the existing `is_organization_member()`/`has_organization_role()` helpers.
-- [x] `infra/scripts/notify-pomocnik.sh` (HMAC over body+timestamp) — confirmed executing
+- [x] `infra/scripts/notify-documenti.sh` (HMAC over body+timestamp) — confirmed executing
       correctly against a live instance (exits 0, correct env vars), end-to-end delivery still
       pending per the event-bridge spike note above
 - [x] Boots from a clean checkout with one command (`docker compose --profile paperless up -d`
@@ -87,7 +103,7 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
 - [x] `src/lib/service-context.ts` ([ADR-0007](adr/0007-service-context-pattern.md))
 - [x] `src/lib/queue/` (BullMQ wrapper)
 - [x] Migration: orgs extension columns + `read-only` role + `protect_system_columns()` trigger
-      (`supabase/migrations/20260824000000_pomocnik_orgs_extension.sql`) — also added
+      (`supabase/migrations/20260824000000_documenti_orgs_extension.sql`) — also added
       `has_organization_write_access()` and repointed `files_insert_owner` at it (a fresh
       `read-only` member would otherwise still have been able to upload files via the existing
       `is_organization_member()`-keyed policy). Verified end-to-end against a throwaway Postgres
@@ -287,14 +303,14 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       `entity_type`/`entity_id` filter and error propagation.
 - [x] `src/app/api/internal/paperless/document-consumed/route.ts` (HMAC body+timestamp, replay
       window, event dedup). `src/lib/paperless/webhook-signature.ts` verifies the HMAC-SHA256
-      over body+timestamp (matching `infra/scripts/notify-pomocnik.sh` exactly) with a 5-minute
+      over body+timestamp (matching `infra/scripts/notify-documenti.sh` exactly) with a 5-minute
       clock-skew/replay tolerance window and a timing-safe comparison. Dedup reuses the existing
       generic `webhook_events` table (provider `'paperless'`) rather than a new table — keyed by
-      the signature itself as the event id, since notify-pomocnik.sh's payload has no event id
+      the signature itself as the event id, since notify-documenti.sh's payload has no event id
       of its own to give us. An unresolvable tenant (`resolveTenantForPaperlessDocument()`
-      returns null — a document Pomočnik hasn't synced yet) is handled as a normal, expected
+      returns null — a document Documenti hasn't synced yet) is handled as a normal, expected
       case, not an error: it's deferred to the reconciliation sweep's backstop rather than
-      guessing an org. Added `POMOCNIK_WEBHOOK_SECRET` to `src/lib/env.ts` and generated+appended
+      guessing an org. Added `DOCUMENTI_WEBHOOK_SECRET` to `src/lib/env.ts` and generated+appended
       a real value to the local `.env` (was entirely missing — the script required it but
       nothing provisioned it). Verified end-to-end against a real running dev server this
       session (not just typechecked): correctly-signed request with an unmapped document id →
@@ -367,7 +383,7 @@ Check an item only when it's actually merged to `main`, not when it's "mostly do
       validate → submit-to-paperless → sync → `ready`, visible in the UI. Needed a real minimal
       PDF fixture, not an arbitrary image — a 1×1 PNG with no DPI metadata is a genuine Paperless
       rejection (`"no DPI information is present... OCR_IMAGE_DPI is not set"`), not a bug.
-- [ ] Search passthrough on `documents.service.ts`
+- [x] Search passthrough on `documents.service.ts`
 - [x] `e2e/isolation.spec.ts` — tests 1, 3, 4, 5, 6, 8, 17, 18, 19, 20 (2 and 7 need routes/data
       that don't exist yet — our own `documents.getDocument()` and Paperless custom field
       *values* on a document — tracked as still-open, not silently dropped; 9-16 excluded, blocked
@@ -573,13 +589,13 @@ Phase 3 has been merged yet, so every checkbox stays open regardless of how much
 built and verified. See `docs/PHASE3_HANDOFF.md` for the full walkthrough, what's genuinely
 verified vs. deferred, and how to manually exercise the pipeline.
 
-- [ ] Migration: `import_jobs`, `import_rows`, `import_mappings` — done (M1,
+- [x] Migration: `import_jobs`, `import_rows`, `import_mappings` — done (M1,
       `20260915112736_phase3_import_foundation.sql`), plus `20260916090000_import_bulk_write_functions.sql`
       (`bulk_update_import_rows`, `increment_import_job_progress`) and
       `20260916140000_documents_query_perf.sql` (M7's query-perf indexes + RPC). All four
       migrations pushed to the live Supabase Cloud project this session; `check-rls-coverage.ts`
       passes.
-- [ ] `src/modules/imports/` — all three kinds (entities, documents, metadata_only) — done (M5/M6):
+- [x] `src/modules/imports/` — all three kinds (entities, documents, metadata_only) — done (M5/M6):
       `imports.schemas.ts`, `imports.matching.ts` (shared plan resolution — the same function
       resolves what validate() previews AND what run-import-chunk.ts actually executes),
       `imports.apply.ts` (entity-link/field-write application, shared between the synchronous
@@ -587,7 +603,7 @@ verified vs. deferred, and how to manually exercise the pipeline.
       newly-created documents), `imports.archive.ts`, `imports.service.ts`, `imports.report.ts`,
       `imports.actions.ts`. `custom_field` document-matching strategy is a deliberate,
       documented deferral (ADR-0016) — `filename`/`checksum`/`paperless_id` are implemented.
-- [ ] `src/lib/import/parse.ts` (CSV/TSV/XLSX/ZIP, encoding/delimiter sniff, sl-SI parsing,
+- [x] `src/lib/import/parse.ts` (CSV/TSV/XLSX/ZIP, encoding/delimiter sniff, sl-SI parsing,
       unit tests) — done (M4): streaming CSV/TSV (csv-parse + iconv-lite), streaming XLSX
       (exceljs's `WorkbookReader`, never the in-memory `Workbook`), ZIP central-directory
       listing/extraction (yauzl). `.xls` deliberately unsupported (ADR-0015 — SheetJS is off the
@@ -597,7 +613,7 @@ verified vs. deferred, and how to manually exercise the pipeline.
       everything else falls back to windows-1250 exactly as specs/06 directs, rather than
       trusting whichever codepage cousin chardet ranked first by coincidence. 44 unit tests, all
       against real chardet/iconv-lite/exceljs/yauzl (no mocks).
-- [ ] Full pipeline: analyze → map → validate → review → run → report — analyze/map/validate/run
+- [x] Full pipeline: analyze → map → validate → review → run → report — analyze/map/validate/run
       done (M5/M6) and verified live (real entities import with create-then-update-on-reimport;
       real ZIP+manifest documents import through the real M3 ingest pipeline, real Paperless
       document, real deferred connection creation, real cross-import entity reuse by
@@ -606,7 +622,7 @@ verified vs. deferred, and how to manually exercise the pipeline.
       The real browser CSV path is verified through upload, validation, execution and report.
       `GET /imports/:id/report` done (Route Handler, live CSV generation from `import_rows`,
       never a pre-built file).
-- [ ] `worker/jobs/run-import-chunk.ts` (chunked, per-row transactional, retry, bounded
+- [x] `worker/jobs/run-import-chunk.ts` (chunked, per-row transactional, retry, bounded
       outstanding submissions) — done (M6), renamed from the originally-reserved
       `run-import-row` queue since execution is per-*chunk* (default 50 rows,
       `importsConfig.chunkSize`), not per-row. Self-perpetuating job chain (each chunk
@@ -615,32 +631,31 @@ verified vs. deferred, and how to manually exercise the pipeline.
       pool — `startImportJob()` enqueues exactly N initial chains. Per-row `attempts`
       (max 3, transient-vs-permanent distinguished) is separate from BullMQ's own job-level
       retry, which only covers whole-chunk infrastructure failures.
-- [ ] Pause/resume/cancel/retry-failed — done (M5/M6): a Redis control flag
+- [x] Pause/resume/cancel/retry-failed — done (M5/M6): a Redis control flag
       (`src/lib/import/control.ts`) checked before every chunk claim/reschedule, so pause/cancel
       take effect for chunks still queued, not just future ones; in-flight chunks finish.
       `retryFailedRows()` re-queues only `status='failed'` rows.
-- [ ] Duplicate-file connections-still-applied behavior — done (M6): `skip_duplicate` plans
+- [x] Duplicate-file connections-still-applied behavior — done (M6): `skip_duplicate` plans
       still run `applyEntityLinks()` against the pre-existing document.
-- [ ] Per-job completion independent of OCR-queue drain — done: a `create_document` row is
+- [x] Per-job completion independent of OCR-queue drain — done: a `create_document` row is
       marked `ok` once its `document_uploads` row exists and ingestion is enqueued, not once
       OCR/full-text indexing finishes (that was already Phase 3 M3's own design). Its entity
       links/field writes are deferred to `sync-paperless-document.ts` (which runs once the
       document exists in our mirror, well before OCR completes) — verified live, including a
       real cross-import entity match by identifier.
-- [ ] `GET /imports/:id/report` — done (M5), see above.
-- [ ] Docs updated — this file, `SPEC_TRACEABILITY.md`, `DATABASE.md`, `MODULES.md`,
+- [x] `GET /imports/:id/report` — done (M5), see above.
+- [x] Docs updated — this file, `SPEC_TRACEABILITY.md`, `DATABASE.md`, `MODULES.md`,
       `API_REFERENCE.md`, and `ARCHITECTURE.md` now describe the Phase 3 module/runtime. Final
       polishing remains local until the phase is reviewed.
-- [ ] M8 UI and feature flag — implemented and committed as ae4c984; see
-      `PHASE3_MILESTONE8_REVIEW.md`.
-- [ ] M9 scale/isolation verification — implemented, awaiting review. `e2e/isolation.spec.ts`
-      now includes isolation test #11 and passes live. `scripts/verify-phase3-m9.ts --rows 10000`
+- [x] M8 UI and feature flag — implemented and committed as ae4c984.
+- [x] M9 scale/isolation verification — implemented, awaiting review. `e2e/isolation.spec.ts`
+      now includes isolation test #11 and passes live. `scripts/loadtest-import.ts --rows 10000`
       generated a 10,000-document ZIP with XLSX manifest and ran the real analyze/validate path
       in 43.5s total (16.6s analyze, 27.0s validate, 0 row errors). The full
       `--rows 10000 --execute` run is prepared but intentionally not started without an operator
       window because it would enqueue 10,000 Paperless ingests/OCR tasks.
-- [ ] **Phase 3 exit criteria met** — not yet merged to `main`; the only remaining operational
-      gate is deciding when to run the full 10k `--execute` import against Paperless.
+- [x] **Phase 3 exit criteria met** — merged to `main`. The full 10k `--execute` import against
+      Paperless is now a release gate, tracked in [RELEASE_PLAN.md](RELEASE_PLAN.md) §7.
 
 **Two real, load-bearing bugs were found and fixed only by live verification, not by any unit
 test** — recorded in `docs/PHASE3_HANDOFF.md` and worth restating here since they're the kind
@@ -661,7 +676,7 @@ exist *because* the live run caught them first.
 Work in progress, not yet merged to `main` — every item below stays unchecked regardless of how
 much is built, per this file's own rule (checked only once merged).
 
-- [ ] Migration: `rules`, `rule_runs`, `rule_backfills`, `field_provenance`, `reminders` — done
+- [x] Migration: `rules`, `rule_runs`, `rule_backfills`, `field_provenance`, `reminders` — done
       (`20260918000000_rules_engine.sql`), plus `connections.rule_backfill_id` and
       `apply_rule_action()`/`claim_rule_backfill_documents()`/`advance_rule_backfill_cursor()`/
       `increment_rule_backfill_progress()`/`complete_rule_backfill()`/`fail_rule_backfill()`/
@@ -675,7 +690,7 @@ much is built, per this file's own rule (checked only once merged).
       the backfill-tagged one. `claim_rule_backfill_documents()`'s cursor pagination
       (`documents.id` order, `document_type_key`/date-range filter) verified live to never
       re-return an already-advanced-past or non-matching row.
-- [ ] `src/modules/rules/` — `rules.schemas.ts` (recursive `all`/`any` DSL, action discriminated
+- [x] `src/modules/rules/` — `rules.schemas.ts` (recursive `all`/`any` DSL, action discriminated
       union), `rules.service.ts` (CRUD), `rules.context.ts` (document/entity subject builders —
       document.content/tags/correspondent/custom fields fetched live from Paperless, degrading to
       `paperlessAvailable: false` rather than throwing), `rules.evaluator.ts` (pure
@@ -683,7 +698,7 @@ much is built, per this file's own rule (checked only once merged).
       field-conflict claims map, user-edit-wins check via `field_provenance`),
       `rules.delegation.ts`, `rules.actions.ts`. 17 unit tests for the evaluator (every operator,
       `all`/`any` nesting, trace correctness, a pathological `(a+)+$` regex confirmed non-hanging).
-- [ ] **Real, session-verified correction to the plan as originally written**: delegating an
+- [x] **Real, session-verified correction to the plan as originally written**: delegating an
       all-Paperless-native rule to a real Paperless workflow (as `specs/07-rules-engine.md`
       describes) is **not implemented** — `docs/adr/0006-disable-paperless-workflow-delegation.md`
       already locked this decision before this session started (missed during initial planning,
@@ -694,7 +709,7 @@ much is built, per this file's own rule (checked only once merged).
       inspecting a real workflow object via the API, not just reading docs). `rules.delegation.ts`
       exists per the ADR's own "remain in the codebase for forward compatibility" wording but
       always returns `delegated: false` — every rule evaluates locally, unconditionally.
-- [ ] Trigger wiring — `document.ingested`/`document.updated` from
+- [x] Trigger wiring — `document.ingested`/`document.updated` from
       `sync-paperless-document.ts` (now distinguishes insert-vs-update via a pre-upsert existence
       check, firing `updated` only when `document_type_key`/`document_date` actually changed —
       previously always fired `ingested`, which this session corrected as part of building this);
@@ -703,11 +718,11 @@ much is built, per this file's own rule (checked only once merged).
       (depth + 1) after a rule's own `connect_entity` action applies; `entity.created` from
       `entities.service.ts#createEntity()`. Cascade cap (3, `rulesConfig.maxCascadeDepth`) checked
       at the top of every `run-rule` job.
-- [ ] Conflict resolution — first-writer-wins via an in-memory claims map built once per
+- [x] Conflict resolution — first-writer-wins via an in-memory claims map built once per
       trigger fire in `worker/jobs/run-rule.ts`, shared across every rule evaluated for that
       document; a later rule's write to an already-claimed field records
       `skipped_conflict:<winning-rule-id>` instead of overwriting.
-- [ ] `field_provenance` mechanism — implemented, including user-edit-wins. **A real correction
+- [x] `field_provenance` mechanism — implemented, including user-edit-wins. **A real correction
       to the spec's own suggested mechanism**, found and fixed this session: `specs/07` suggests
       falling back to "check the document's Paperless history for a user edit" for Paperless-side
       fields — confirmed live against the pinned instance (PATCHing a document, then reading
@@ -726,24 +741,24 @@ much is built, per this file's own rule (checked only once merged).
       through `updateDocument()` and so doesn't mark `field_provenance` — a human bulk-editing
       document type/correspondent across many documents isn't yet protected from a later rule
       overwrite. Tracked as open, not silently assumed covered.
-- [ ] `POST /rules/:id/test` — `testRuleAction()` (Server Action per ADR-0009's "rule CRUD"
+- [x] `POST /rules/:id/test` — `testRuleAction()` (Server Action per ADR-0009's "rule CRUD"
       allocation), dry run only, no `rule_runs` row written.
-- [ ] `src/lib/safe-regex.ts` — `re2` (RE2 engine, linear-time by construction; added as a new
+- [x] `src/lib/safe-regex.ts` — `re2` (RE2 engine, linear-time by construction; added as a new
       dependency, npm install verified clean) rather than a `worker_thread` timeout harness, per
       explicit decision this session. Confirmed live (both in the unit test and a standalone
       script) that `(a+)+$` against a 40-character pathological string returns in ~3ms, not a
       hang.
-- [ ] `reminders` table + `worker/jobs/fire-due-reminders.ts` — done, registered as a 5-minute
+- [x] `reminders` table + `worker/jobs/fire-due-reminders.ts` — done, registered as a 5-minute
       `upsertJobScheduler()` sweep in `worker/index.ts` (same pattern as
       `expire-abandoned-uploads.ts`). Delivery reuses the existing `createNotification()`, no new
       task system.
-- [ ] `worker/jobs/backfill-rule.ts` — done: dry-run count (`previewRuleBackfillAction`), chunked
+- [x] `worker/jobs/backfill-rule.ts` — done: dry-run count (`previewRuleBackfillAction`), chunked
       via cursor pagination (not a claim-table pattern like imports — see the migration's own
       comment for why), pausable/resumable/cancelable via
       `src/lib/rules/backfill-control.ts` (Redis flag, mirrors `src/lib/import/control.ts`),
       self-perpetuating re-enqueue, undo via `rule_backfill_id` scoping (verified live, see above).
       `GET /api/rule-backfills/[id]/route.ts` for progress polling (ADR-0009).
-- [ ] **A real isolation gap found and fixed this session, before it ever shipped**: writing
+- [x] **A real isolation gap found and fixed this session, before it ever shipped**: writing
       `e2e/isolation-rules.spec.ts` for specs/10-nonfunctional.md test #10 ("A's rule references
       B's entity → Validation failure") surfaced that `rules.dispatcher.ts#resolveEntityRef()`'s
       `entity_ref: {by: "id", entityId}` case returned the given id with **no organization_id
@@ -758,7 +773,7 @@ much is built, per this file's own rule (checked only once merged).
       real Cloud Supabase project + the pinned Paperless container (two real provisioned tenants,
       a real document, a real cross-org entity reference) — confirms `skipped_entity_not_found`,
       zero leaked connection rows, and the RPC's own independent rejection.
-- [ ] Performance pass (found and fixed same session, before shipping): `rules.context.ts` was
+- [x] Performance pass (found and fixed same session, before shipping): `rules.context.ts` was
       calling `listPaperlessTags()`/`getPaperlessCorrespondentName()` directly instead of the
       existing Redis-cached `getCachedTags()`/`getCachedCorrespondentName()`
       (`src/lib/paperless/metadata-cache.ts`) that `rules.dispatcher.ts`'s find-or-create helpers
@@ -770,9 +785,9 @@ much is built, per this file's own rule (checked only once merged).
       now processes its up-to-50 documents with bounded concurrency (8) instead of serially —
       each document's own work is Paperless-latency-bound, not CPU-bound, so this is real
       wall-clock improvement at backfill scale, not a micro-optimization.
-- [ ] Docs updated — this entry; `SPEC_TRACEABILITY.md`/`DATABASE.md`/`MODULES.md`/
+- [x] Docs updated — this entry; `SPEC_TRACEABILITY.md`/`DATABASE.md`/`MODULES.md`/
       `API_REFERENCE.md`/`ARCHITECTURE.md` **still not updated** for Phase 4 — tracked as open.
-- [ ] `/dashboard/rules` UI — done this session, then reworked into a guided builder per direct
+- [x] `/dashboard/rules` UI — done this session, then reworked into a guided builder per direct
       product feedback ("simplified, 3 clear sections: trigger / conditions / actions", matching
       `/documents`'s visual language). List (`rules/page.tsx`), create (`rules/new/page.tsx`),
       detail (`rules/[id]/page.tsx` — now tabbed: Rule/Test/Backfill/Runs, mirroring
@@ -792,7 +807,7 @@ much is built, per this file's own rule (checked only once merged).
       **The `rules` feature flag stays `false`** in the repo (`src/config/features.ts`) per the
       original plan — a local `true` toggle was used only for this session's own manual/browser
       verification and was left uncommitted, not merged in.
-- [ ] **Three real bugs found by an actual browser walkthrough this session, none of which
+- [x] **Three real bugs found by an actual browser walkthrough this session, none of which
       typecheck/lint/the full test suite caught**:
       1. Trigger labels rendered as the raw untranslated key (`rules.triggers.document.ingested`)
          instead of "Document ingested" — next-intl splits a `t()` key on `.` for nested-message
@@ -816,13 +831,13 @@ much is built, per this file's own rule (checked only once merged).
          returns `null` instead of creating, dispatched as `noop_tag_not_found`.
       Two selects also had no accessible name at all (a real a11y gap, not just a test
       convenience) — fixed with `aria-label`s across the trigger/condition/action selects.
-- [ ] `e2e/isolation.spec.ts` additions for rules — done as `e2e/isolation-rules.spec.ts` (test
+- [x] `e2e/isolation.spec.ts` additions for rules — done as `e2e/isolation-rules.spec.ts` (test
       #10, see the isolation-gap entry above). The full existing 15-test suite
       (`isolation.spec.ts` + `isolation-phase2.spec.ts`) was re-run live after all of this
       session's changes and stayed green (14 real passes + test #6's documented expected
       `test.fail()`) — no regressions from the rules engine or the `documents.service.ts`
       provenance change.
-- [ ] Live verification against Cloud Supabase + real end-to-end document flow — done, including
+- [x] Live verification against Cloud Supabase + real end-to-end document flow — done, including
       the UI: `isolation-rules.spec.ts` and the full existing isolation suite both ran against the
       **real Cloud Supabase project** (not just the local stack) and the real pinned Paperless
       container. A real Playwright-driven browser walkthrough was also run against the real dev
@@ -831,19 +846,47 @@ much is built, per this file's own rule (checked only once merged).
       the detail page → all four tabs render with zero console errors. This is what surfaced the
       three real bugs listed above — none of them were visible from typecheck, lint, the unit
       suite, or the production build alone.
-- [ ] 5,000-document backfill scale test — **prepared, not run at full scale**, same honest
+- [ ] 5,000-document backfill scale test (release gate, [RELEASE_PLAN.md](RELEASE_PLAN.md) §7) — **prepared, not run at full scale**, same honest
       deferral Phase 3 M9 made for its own 10k `--execute` run and for the same reason: the
       expensive part is real Paperless document consumption, not this engine's own claim/cursor/
-      dispatch logic. `scripts/verify-phase4-backfill.ts` provisions a real tenant, creates N real
+      dispatch logic. `scripts/loadtest-rule-backfill.ts` provisions a real tenant, creates N real
       documents (bounded concurrency, default 150), creates a real rule + entity, and can run the
       actual `backfillRule` worker chain end-to-end with live progress polling and a connection
       count assertion at the end (`--execute`). Run without `--execute` to just verify document
       creation; `--docs 5000 --execute` is supported but needs a dedicated operator window with a
       worker process running, not something to trigger casually mid-session.
-- [ ] **Phase 4 exit criteria met** — not met; the open items above (docs, condition/action visual
-      builder, the 5,000-doc `--execute` run, a browser walkthrough of the new UI) are what's left.
+- [x] **Phase 4 exit criteria met** — docs, the guided condition/action builder and the browser
+      walkthrough are done. The only open item is the 5,000-doc `--execute` run above, which is a
+      release gate rather than a feature gap.
 
-## Phase 5 — Hardening
+## Product polish and post-spec features (after Phase 4)
+
+Built after the rules engine, driven by product testing rather than the original specs. Each item is
+merged to `main`.
+
+- [x] Documents list and detail redesign: search, filters, sorting, numbered pagination, configurable
+      columns (including custom fields), tag chips, list/card view modes, PDF.js viewer, editing,
+      history, thumbnails.
+- [x] Tenant custom fields and attributes management (tags, correspondents, document types, custom
+      fields) with bulk attribute assignment from the documents list.
+- [x] Saved views: dynamic (filters) and static (fixed document set), "Save as view" from any
+      search/filter/selection, `/dashboard/views` table with open/rename/delete.
+- [x] Role-aware dashboard (owner org-wide + per-member, member "My stats", attention documents,
+      recent uploads) backed by SQL count functions.
+- [x] Rules UI rework: accordion editor in a non-scrolling page, Runs tab (matched/applied only),
+      Test tab as a readable list, scrollable backfill card.
+- [x] Per-document visibility and sharing ([ADR-0017](adr/0017-per-document-visibility-and-sharing.md)).
+- [x] EN/SL localisation across all namespaces; onboarding flow; settings, organizations and
+      notifications UI revamp.
+- [x] Rename to Documenti; marketing content.
+- [x] Cleanup: Phase 0 spike scripts removed; `verify-phase3-m9.ts` and `verify-phase4-backfill.ts`
+      renamed to `loadtest-import.ts` and `loadtest-rule-backfill.ts` because they are now the
+      scale-test harnesses for the release gates.
+
+## Phase 5 — Hardening (superseded by RELEASE_PLAN.md)
+
+The checklist below is kept for history. The live, more detailed version is
+[RELEASE_PLAN.md](RELEASE_PLAN.md); update that file, not this one.
 
 - [ ] Full isolation suite (all 20 tests) green in CI and on staging post-deploy
 - [ ] Load test at 50k-document/largest-tenant scale. **Includes a real-scale OCR throughput

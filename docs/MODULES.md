@@ -13,8 +13,12 @@ those functions read/write, see [DATABASE.md](DATABASE.md).
 | RBAC | Optional | Organizations |
 | Billing | Optional | Stripe |
 | Credits | Optional | Billing |
-| Documents | Optional | Organizations, Supabase Storage, Paperless — Pomočnik |
-| Imports | Optional | Organizations, Documents, Entities, Supabase Storage, Paperless, worker — Pomočnik |
+| Documents | Optional | Organizations, Supabase Storage, Paperless — Documenti |
+| Attributes & Custom Fields | Optional | Documents, Paperless |
+| Rules | Optional | Documents, Entities, worker |
+| Saved Views | Optional | Documents, Entities |
+| Dashboard | Optional | Documents, Entities |
+| Imports | Optional | Organizations, Documents, Entities, Supabase Storage, Paperless, worker — Documenti |
 | Notifications | Optional | Auth |
 | Admin | Optional | Auth |
 | Audit Logs | Recommended | Auth (the write side, `src/lib/events/`, has no dependency on Admin — only the `/admin/audit-log` read UI does) |
@@ -37,7 +41,7 @@ own members, roles, and pending invitations.
 `organization_invitations` tables defined in the initial schema migration, plus the
 `create_organization`, `get_organization_invitation`, `accept_organization_invitation`, and
 `transfer_organization_ownership` SECURITY DEFINER functions from
-`supabase/migrations/20260820120000_organizations_functions.sql`, and (Pomočnik,
+`supabase/migrations/20260820120000_organizations_functions.sql`, and (Documenti,
 `20260912195634_transactional_membership_audit.sql`) `update_member_role`, `remove_member`, and
 `leave_organization` — these three used to be plain RLS-scoped mutations from
 `organizations.actions.ts`; they became SECURITY DEFINER functions specifically so their audit
@@ -46,7 +50,7 @@ See `docs/SECURITY.md` for why each category needs what it needs.
 
 **Configuration**: gated by `features.organizations` in `src/config/features.ts`. Roles are
 `owner`, `admin`, `member`, `read-only` (the `organization_role` enum — the 4th role added for
-Pomočnik, `supabase/migrations/20260824000000_pomocnik_orgs_extension.sql`); role permissions
+Documenti, `supabase/migrations/20260824000000_documenti_orgs_extension.sql`); role permissions
 are defined in `src/modules/auth/authorization.ts`'s `can()` helper. `read-only` has the same
 read access as `member` but no write access anywhere — enforced at the RLS layer by
 `has_organization_write_access()`, not just by `can()`, since RLS is the real boundary
@@ -195,7 +199,7 @@ inside that module and is still needed, was extracted to `src/modules/profile/av
 + `src/config/avatar.ts` (still uses the `avatars` Storage bucket, which was never Files-specific).
 See `supabase/migrations/20260913120000_drop_files_and_projects.sql`.
 
-## Documents — Pomočnik
+## Documents — Documenti
 
 **Purpose**: tenant document upload → Paperless ingestion → a queryable local mirror
 (`documents`), with a real UI to exercise it (`/dashboard/documents`) rather than only API
@@ -266,7 +270,7 @@ function's cursor to resolve a filter into a capped id set — the "select all m
 primitive bulk actions and export both build on, capped at `MAX_PAPERLESS_ID_SET` (2000) per
 specs/05's own scaling note.
 
-## Entities & Entity Types — Pomočnik Level 1
+## Entities & Entity Types — Documenti Level 1
 
 **Purpose**: the business-object layer documents connect to — customers, projects, contracts,
 employees (the four system types, Slovenian-labeled per D7) plus any tenant-defined type.
@@ -277,7 +281,7 @@ allowed, renaming a `label` is always allowed, changing a `key` is rejected outr
 UI without deleting its `data` key).
 
 **Dependency**: Organizations only — no Paperless dependency (`entities`/`entity_types` are
-pure-Pomočnik tables, not mirrored from anywhere).
+pure-Documenti tables, not mirrored from anywhere).
 
 **Configuration**: gated by `features.entities`. Field schemas live in
 `entity_types.field_schema` (jsonb array), not a separate migration per type — a tenant (or
@@ -294,7 +298,7 @@ against. A field with an `identifier_kind` in its schema is auto-promoted into
 (`/dashboard/entity-types`), gated by role (owner/admin only), not just `features.entities`.
 `countEntitiesByType()` backs the entities index page's per-type counts.
 
-## Connections — Pomočnik Level 1
+## Connections — Documenti Level 1
 
 **Purpose**: the polymorphic document↔entity and entity↔entity link — specs/05's own framing:
 "if adding a connection takes more than two interactions, the product fails at its core
@@ -322,24 +326,28 @@ there is no worker-triggered merge path.
 connection/cross-org rules), collecting per-item successes/skips (already-connected)/failures
 rather than failing the whole batch on one bad id.
 
-## Saved Views — Pomočnik Level 1
+## Saved Views — Documenti Level 1
 
-**Purpose**: persisted filter/column/sort combinations, optionally shared org-wide
-(`saved_views`). `ensureStarterViews()` lazily seeds the five spec-required views (All
-documents, Documents with no connections, Invoices this year, Open contracts, Recently added)
-the first time a tenant visits `/dashboard/views` — not at provisioning time, matching
-`complete_provisioning()`'s own "seed system rows, but only what's actually needed" instinct
-without adding another step to the provisioning transaction.
+**Purpose**: persisted configurations for documents or entities (`saved_views`). Two kinds
+(`view_kind`): **dynamic** stores search text, filters, sort and visible columns and re-evaluates
+every time it is opened; **static** stores a fixed list of document ids (`document_ids`) chosen by
+selecting rows and choosing "Save as view", and only ever shows those documents. The documents list
+offers "Save as view" whenever documents are selected or any search/filter/sort is active.
+`/dashboard/views` lists views in the same table style as documents with open, rename and delete.
+`ensureStarterViews()` lazily seeds the five spec-required starter views (All documents, Documents
+with no connections, Invoices this year, Open contracts, Recently added) on first visit.
 
 **Dependency**: Documents (scope `documents`) or Entities (scope `entities`, optionally
-`entity_type_id`-scoped).
+`entity_type_id`-scoped). Per-document visibility (ADR-0017) applies when a static view is opened; verify
+that ids the viewer cannot see are dropped rather than erroring (RELEASE_PLAN §10).
+
+**Code**: `src/modules/saved-views/` (service, actions, schemas, tests).
 
 **How to extend**: `hrefFor(view)` (`dashboard/views/page.tsx`) is the one place a saved view's
-`filters` jsonb is translated into an actual URL — either `/dashboard/entities/:typeKey` or
-`/dashboard/documents?<query>`. A new filterable field needs a matching case here as well as in
+`filters` jsonb becomes a URL. A new filterable field needs a matching case there and in
 `listDocuments()`'s options.
 
-## Bulk Actions & Background Operations — Pomočnik Level 1
+## Bulk Actions & Background Operations — Documenti Level 1
 
 **Purpose**: "ours" bulk actions (connect/disconnect an entity across many documents) and
 "Paperless's" bulk actions (type/tag/correspondent/custom-field/reprocess/delete, proxied to
@@ -375,7 +383,7 @@ Action, not a Route Handler — the frontend already has a `buildRequestContext(
 via other actions on the same page, so a dedicated fetch endpoint wasn't needed here the way
 exports' download route was).
 
-## Exports — Pomočnik Level 1
+## Exports — Documenti Level 1
 
 **Purpose**: filtered/selected document rows to CSV or XLSX, with connected-entity columns
 resolved through connections (specs/05: "the latter is what makes the export worth having").
@@ -399,9 +407,9 @@ private-bucket-plus-signed-URL pattern `document-uploads` already established, n
 add-on. Only row export (CSV/XLSX) exists. See `PHASE2_HANDOFF.md` for the reasoning and what
 isolation test 16 (which needs this feature to test) currently looks like as a result.
 
-## Imports — Pomočnik Level 1
+## Imports — Documenti Level 1
 
-**Purpose**: guided migration of legacy data into Pomočnik: entities from CSV/XLSX,
+**Purpose**: guided migration of legacy data into Documenti: entities from CSV/XLSX,
 documents from ZIP archives with optional CSV/XLSX manifests, and metadata-only updates against
 existing documents. The UI is `/dashboard/imports`; the core code lives in
 `src/modules/imports/` and `src/components/imports/`.
@@ -421,7 +429,7 @@ claims only pending rows. Permanent validation failures are terminal and count t
 before execution. `on_missing:"fail_row"` entity links become `ENTITY_NOT_FOUND` rows during
 planning, so a tenant cannot map an import to another tenant's identifier; `on_missing:"skip_connection"`
 still lets the document row execute but records `needs_review`. Milestone 9
-adds `scripts/verify-phase3-m9.ts`, which generated a 10,000-document ZIP with XLSX manifest and
+adds `scripts/loadtest-import.ts`, which generated a 10,000-document ZIP with XLSX manifest and
 verified analyze + validate live in 43.5 seconds (16.6s analyze, 27.0s validate) without starting
 10,000 OCR jobs.
 
@@ -429,6 +437,91 @@ verified analyze + validate live in 43.5 seconds (16.6s analyze, 27.0s validate)
 `imports.apply.ts` or `run-import-chunk.ts`. Keep validation and execution on the same planner.
 The deliberately deferred `custom_field` document-matching strategy remains rejected at the
 schema layer until there is a live-verified batched custom-field-value lookup.
+
+## Attributes & Custom Fields — Documenti Level 1
+
+**Purpose**: tenant-defined classification of documents. Four kinds, all under
+`/dashboard/attributes/[kind]`: **tags**, **correspondents**, **document types** (each a Paperless
+object owned by the tenant's group, created via `createOwnedObject()`) and **custom fields**
+(`custom_field_defs`, mirrored to a Paperless custom field). Custom field types: string, integer,
+float, monetary, date, boolean, select, documentlink, url. A document can carry many custom fields;
+values are edited on the document detail page and can be assigned in bulk from the documents list
+(selection → "Assign attributes"). Custom fields can also be added as columns in the listing's
+configurable column set.
+
+**Isolation note**: Paperless's own custom-field list endpoint leaks definitions across tenants
+(`docs/spike-findings.md` §1 #6), so definitions are always read from our own `custom_field_defs`
+mirror, never from Paperless's list.
+
+**Code**: `src/modules/attributes/` (form actions for tags/correspondents/types, Zod schemas incl.
+matching algorithm), `src/modules/custom-fields/` (`custom-field-defs.service.ts`,
+`custom-field-values.ts` maps raw Paperless values to keyed values).
+
+**How to extend**: a new field data type needs the Zod enum in `attributes.schemas.ts`, the DB check
+constraint in `custom_field_defs`, the renderer/editor on the document detail page, and the column
+renderer in the documents list. Document-matching on custom fields for imports is deferred (ADR-0016).
+
+## Rules — Documenti Level 1
+
+**Purpose**: deterministic automation (`specs/07-rules-engine.md`). A rule has a trigger
+(`document.ingested`, `document.updated`, `document.connected`, `entity.created`, `manual`), a
+recursive `all`/`any` condition tree, and an ordered action list: `connect_entity`,
+`disconnect_entity`, `set_custom_field`, `set_document_type`, `add_tag`/`remove_tag`,
+`set_correspondent`, `set_storage_path`, `assign_responsible`, `create_reminder`, `notify`. Regex
+conditions run on RE2 (`src/lib/safe-regex.ts`) with a subject length cap.
+
+**Execution**: always local (`rules.evaluator.ts` / `rules.dispatcher.ts` via the `run-rule` worker
+job). Delegation to Paperless workflows is permanently off on the shared-instance topology
+([ADR-0006](adr/0006-disable-paperless-workflow-delegation.md)); `rules.delegation.ts` is a
+deliberate no-op stub kept so call sites don't change if a dedicated-instance build reintroduces it.
+Conflicts are first-writer-wins per run; cascades are capped (`src/config/rules.ts`: depth 3, 5 s
+per-document budget). A human edit always wins over a rule via `field_provenance`.
+
+**Visibility**: every run writes `rule_runs` (matched / applied, per rule and per document). The
+UI's Runs tab shows only matched and applied runs with the document title. The Test tab
+(`testRuleAction`) shows the condition trace and the actions that would apply as a plain list; it
+writes nothing.
+
+**Backfill**: `previewRuleBackfillAction` (dry-run count) then `startRuleBackfillAction` creates a
+`rule_backfills` row and the `backfill-rule` job processes in chunks; pause/resume/cancel via a Redis
+flag (`src/lib/rules/backfill-control.ts`); undo is scoped to one backfill run, not the rule
+([ADR-0010](adr/0010-per-backfill-undo-scope.md)). Reminders (`reminders`) are fired every 5 minutes by
+`fire-due-reminders`.
+
+**UI**: `/dashboard/rules` (list), `/dashboard/rules/new` and `/dashboard/rules/[id]`: a
+non-scrolling page with an accordion of Name/Trigger, Conditions and Actions cards (one open at a time,
+Name/Trigger default) inside a scrollable container, plus Runs, Test and Backfill tabs.
+
+**How to extend**: a new action type needs its Zod variant in `rules.schemas.ts`, a branch in
+`apply_rule_action()` (SQL, so the audit row stays atomic, ADR-0008), the builder UI, and an
+isolation test if it takes an entity/document reference (cross-org refs must be rejected, see
+`e2e/isolation-rules.spec.ts`).
+
+## Document Sharing — Documenti Level 1
+
+**Purpose**: per-document access inside an organization ([ADR-0017](adr/0017-per-document-visibility-and-sharing.md)).
+Default visibility is creator + org owner. The creator or owner can share with a member or with
+everyone at `view` or `edit`. Read-only members never get edit rights.
+
+**Code**: `src/modules/documents/document-shares.{service,actions,schemas}.ts`; SQL functions
+`can_manage_document`, `can_edit_document`, `is_document_shared_with_me`, `filter_document_ids`,
+`get_document_permissions`, `share_document`, `unshare_document`. UI: the Permissions tab on the
+document detail page (`src/components/documents/document-permissions-tab.tsx`). Bulk actions filter
+their target ids through `filter_document_ids()` so a member can only bulk-edit what they may edit.
+
+**How to extend**: never bypass the scoped read. New document read/write paths must resolve their
+authorizing read through the RLS-scoped client before using the admin client.
+
+## Dashboard — Documenti Level 1
+
+**Purpose**: role-aware home (`/dashboard`). Owners see org-wide totals plus a per-member breakdown
+(member picker); members see "My stats" (their own created documents/entities/connections) plus
+attention items (documents needing action) and recent uploads. Counts come from
+`get_org_dashboard_counts()` and `get_member_dashboard_counts()` (SQL, not row pulling). Tags,
+correspondents and document types are excluded from per-member counts because Paperless has no
+per-user creator attribution for them.
+
+**Code**: `src/modules/dashboard/dashboard.service.ts`, `src/lib/dashboard/recent-activity.ts`.
 
 ## Admin
 
@@ -516,6 +609,6 @@ the org is gone would fail (see `deleteOrganizationAdmin` in
 
 **Reading it back**: `listAuditLogs()` (`src/modules/admin/audit-log.service.ts`) is the
 app-admin global feed behind `/admin/audit-log`. `listAuditLogsForSubject(entityType, entityId)`
-— Pomočnik — is the same cursor-paginated shape scoped to one entity's history instead (a
+— Documenti — is the same cursor-paginated shape scoped to one entity's history instead (a
 document, an `organization_member`); it adds no authorization of its own, relying entirely on
 the same select RLS as the global feed.

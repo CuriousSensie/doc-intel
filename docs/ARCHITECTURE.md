@@ -133,6 +133,20 @@ permanent validation errors are terminal and already counted. The worker updates
 per chunk, not once per row, and the document/OCR progress shown in the UI comes from
 `document_uploads`, separate from import row completion.
 
+## Rules and document visibility flow
+
+- **Rules**: a trigger (`document.ingested` from `sync-paperless-document`, `document.updated`,
+  `document.connected`, `entity.created`, or manual) enqueues `run-rule`. The worker loads enabled rules
+  for that trigger in priority order, evaluates the condition tree locally (RE2 for regex), and applies
+  actions through `apply_rule_action()`, which writes the mutation, `rule_runs`, `field_provenance` and
+  the audit row in one transaction (ADR-0008). Cascades are depth-capped. Backfill is the same path run
+  in chunks by `backfill-rule` with pause/cancel flags in Redis; undo removes only that backfill's
+  connections (ADR-0010). Paperless workflow delegation is off (ADR-0006).
+- **Document visibility**: the RLS-scoped Supabase client is the authorizing read for every document
+  operation; only then does code use the admin client for the privileged Paperless call. Visibility is
+  creator + org owner + share recipients (ADR-0017), enforced by one policy and SQL permission
+  functions rather than by Paperless.
+
 ## Auth flow
 
 ```mermaid
@@ -256,7 +270,7 @@ and `auditLogSink` — rather than every module hand-rolling its own "write to c
 the database" logic. Adding a new destination (Slack, analytics) is writing one more `EventSink`
 and adding it to the list; no existing call site changes. **One deliberate exception**:
 organization permission-change mutations (`update_member_role`, `remove_member`,
-`leave_organization`, `transfer_organization_ownership` — Pomočnik, ADR-0008) bypass this
+`leave_organization`, `transfer_organization_ownership` — Documenti, ADR-0008) bypass this
 dispatcher entirely and write their audit row transactionally inside the same Postgres function
 as the mutation, precisely because `logEvent()`'s sinks are deliberately best-effort and never
 throw back into the caller — the right behavior for supplementary logging, the wrong one for a

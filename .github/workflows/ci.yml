@@ -65,7 +65,7 @@ jobs:
           PAPERLESS_ADMIN_PASSWORD: ci_test_password
           PAPERLESS_ADMIN_MAIL: admin@example.com
           PAPERLESS_TOKEN_ENCRYPTION_KEY: ${{ secrets.CI_PAPERLESS_TOKEN_ENCRYPTION_KEY }}
-          POMOCNIK_WEBHOOK_SECRET: ${{ secrets.CI_POMOCNIK_WEBHOOK_SECRET }}
+          DOCUMENTI_WEBHOOK_SECRET: ${{ secrets.CI_DOCUMENTI_WEBHOOK_SECRET }}
         run: |
           cat > .env <<EOF
           PAPERLESS_DBPASS=$PAPERLESS_DBPASS
@@ -74,7 +74,7 @@ jobs:
           PAPERLESS_ADMIN_PASSWORD=$PAPERLESS_ADMIN_PASSWORD
           PAPERLESS_ADMIN_MAIL=$PAPERLESS_ADMIN_MAIL
           PAPERLESS_TOKEN_ENCRYPTION_KEY=$PAPERLESS_TOKEN_ENCRYPTION_KEY
-          POMOCNIK_WEBHOOK_SECRET=$POMOCNIK_WEBHOOK_SECRET
+          DOCUMENTI_WEBHOOK_SECRET=$DOCUMENTI_WEBHOOK_SECRET
           EOF
           docker compose --profile paperless up -d
           echo "Waiting for Paperless to become healthy..."

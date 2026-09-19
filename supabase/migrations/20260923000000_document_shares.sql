@@ -19,6 +19,9 @@ create table public.document_shares (
 
 create index document_shares_shared_with_idx on public.document_shares (shared_with, organization_id);
 create index document_shares_document_idx on public.document_shares (document_id);
+-- Leading organization_id index (specs/12 never-do #12). Also added by 20260927000000 for databases
+-- that had already applied this file.
+create index if not exists document_shares_organization_idx on public.document_shares (organization_id);
 
 create trigger document_shares_set_updated_at
   before update on public.document_shares

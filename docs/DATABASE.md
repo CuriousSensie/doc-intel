@@ -36,11 +36,11 @@ erDiagram
     text logo_url
     uuid created_by FK "auth.users, set null"
     timestamptz suspended_at
-    text timezone "default 'Europe/Ljubljana' — Pomočnik"
-    text locale "default 'sl-SI' — Pomočnik"
-    char currency "default_currency, default 'EUR' — Pomočnik"
-    text provisioning_status "pending|provisioning|ready|provisioning_failed, system-managed — Pomočnik"
-    boolean ai_enabled "default false, system-managed — Pomočnik"
+    text timezone "default 'Europe/Ljubljana' — Documenti"
+    text locale "default 'sl-SI' — Documenti"
+    char currency "default_currency, default 'EUR' — Documenti"
+    text provisioning_status "pending|provisioning|ready|provisioning_failed, system-managed — Documenti"
+    boolean ai_enabled "default false, system-managed — Documenti"
     timestamptz created_at
     timestamptz updated_at
   }
@@ -137,7 +137,7 @@ erDiagram
   AUDIT_LOGS {
     uuid id PK
     uuid actor_id FK "auth.users, set null, nullable = system-initiated"
-    text actor_type "user|system|rule|import|ai, default 'user' — ADR-0005, Pomočnik"
+    text actor_type "user|system|rule|import|ai, default 'user' — ADR-0005, Documenti"
     uuid organization_id FK "set null, nullable"
     text action "dot-namespaced, e.g. auth.login"
     text entity_type
@@ -321,20 +321,20 @@ erDiagram
   }
 
   PROFILES ||--o{ ORGANIZATION_MEMBERS : "is a member via"
-  ORGANIZATIONS ||--o{ DOCUMENTS : "has (Pomočnik)"
-  ORGANIZATIONS ||--o{ DOCUMENT_UPLOADS : "has (Pomočnik)"
-  DOCUMENTS ||--o{ DOCUMENT_UPLOADS : "resolved from (Pomočnik)"
-  ORGANIZATIONS ||--o{ ENTITY_TYPES : "has (Pomočnik)"
-  ORGANIZATIONS ||--o{ ENTITIES : "has (Pomočnik Level 1)"
-  ENTITY_TYPES ||--o{ ENTITIES : "typed by (Pomočnik Level 1)"
-  ENTITIES ||--o{ ENTITY_IDENTIFIERS : "has (Pomočnik Level 1)"
-  ORGANIZATIONS ||--o{ CONNECTIONS : "has (Pomočnik Level 1, polymorphic source/target)"
-  ORGANIZATIONS ||--o{ CUSTOM_FIELD_DEFS : "has (Pomočnik Level 1)"
-  ORGANIZATIONS ||--o{ SAVED_VIEWS : "has (Pomočnik Level 1)"
-  ENTITY_TYPES ||--o{ SAVED_VIEWS : "scopes (optional, Pomočnik Level 1)"
-  ORGANIZATIONS ||--o{ BACKGROUND_OPERATIONS : "has (Pomočnik Level 1)"
-  ORGANIZATIONS ||--|| TENANT_PAPERLESS_CONFIG : "has (Pomočnik)"
-  ORGANIZATIONS ||--o{ PAPERLESS_OBJECT_MAP : "owns (Pomočnik)"
+  ORGANIZATIONS ||--o{ DOCUMENTS : "has (Documenti)"
+  ORGANIZATIONS ||--o{ DOCUMENT_UPLOADS : "has (Documenti)"
+  DOCUMENTS ||--o{ DOCUMENT_UPLOADS : "resolved from (Documenti)"
+  ORGANIZATIONS ||--o{ ENTITY_TYPES : "has (Documenti)"
+  ORGANIZATIONS ||--o{ ENTITIES : "has (Documenti Level 1)"
+  ENTITY_TYPES ||--o{ ENTITIES : "typed by (Documenti Level 1)"
+  ENTITIES ||--o{ ENTITY_IDENTIFIERS : "has (Documenti Level 1)"
+  ORGANIZATIONS ||--o{ CONNECTIONS : "has (Documenti Level 1, polymorphic source/target)"
+  ORGANIZATIONS ||--o{ CUSTOM_FIELD_DEFS : "has (Documenti Level 1)"
+  ORGANIZATIONS ||--o{ SAVED_VIEWS : "has (Documenti Level 1)"
+  ENTITY_TYPES ||--o{ SAVED_VIEWS : "scopes (optional, Documenti Level 1)"
+  ORGANIZATIONS ||--o{ BACKGROUND_OPERATIONS : "has (Documenti Level 1)"
+  ORGANIZATIONS ||--|| TENANT_PAPERLESS_CONFIG : "has (Documenti)"
+  ORGANIZATIONS ||--o{ PAPERLESS_OBJECT_MAP : "owns (Documenti)"
   ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : "has"
   ORGANIZATIONS ||--o{ ORGANIZATION_INVITATIONS : "has"
   PROFILES ||--o{ ORGANIZATION_INVITATIONS : "invites / accepts"
@@ -358,11 +358,58 @@ same **owner-polymorphic** shape: `owner_type` plus exactly one of `user_id`/`or
 "organizations pay for their members" without duplicated tables or duplicated service logic — see
 [ARCHITECTURE.md](ARCHITECTURE.md#owner-polymorphic-billing).
 
+## Entity-relationship diagram — rules, sharing, views (added after Level 1 polish)
+
+The main diagram above predates these tables. All are tenant-scoped (`organization_id` + index + RLS).
+
+```mermaid
+erDiagram
+  ORGANIZATIONS ||--o{ RULES : owns
+  RULES ||--o{ RULE_RUNS : "evaluated as"
+  RULES ||--o{ RULE_BACKFILLS : "backfilled by"
+  RULE_BACKFILLS ||--o{ CONNECTIONS : "created (rule_backfill_id)"
+  DOCUMENTS ||--o{ RULE_RUNS : "subject of"
+  DOCUMENTS ||--o{ FIELD_PROVENANCE : "last writer per field"
+  DOCUMENTS ||--o{ DOCUMENT_SHARES : "shared via"
+  PROFILES ||--o{ DOCUMENT_SHARES : "shared_with (NULL = everyone)"
+  ORGANIZATIONS ||--o{ SAVED_VIEWS : owns
+  ORGANIZATIONS ||--o{ CUSTOM_FIELD_DEFS : owns
+  ORGANIZATIONS ||--o{ REMINDERS : owns
+
+  RULES {
+    uuid id PK
+    text trigger "document.ingested|updated|connected, entity.created, manual"
+    jsonb conditions
+    jsonb actions
+    int priority
+    bool enabled
+  }
+  RULE_BACKFILLS {
+    uuid id PK
+    text status "pending|running|paused|cancelled|completed|failed"
+  }
+  DOCUMENT_SHARES {
+    uuid document_id FK
+    uuid shared_with FK "nullable"
+    text permission "view|edit"
+  }
+  FIELD_PROVENANCE {
+    uuid document_id PK
+    text field_key PK
+    text updated_by "user|rule|import|ai|system"
+  }
+  SAVED_VIEWS {
+    text view_kind "dynamic|static"
+    jsonb filters
+    jsonb document_ids
+  }
+```
+
 ## Enums
 
 | Enum | Values |
 | --- | --- |
-| `organization_role` | `owner`, `admin`, `member`, `read-only` (added for Pomočnik — a viewer role with read access identical to `member` but no write access, see `has_organization_write_access()` below) |
+| `organization_role` | `owner`, `admin`, `member`, `read-only` (added for Documenti — a viewer role with read access identical to `member` but no write access, see `has_organization_write_access()` below) |
 | `subscription_status` | `incomplete`, `trialing`, `active`, `past_due`, `canceled`, `unpaid`, `paused` |
 | `credit_transaction_type` | `subscription_grant`, `purchase`, `usage`, `refund`, `admin_adjustment`, `promotion` |
 | `billing_owner_type` | `user`, `organization` |
@@ -380,32 +427,32 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | `is_app_admin()` | `true` if the current session's user has `profiles.is_app_admin = true` and isn't suspended. Used in nearly every RLS policy as the admin-bypass clause. |
 | `is_organization_member(target_organization_id)` | `true` if the current session's user is a member of the org **and** the org isn't suspended. The suspension check lives here, not in application code — see [SECURITY.md](SECURITY.md#admin). |
 | `has_organization_role(target_organization_id, allowed_roles)` | Same as above, plus a role check. |
-| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Pomočnik. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `document_uploads_insert_member`). |
-| `protect_system_columns()` | Trigger function on `organizations` — rejects a non-`service_role` write to `provisioning_status` or `ai_enabled` (system-managed; set only by the tenant-provisioning job and the AI opt-in flow). RLS is row-level, not column-level, so this is the enforcement point — Pomočnik. |
+| `has_organization_write_access(target_organization_id)` | Same as `is_organization_member()` but excludes the `read-only` role — Documenti. Use this, not `is_organization_member()`, for any org-scoped write policy that should be denied to a viewer (e.g. `document_uploads_insert_member`). |
+| `protect_system_columns()` | Trigger function on `organizations` — rejects a non-`service_role` write to `provisioning_status` or `ai_enabled` (system-managed; set only by the tenant-provisioning job and the AI opt-in flow). RLS is row-level, not column-level, so this is the enforcement point — Documenti. |
 | `create_organization(org_name, org_slug)` | Creates an org and the creator's `owner` membership in one transaction (the creator has no RLS access to insert their own membership otherwise — see [SECURITY.md](SECURITY.md#organizations)). |
 | `get_organization_invitation(p_token)` | Looks up an invitation by its token hash — the invitee isn't a member yet, so this can't be a plain RLS-scoped select. |
 | `accept_organization_invitation(p_token)` | Validates the token (hash, expiry, revocation, email match) and inserts the membership atomically. |
-| `transfer_organization_ownership(p_org_id, p_new_owner_id)` | Swaps two members' roles (old owner → admin, new owner → owner) **and writes the `organization.ownership_transferred` audit row** in the same transaction — Pomočnik, ADR-0008; the audit insert was added after the fact (see `update_member_role` below for why). |
-| `update_member_role(p_member_id, p_role)` | Replicates the `has_organization_role(owner\|admin)` check explicitly (bypasses RLS as SECURITY DEFINER), updates the role, writes the `organization.member.role_changed` audit row atomically — Pomočnik, ADR-0008. Added because a plain RLS-scoped update + a separate `logEvent()` call isn't a guaranteed audit record: `logEvent()`'s sinks are best-effort and never throw back into the caller. |
-| `remove_member(p_member_id)` | Same auth check as `update_member_role`, deletes the member's `document_shares` rows and the member row, writes `organization.member.removed` atomically — Pomočnik, ADR-0008. |
-| `can_manage_document(p_document_id)` | Caller is the document's creator or an org owner. SECURITY DEFINER; single source of truth for share/unshare/delete rights — Pomočnik, document sharing. |
+| `transfer_organization_ownership(p_org_id, p_new_owner_id)` | Swaps two members' roles (old owner → admin, new owner → owner) **and writes the `organization.ownership_transferred` audit row** in the same transaction — Documenti, ADR-0008; the audit insert was added after the fact (see `update_member_role` below for why). |
+| `update_member_role(p_member_id, p_role)` | Replicates the `has_organization_role(owner\|admin)` check explicitly (bypasses RLS as SECURITY DEFINER), updates the role, writes the `organization.member.role_changed` audit row atomically — Documenti, ADR-0008. Added because a plain RLS-scoped update + a separate `logEvent()` call isn't a guaranteed audit record: `logEvent()`'s sinks are best-effort and never throw back into the caller. |
+| `remove_member(p_member_id)` | Same auth check as `update_member_role`, deletes the member's `document_shares` rows and the member row, writes `organization.member.removed` atomically — Documenti, ADR-0008. |
+| `can_manage_document(p_document_id)` | Caller is the document's creator or an org owner. SECURITY DEFINER; single source of truth for share/unshare/delete rights — Documenti, document sharing. |
 | `can_edit_document(p_document_id)` | `has_organization_write_access` AND (manage OR an `edit` share for the caller). A read-only member never edits, even with an `edit` share. |
 | `is_document_shared_with_me(p_document_id)` | Any (view or edit) share for the caller; used by the `documents_select_member` policy. SECURITY DEFINER so `documents` and `document_shares` policies don't recurse into each other. |
 | `filter_document_ids(p_organization_id, p_ids, p_required)` | Subset of `p_ids` the caller can `edit` or `manage`; bulk edit/connect resolve their ids through it so every downstream write sees the identical set. |
 | `share_document(p_document_id, p_user_id, p_permission)` | Creator/owner only; grantee must be a same-org member who doesn't already have full access; `edit` rejected for a read-only grantee; upserts the share and writes the `document.shared` audit row atomically — ADR-0008. |
 | `unshare_document(p_document_id, p_user_id)` | Same auth as `share_document`; deletes the share and writes `document.unshared` atomically. |
 | `get_document_permissions(p_document_id)` | One-call payload for the document Permissions tab (organization owner, creator, shares with names, and — for creator/owner only — the shareable member list). SECURITY DEFINER because it reads other members' profiles; replicates the visibility check (member AND creator/owner/shared) and raises `P0002` for a document the caller can't see. |
-| `leave_organization(p_organization_id)` | Self-service leave, scoped to `auth.uid()`. Raises if the caller is the org's sole owner — replacing `organization_members_delete_self`'s RLS-policy-as-business-logic (a delete that RLS silently filtered to 0 rows for a sole owner) with an explicit exception, since this no longer goes through the caller's RLS-scoped client. Writes `organization.member.left` atomically — Pomočnik, ADR-0008. |
+| `leave_organization(p_organization_id)` | Self-service leave, scoped to `auth.uid()`. Raises if the caller is the org's sole owner — replacing `organization_members_delete_self`'s RLS-policy-as-business-logic (a delete that RLS silently filtered to 0 rows for a sole owner) with an explicit exception, since this no longer goes through the caller's RLS-scoped client. Writes `organization.member.left` atomically — Documenti, ADR-0008. |
 | `increment_usage_counter(p_owner_type, p_user_id, p_organization_id, p_feature, p_period, p_amount, p_limit)` | Atomic conditional upsert — raises if the increment would exceed `p_limit`. The concurrency-safe alternative to a client-side read-then-write. |
 | `consume_credits(p_owner_type, p_user_id, p_organization_id, p_amount, p_reference, p_metadata)` | Takes a per-owner Postgres advisory lock, sums the ledger, inserts a debit row if sufficient balance exists — serializes concurrent spends to prevent double-spending on a table with no mutable balance column. |
-| `purge_old_audit_logs()` | Deletes `audit_logs` rows older than 2 years (ADR-0005 — extended from the original 30-day admin-only window once this table started also carrying Pomočnik's business audit). **Not scheduled anywhere yet** — see [SECURITY.md](SECURITY.md#audit-logs). |
-| `claim_provisioning(p_organization_id)` | Conditional `UPDATE ... WHERE provisioning_status IN ('pending','provisioning_failed')`, returns whether *this* call claimed it. Not a Postgres advisory lock — see `provision-tenant.ts`'s doc comment for why a session-scoped lock isn't safe over PostgREST's pooled connections — Pomočnik. |
-| `complete_provisioning(p_organization_id, p_base_url, p_service_user_id, p_group_id, p_api_token_encrypted, p_storage_path_id, p_object_map)` | Atomically writes `tenant_paperless_config`, `paperless_object_map` rows, the four system `entity_types`, `organizations.provisioning_status = 'ready'`, and the `org.provisioned` audit row — ADR-0008. Idempotent (`on conflict ... do nothing`/`do update`) — Pomočnik. |
-| `fail_provisioning(p_organization_id, p_reason)` | Sets `provisioning_status = 'provisioning_failed'` and writes the `org.provisioning_failed` audit row atomically — Pomočnik. |
-| `claim_upload_validation(p_upload_id, p_organization_id)` | Conditional `UPDATE ... WHERE status IN ('uploaded','validating')`, returns whether *this* call claimed it — Pomočnik, `worker/jobs/validate-upload.ts`. The `validating` arm (not just `uploaded`) exists so a BullMQ retry of the *same* job can reclaim its own prior attempt's row after a transient failure; without it, a retry landing after the row was already claimed would lose the claim race against itself and silently no-op. Unlike `claim_provisioning()`, explicitly rejects any caller whose `auth.role() <> 'service_role'` — `document_uploads` has no update RLS policy at all, so an unguarded SECURITY DEFINER function here would otherwise let any authenticated member flip another tenant's upload status via RPC. |
-| `complete_upload_validation(p_upload_id, p_organization_id)` | Service-role-only (same guard as above), sets `status = 'validated'` — Pomočnik. |
-| `fail_upload_validation(p_upload_id, p_organization_id, p_reason)` | Service-role-only, sets `status = 'failed'` + `error_message` — Pomočnik. |
-| `merge_entities(p_keep_id, p_merge_id)` | **Pomočnik Level 1.** Re-points `connections`/`entity_identifiers` from the merged entity onto the kept one (dropping any that would collide with an existing row on the kept entity), soft-deletes the merged entity (`status = 'archived'`, `deleted_at = now()`), writes one `entity.merged` audit row — all atomically (ADR-0008). Checks `auth.uid()`/`has_organization_write_access()` itself (unlike the provisioning/upload trios, this one is meant to be called from a real request-context client, not the admin client — there is no worker-triggered merge path). Rejects self-merge, cross-org merge, and an unauthenticated/unauthorized caller by raising, not silently no-op'ing. |
+| `purge_old_audit_logs()` | Deletes `audit_logs` rows older than 2 years (ADR-0005 — extended from the original 30-day admin-only window once this table started also carrying Documenti's business audit). **Not scheduled anywhere yet** — see [SECURITY.md](SECURITY.md#audit-logs). |
+| `claim_provisioning(p_organization_id)` | Conditional `UPDATE ... WHERE provisioning_status IN ('pending','provisioning_failed')`, returns whether *this* call claimed it. Not a Postgres advisory lock — see `provision-tenant.ts`'s doc comment for why a session-scoped lock isn't safe over PostgREST's pooled connections — Documenti. |
+| `complete_provisioning(p_organization_id, p_base_url, p_service_user_id, p_group_id, p_api_token_encrypted, p_storage_path_id, p_object_map)` | Atomically writes `tenant_paperless_config`, `paperless_object_map` rows, the four system `entity_types`, `organizations.provisioning_status = 'ready'`, and the `org.provisioned` audit row — ADR-0008. Idempotent (`on conflict ... do nothing`/`do update`) — Documenti. |
+| `fail_provisioning(p_organization_id, p_reason)` | Sets `provisioning_status = 'provisioning_failed'` and writes the `org.provisioning_failed` audit row atomically — Documenti. |
+| `claim_upload_validation(p_upload_id, p_organization_id)` | Conditional `UPDATE ... WHERE status IN ('uploaded','validating')`, returns whether *this* call claimed it — Documenti, `worker/jobs/validate-upload.ts`. The `validating` arm (not just `uploaded`) exists so a BullMQ retry of the *same* job can reclaim its own prior attempt's row after a transient failure; without it, a retry landing after the row was already claimed would lose the claim race against itself and silently no-op. Unlike `claim_provisioning()`, explicitly rejects any caller whose `auth.role() <> 'service_role'` — `document_uploads` has no update RLS policy at all, so an unguarded SECURITY DEFINER function here would otherwise let any authenticated member flip another tenant's upload status via RPC. |
+| `complete_upload_validation(p_upload_id, p_organization_id)` | Service-role-only (same guard as above), sets `status = 'validated'` — Documenti. |
+| `fail_upload_validation(p_upload_id, p_organization_id, p_reason)` | Service-role-only, sets `status = 'failed'` + `error_message` — Documenti. |
+| `merge_entities(p_keep_id, p_merge_id)` | **Documenti Level 1.** Re-points `connections`/`entity_identifiers` from the merged entity onto the kept one (dropping any that would collide with an existing row on the kept entity), soft-deletes the merged entity (`status = 'archived'`, `deleted_at = now()`), writes one `entity.merged` audit row — all atomically (ADR-0008). Checks `auth.uid()`/`has_organization_write_access()` itself (unlike the provisioning/upload trios, this one is meant to be called from a real request-context client, not the admin client — there is no worker-triggered merge path). Rejects self-merge, cross-org merge, and an unauthenticated/unauthorized caller by raising, not silently no-op'ing. |
 | `claim_import_chunk(job_id, organization_id, limit)` | **Phase 3 milestone 1.** Service-role-only claim of up to 50 pending rows with `FOR UPDATE SKIP LOCKED`; changes a ready job to running and returns the claimed rows. Paused/terminal jobs claim nothing. |
 | `complete_import_job(job_id, organization_id)` | Service-role-only conditional completion after no pending/processing rows remain; sets completed or completed_with_errors and writes the import-completion audit row atomically (ADR-0008). Returns false on a repeat or invalid transition. |
 | `fail_import_job(job_id, organization_id, reason)` | Service-role-only conditional failure from nonterminal states; writes the failure audit row atomically and returns false on a repeat. |
@@ -418,8 +465,8 @@ for SECURITY DEFINER functions — an unset search_path is a privilege-escalatio
 | Bucket | Visibility | Size limit | Used by |
 | --- | --- | --- | --- |
 | `avatars` | Public | 5 MB | `uploadAvatar()` — served via `getPublicUrl`, no signed URL needed |
-| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Pomočnik. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other bucket uses); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
-| `exports` | Private | 100 MB | **Pomočnik Level 1.** `worker/jobs/export.ts` uploads the generated CSV/XLSX via the admin client; `GET /api/exports/[id]/download` issues a 5-minute signed URL and redirects — no `storage.objects` RLS policies, same convention as `document-uploads`. |
+| `document-uploads` | Private | 100 MB | `createUploadIntent()`/`completeUpload()` — Documenti. Direct-to-storage (`createSignedUploadUrl()`, fixed 2h expiry, not the server-buffered pattern the other bucket uses); no `storage.objects` RLS policies, the signed URL's own token is the authorization. |
+| `exports` | Private | 100 MB | **Documenti Level 1.** `worker/jobs/export.ts` uploads the generated CSV/XLSX via the admin client; `GET /api/exports/[id]/download` issues a 5-minute signed URL and redirects — no `storage.objects` RLS policies, same convention as `document-uploads`. |
 | `import-sources` | Private | 100 MB | **Phase 3 milestone 1.** Signed source uploads for CSV/TSV/XLSX/ZIP; bucket MIME restrictions and `src/config/imports.ts` define accepted types. Dashboard import routes and signed-upload Server Actions are implemented (M8). |
 
 No `storage.objects` RLS policies exist for these private buckets — every read/write goes through the
@@ -518,7 +565,7 @@ remains executable but carries `needs_review` through validation and final execu
 This is the importer-specific isolation test #11: tenant A cannot map to tenant B's identifier,
 and no cross-tenant connection is created.
 
-`scripts/verify-phase3-m9.ts` is the reproducible scale harness. It creates a disposable org,
+`scripts/loadtest-import.ts` is the reproducible scale harness. It creates a disposable org,
 builds a ZIP with an XLSX manifest and N valid PDFs, uploads the source to `import-sources`,
 then runs the real analyze/mapping/validate services. `--execute` starts the real worker-backed
 chunk chain; the default validate-only mode intentionally avoids enqueuing thousands of
@@ -543,17 +590,23 @@ notable default/constraint. This section adds what the diagram can't: RLS polici
 | `notifications` | select-own, update-own — **no insert policy**, admin client only. | `notifications_user_created_idx (user_id, created_at desc)` |
 | `audit_logs` | select: admin, or org owner/admin for their own org's rows. **No insert policy at all** — `logEvent()`'s `auditLogSink` (admin client) is the only writer. | `audit_logs_actor_idx (actor_id, created_at desc)` |
 | `webhook_events` | No policies read in application code (admin-client only, used solely by the Stripe webhook handler for idempotency). | unique `(provider, event_id)` |
-| `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` — Pomočnik. | PK is `organization_id` itself (1:1) |
-| `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Pomočnik. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
-| `entity_types` | select: org member or admin. write (insert/update/delete): org member **with write access** or admin — `has_organization_write_access()`, so `read-only` can't create/edit entity types either. Seeded (4 system rows per org) by `complete_provisioning()`, not application code — Pomočnik. | `(organization_id)` |
-| `documents` | select: org member or admin. **No insert/update/delete policy** — only the sync worker (admin client, `worker/jobs/sync-paperless-document.ts`) writes this table — Pomočnik. | `(organization_id, document_type_key)`, `(organization_id, document_date desc)`, `(organization_id, checksum)`, all `where deleted_at is null` (first three); **Phase 3 M7**: `(organization_id, created_at desc, id desc) where deleted_at is null` (backs `listDocuments()`'s keyset cursor — previously unindexed) and `(organization_id, status, created_at desc) where deleted_at is null` (every saved view except "All documents" filters by status) |
-| `document_uploads` | select: org member or admin. insert: creator **with write access** (`created_by = auth.uid() and has_organization_write_access()`). **No update/delete policy** — every status transition after the initial insert runs via the admin client from a worker job — Pomočnik. | `(organization_id, created_at desc)`; partial `(expires_at) where status in ('pending','uploaded')` for `expire-abandoned-uploads.ts`'s sweep |
+| `tenant_paperless_config` | RLS enabled, **no policies** (admin-client only — `api_token_encrypted` must never reach a browser). Read/written only by `worker/jobs/provision-tenant.ts` and `src/lib/paperless/client.ts` — Documenti. | PK is `organization_id` itself (1:1) |
+| `paperless_object_map` | RLS enabled, **no policies** (admin-client only). Read by the event-bridge webhook and reconciliation sweep to resolve a Paperless object to its tenant — Documenti. | unique `(object_type, paperless_id)` — deliberately without `organization_id`, so a cross-tenant mapping bug is a DB error, not a silent leak; `(organization_id, object_type)` |
+| `entity_types` | select: org member or admin. write (insert/update/delete): org member **with write access** or admin — `has_organization_write_access()`, so `read-only` can't create/edit entity types either. Seeded (4 system rows per org) by `complete_provisioning()`, not application code — Documenti. | `(organization_id)` |
+| `documents` | select: **creator, org owner, or a share recipient** (`documents_select_member`, [ADR-0017](adr/0017-per-document-visibility-and-sharing.md)), or admin. **No insert/update/delete policy** — only the sync worker (admin client, `worker/jobs/sync-paperless-document.ts`) writes this table — Documenti. | `(organization_id, document_type_key)`, `(organization_id, document_date desc)`, `(organization_id, checksum)`, all `where deleted_at is null` (first three); **Phase 3 M7**: `(organization_id, created_at desc, id desc) where deleted_at is null` (backs `listDocuments()`'s keyset cursor — previously unindexed) and `(organization_id, status, created_at desc) where deleted_at is null` (every saved view except "All documents" filters by status) |
+| `document_uploads` | select: org member or admin. insert: creator **with write access** (`created_by = auth.uid() and has_organization_write_access()`). **No update/delete policy** — every status transition after the initial insert runs via the admin client from a worker job — Documenti. | `(organization_id, created_at desc)`; partial `(expires_at) where status in ('pending','uploaded')` for `expire-abandoned-uploads.ts`'s sweep |
 | `entities` | select: org member or admin. write (all): write-access member or admin — `has_organization_write_access()`. | `(organization_id, entity_type_id) where deleted_at is null`; GIN on `search_tsv`; GIN `jsonb_path_ops` on `data` |
 | `entity_identifiers` | select: org member or admin. write (all): write-access member or admin. | `(organization_id, normalized)`; `(entity_id)`; unique `(organization_id, kind, normalized)` |
 | `connections` | select: org member or admin. write (all): write-access member or admin. Application-level guard (not RLS, since `source_id`/`target_id` are polymorphic with no FK): `connections.service.ts#createConnection()`'s `assertBelongsToOrg()` rejects a source/target id that doesn't resolve to a row in the caller's own org — this closed isolation test #9 (a cross-org connection could otherwise be created silently). | unique `connections_unique_pair` on `(organization_id, least(source_id,target_id), greatest(source_id,target_id), relation) where deleted_at is null` — makes a duplicate connection a DB-level impossibility regardless of which side is passed first |
 | `custom_field_defs` | select: org member or admin. write (all): write-access member or admin. Application-level guard: `custom-field-defs.service.ts` is the only code path allowed to read/write this table — product code must never call Paperless's `GET /api/custom_fields/` directly (confirmed cross-tenant leak, `docs/spike-findings.md` §1 #6). | `(organization_id)` |
-| `saved_views` | select: org member or admin (shared views or the creator's own). write: creator or admin. | `(organization_id)` |
+| `saved_views` | select: org member or admin (shared views or the creator's own). write: creator or admin. `view_kind` `dynamic` (filters) or `static` (`document_ids`). | `(organization_id)` |
 | `background_operations` | select: org member or admin. insert: creator **with write access**. **No update/delete policy** — every progress/status update after the initial insert runs via the admin client from a worker job (`worker/jobs/bulk-action.ts`, `worker/jobs/export.ts`) — same convention as `document_uploads`. | `(organization_id, created_at desc)` |
+| `document_shares` | select: the recipient, a user who can manage the document, or admin. **No insert/update/delete policy** — writes only through `share_document()`/`unshare_document()` (audit row in the same transaction, ADR-0008). `shared_with` NULL means everyone in the org; permission `view` or `edit`. | `(organization_id)`, `(shared_with, organization_id)`, `(document_id)`, unique per person and unique for the everyone row |
+| `rules` | select: org member or admin. write (all): write-access member or admin. `delegate_to_paperless`/`paperless_workflow_id` exist but stay unused (ADR-0006). | `(organization_id, trigger, priority)` |
+| `rule_runs` | select: org member or admin. **No write policy** — written by `apply_rule_action()` and the worker (service role). | `(organization_id, rule_id, created_at desc)`, `(organization_id, document_id, created_at desc) where document_id is not null` |
+| `rule_backfills` | select: org member or admin. insert: creator with write access, status `pending` only. Status/counters are worker-managed. Undo scope per ADR-0010. | `(organization_id, rule_id)` |
+| `field_provenance` | select: org member or admin. Written by rule/user/import paths; PK `(document_id, field_key)`; `updated_by` in user/rule/import/ai/system. Reused by Level 2. | `(organization_id)` |
+| `reminders` | select: org member or admin. Fired by `fire-due-reminders`. | `(due_date) where fired_at is null`, `(organization_id)` |
 | `import_jobs` | select: org member or admin. insert: creator with write access, draft only. No user update/delete policy; worker transitions are service-role-only. | `(organization_id, created_at desc)`, `(organization_id, status)`; unique `(id, organization_id)` for same-tenant composite FKs |
 | `import_rows` | select: org member or admin. Worker materializes/mutates rows via service role; no user write policy. | `(import_job_id, status)`, `(organization_id, import_job_id)`; unique `(import_job_id, row_number)` and `(id, organization_id)` |
 | `import_mappings` | select: org member or admin. write: org member with write access or admin. | unique `(organization_id, name)`; `(organization_id, created_at desc)` |
@@ -571,26 +624,37 @@ Applied in filename order (timestamp-prefixed) via the Supabase CLI — see
 | `20260821130000_billing_functions.sql` | Replaces `usage_counters`' original composite unique constraint with two partial unique indexes (nullable owner columns aren't equal to each other in Postgres, so the naive constraint didn't work); adds `increment_usage_counter` and `consume_credits`. |
 | `20260822090000_files_storage.sql` | Creates the `avatars` and `files` Storage buckets; adds the two cursor-pagination indexes on `files`. |
 | `20260823090000_admin.sql` | Adds `organizations.suspended_at` and threads it through `is_organization_member`/`has_organization_role`; adds `subscriptions.platform_disabled_at`; adds `purge_old_audit_logs()`. |
-| `20260824000000_pomocnik_orgs_extension.sql` | **Pomočnik Level 0.** Adds `organizations.timezone`/`locale`/`default_currency`/`provisioning_status`/`ai_enabled`; adds the `read-only` value to `organization_role`; adds `protect_system_columns()` + its trigger (blocks non-service-role writes to `provisioning_status`/`ai_enabled`). Originally also added `has_organization_write_access()` in the same file, but Postgres forbids using a newly-added enum value (`read-only`) inside a function body compiled within the same transaction that added it (`SQLSTATE 55P04`) — split into the next migration once this was actually run against a real Postgres instance for the first time. |
-| `20260824120000_pomocnik_write_access_function.sql` | **Pomočnik Level 0.** Adds `has_organization_write_access()` and repoints `files_insert_owner` at it so a `read-only` member can't upload files — split out of the previous migration for the enum-transaction reason above. |
-| `20260825000000_paperless_linkage.sql` | **Pomočnik Level 0.** Adds `tenant_paperless_config` and `paperless_object_map` — both RLS-enabled with zero policies (admin-client only), matching the existing `stripe_customers`/`subscriptions`/`webhook_events` convention. Verified end-to-end against a throwaway Postgres container: RLS enabled + 0 policies confirmed, the `(object_type, paperless_id)` unique constraint correctly rejects a cross-tenant duplicate mapping, and the `object_type` check constraint correctly rejects an invalid value. |
-| `20260826000000_tenant_provisioning.sql` | **Pomočnik Level 0/1.** Adds `entity_types` (RLS: member read, write-access write); adds `audit_logs.actor_type` (ADR-0005); adds `claim_provisioning()`/`complete_provisioning()`/`fail_provisioning()` (ADR-0008). Verified against a throwaway Postgres container: first claim succeeds and a concurrent second claim is correctly refused, retry-after-failure is re-claimable, `complete_provisioning()` is idempotent on re-run (still exactly 4 `entity_types` rows, no duplicates). |
-| `20260827000000_audit_log_retention.sql` | **Pomočnik.** Extends `purge_old_audit_logs()`'s window from 30 days to 2 years (ADR-0005's stated consequence, not applied when `actor_type` was added). |
-| `20260828000000_document_uploads.sql` | **Pomočnik Level 0.** Adds the `documents` mirror table (specs/02-data-model.md; select-only RLS) and `document_uploads` (specs/01-architecture.md §Upload; select + creator-insert RLS); creates the `document-uploads` Storage bucket. Verified against a throwaway Postgres container **as a real non-superuser role** (not just `psql -U postgres`, which bypasses RLS entirely) — a `member` can insert their own upload, a `read-only` member is correctly rejected by the RLS policy itself, not just by `has_organization_write_access()`'s own return value. |
-| `20260912125436_document_upload_validation_functions.sql` | **Pomočnik Level 0.** Adds `claim_upload_validation()`/`complete_upload_validation()`/`fail_upload_validation()` for `worker/jobs/validate-upload.ts`, following the provisioning trio's claim/complete/fail pattern but explicitly service-role-only (see the Functions table above for why). First migration this session pushed to the real, live Supabase Cloud project rather than a throwaway container — see the previous two `pomocnik_orgs_extension`/`pomocnik_write_access_function` rows for the bug that surfaced doing so. |
-| `20260912195634_transactional_membership_audit.sql` | **Pomočnik.** Adds `update_member_role()`, `remove_member()`, `leave_organization()`, and augments `transfer_organization_ownership()` so organization permission-change audit rows are written in the same transaction as the mutation (ADR-0008) — see the Functions table above. Verified live: each function called unauthenticated against the real project correctly raises `P0001: Authentication required` from inside the right function body (not a generic SQL error), confirming argument types and column references resolve correctly. |
-| `20260922000000_document_visibility_rls.sql` | **Pomočnik.** `documents_select_member` / `document_uploads_select_member` limited to the creator, the org owner and app admins (previously any org member). |
-| `20260923000000_document_shares.sql` | **Pomočnik.** `document_shares` table (no direct write policies), the permission functions above, `share_document`/`unshare_document`, `documents_select_member` extended with shares, and `remove_member`/`leave_organization` now delete the leaving member's shares. |
-| `20260924000000_document_shares_everyone.sql` | **Pomočnik.** `document_shares.shared_with` nullable — a NULL row is an organization-wide grant (read-only members still never edit); `share_document`/`unshare_document` accept a NULL user; `can_edit_document`, `is_document_shared_with_me` and the shares select policy honor it. |
-| `20260925000000_get_document_permissions.sql` | **Pomočnik.** `get_document_permissions()` — replaces ~10 separate queries behind the Permissions tab with one round trip. |
-| `20260913061540_relax_upload_claim_for_retries.sql` | **Pomočnik.** Widens `claim_upload_validation()`'s claimable source statuses from `uploaded` only to `uploaded` or `validating` — a bug enabling BullMQ retries surfaced live: a same-job retry landing after a transient failure left the row at `validating`, and the claim could never re-match it, permanently stranding the upload with no error. |
-| `20260913120000_drop_files_and_projects.sql` | **Pomočnik Level 1.** Drops the boilerplate's `files` and `projects` tables (with their policies/indexes) and the `files` Storage bucket entirely — neither is part of the product; Documents/Paperless and the `project` entity type supersede them. `has_organization_write_access()` is kept (load-bearing elsewhere by now). Avatar upload was extracted out of the files module first — see `src/modules/profile/avatar.service.ts`. |
-| `20260914000000_entities_connections_fields_views.sql` | **Pomočnik Level 1.** Adds `entities`, `entity_identifiers`, `connections` (with `connections_unique_pair`), `custom_field_defs`, `saved_views`, and `merge_entities()`. Verified against a throwaway Postgres container: all migrations apply cleanly in order; the three unique constraints correctly reject duplicates; `merge_entities()` moves identifiers/connections, archives the merged entity, writes one audit row, and rejects unauthenticated/cross-org/self-merge calls; RLS itself (as a real non-superuser role) blocks a cross-tenant read and write. |
-| `20260914120000_background_operations.sql` | **Pomočnik Level 1 (Milestone 7).** Adds `background_operations` (progress tracking for bulk actions + export, mirroring `document_uploads`'s select+creator-insert-only RLS shape) and creates the `exports` Storage bucket. |
+| `20260824000000_documenti_orgs_extension.sql` | **Documenti Level 0.** Adds `organizations.timezone`/`locale`/`default_currency`/`provisioning_status`/`ai_enabled`; adds the `read-only` value to `organization_role`; adds `protect_system_columns()` + its trigger (blocks non-service-role writes to `provisioning_status`/`ai_enabled`). Originally also added `has_organization_write_access()` in the same file, but Postgres forbids using a newly-added enum value (`read-only`) inside a function body compiled within the same transaction that added it (`SQLSTATE 55P04`) — split into the next migration once this was actually run against a real Postgres instance for the first time. |
+| `20260824120000_documenti_write_access_function.sql` | **Documenti Level 0.** Adds `has_organization_write_access()` and repoints `files_insert_owner` at it so a `read-only` member can't upload files — split out of the previous migration for the enum-transaction reason above. |
+| `20260825000000_paperless_linkage.sql` | **Documenti Level 0.** Adds `tenant_paperless_config` and `paperless_object_map` — both RLS-enabled with zero policies (admin-client only), matching the existing `stripe_customers`/`subscriptions`/`webhook_events` convention. Verified end-to-end against a throwaway Postgres container: RLS enabled + 0 policies confirmed, the `(object_type, paperless_id)` unique constraint correctly rejects a cross-tenant duplicate mapping, and the `object_type` check constraint correctly rejects an invalid value. |
+| `20260826000000_tenant_provisioning.sql` | **Documenti Level 0/1.** Adds `entity_types` (RLS: member read, write-access write); adds `audit_logs.actor_type` (ADR-0005); adds `claim_provisioning()`/`complete_provisioning()`/`fail_provisioning()` (ADR-0008). Verified against a throwaway Postgres container: first claim succeeds and a concurrent second claim is correctly refused, retry-after-failure is re-claimable, `complete_provisioning()` is idempotent on re-run (still exactly 4 `entity_types` rows, no duplicates). |
+| `20260827000000_audit_log_retention.sql` | **Documenti.** Extends `purge_old_audit_logs()`'s window from 30 days to 2 years (ADR-0005's stated consequence, not applied when `actor_type` was added). |
+| `20260828000000_document_uploads.sql` | **Documenti Level 0.** Adds the `documents` mirror table (specs/02-data-model.md; select-only RLS) and `document_uploads` (specs/01-architecture.md §Upload; select + creator-insert RLS); creates the `document-uploads` Storage bucket. Verified against a throwaway Postgres container **as a real non-superuser role** (not just `psql -U postgres`, which bypasses RLS entirely) — a `member` can insert their own upload, a `read-only` member is correctly rejected by the RLS policy itself, not just by `has_organization_write_access()`'s own return value. |
+| `20260912125436_document_upload_validation_functions.sql` | **Documenti Level 0.** Adds `claim_upload_validation()`/`complete_upload_validation()`/`fail_upload_validation()` for `worker/jobs/validate-upload.ts`, following the provisioning trio's claim/complete/fail pattern but explicitly service-role-only (see the Functions table above for why). First migration this session pushed to the real, live Supabase Cloud project rather than a throwaway container — see the previous two `documenti_orgs_extension`/`documenti_write_access_function` rows for the bug that surfaced doing so. |
+| `20260912195634_transactional_membership_audit.sql` | **Documenti.** Adds `update_member_role()`, `remove_member()`, `leave_organization()`, and augments `transfer_organization_ownership()` so organization permission-change audit rows are written in the same transaction as the mutation (ADR-0008) — see the Functions table above. Verified live: each function called unauthenticated against the real project correctly raises `P0001: Authentication required` from inside the right function body (not a generic SQL error), confirming argument types and column references resolve correctly. |
+| `20260922000000_document_visibility_rls.sql` | **Documenti.** `documents_select_member` / `document_uploads_select_member` limited to the creator, the org owner and app admins (previously any org member). |
+| `20260923000000_document_shares.sql` | **Documenti.** `document_shares` table (no direct write policies), the permission functions above, `share_document`/`unshare_document`, `documents_select_member` extended with shares, and `remove_member`/`leave_organization` now delete the leaving member's shares. |
+| `20260924000000_document_shares_everyone.sql` | **Documenti.** `document_shares.shared_with` nullable — a NULL row is an organization-wide grant (read-only members still never edit); `share_document`/`unshare_document` accept a NULL user; `can_edit_document`, `is_document_shared_with_me` and the shares select policy honor it. |
+| `20260925000000_get_document_permissions.sql` | **Documenti.** `get_document_permissions()` — replaces ~10 separate queries behind the Permissions tab with one round trip. |
+| `20260913061540_relax_upload_claim_for_retries.sql` | **Documenti.** Widens `claim_upload_validation()`'s claimable source statuses from `uploaded` only to `uploaded` or `validating` — a bug enabling BullMQ retries surfaced live: a same-job retry landing after a transient failure left the row at `validating`, and the claim could never re-match it, permanently stranding the upload with no error. |
+| `20260913120000_drop_files_and_projects.sql` | **Documenti Level 1.** Drops the boilerplate's `files` and `projects` tables (with their policies/indexes) and the `files` Storage bucket entirely — neither is part of the product; Documents/Paperless and the `project` entity type supersede them. `has_organization_write_access()` is kept (load-bearing elsewhere by now). Avatar upload was extracted out of the files module first — see `src/modules/profile/avatar.service.ts`. |
+| `20260914000000_entities_connections_fields_views.sql` | **Documenti Level 1.** Adds `entities`, `entity_identifiers`, `connections` (with `connections_unique_pair`), `custom_field_defs`, `saved_views`, and `merge_entities()`. Verified against a throwaway Postgres container: all migrations apply cleanly in order; the three unique constraints correctly reject duplicates; `merge_entities()` moves identifiers/connections, archives the merged entity, writes one audit row, and rejects unauthenticated/cross-org/self-merge calls; RLS itself (as a real non-superuser role) blocks a cross-tenant read and write. |
+| `20260914120000_background_operations.sql` | **Documenti Level 1 (Milestone 7).** Adds `background_operations` (progress tracking for bulk actions + export, mirroring `document_uploads`'s select+creator-insert-only RLS shape) and creates the `exports` Storage bucket. |
 | `20260915112736_phase3_import_foundation.sql` | **Phase 3 milestone 1.** Adds `import_jobs`/`import_rows`/`import_mappings` with RLS and indexes, tenant-safe composite FKs from `documents`/`document_uploads`, service-role-only claim/completion/failure RPCs, atomic audit, and the private `import-sources` bucket. Pushed to the live Supabase Cloud project. |
-| `20260914120500_connections_created_via_bulk.sql` | **Pomočnik Level 1 (Milestone 7).** Widens `connections.created_via`'s check constraint to allow `'bulk'`, so a 500-document bulk-connect is tagged distinctly from 500 individual manual clicks in history/audit. |
+| `20260914120500_connections_created_via_bulk.sql` | **Documenti Level 1 (Milestone 7).** Widens `connections.created_via`'s check constraint to allow `'bulk'`, so a 500-document bulk-connect is tagged distinctly from 500 individual manual clicks in history/audit. |
 | `20260916090000_import_bulk_write_functions.sql` | **Phase 3 milestones 5/6.** Adds `bulk_update_import_rows()` and `increment_import_job_progress()` — see the Functions table above. Verified live: called directly against the real project, correctly rejects a non-service-role caller and applies a real batched update/increment. |
 | `20260916140000_documents_query_perf.sql` | **Phase 3 milestone 7.** Adds `(organization_id, created_at desc, id desc)` and `(organization_id, status, created_at desc)` indexes on `documents` (both `where deleted_at is null`), and `list_documents_without_connections()` — see the Functions table above. Verified live against the real project: the RPC returns correct results scoped to a real org. |
+| `20260916150000_documents_sort_indexes.sql` | **Documenti Level 1.** Keyset-pagination composite indexes for sorting the documents list by title and document type. |
+| `20260916170000_documents_listing_controls_created_at.sql` | **Documenti Level 1.** Listing-control support for the configurable columns/sorting on `created_at`. |
+| `20260917120000_documents_numbered_pagination_rpc.sql` | **Documenti Level 1.** RPCs behind numbered pagination and the "no connections" filter (`count_document_connections`, `count_documents_without_connections`). |
+| `20260918000000_rules_engine.sql` | **Documenti Level 1 (Phase 4).** `rules`, `rule_runs`, `rule_backfills`, `field_provenance`, `reminders`; `connections.rule_backfill_id`; `apply_rule_action()` (audit atomic with the mutation, ADR-0008). |
+| `20260919000000_apply_rule_action_ownership_check.sql` | **Documenti Level 1.** `apply_rule_action()` rejects a source/target that is not in the caller's org (isolation test #10, defence in depth). |
+| `20260920000000_fix_apply_rule_action_null_field_key.sql` | **Documenti Level 1.** Fix: `add_tag`/`remove_tag` have no field key and violated `field_provenance.field_key NOT NULL`. |
+| `20260920010000_fix_rule_backfill_audit_actor_type.sql` | **Documenti Level 1.** Fix: `complete_rule_backfill()`/`fail_rule_backfill()` wrote an `audit_logs.actor_type` value the check constraint did not allow. |
+| `20260920120000_saved_view_static_document_sets.sql` | **Documenti Level 1.** `saved_views.view_kind` (`dynamic`/`static`) and `saved_views.document_ids` jsonb. |
+| `20260921000000_dashboard_stats_rpc.sql` | **Documenti Level 1.** `get_org_dashboard_counts()`, `get_member_dashboard_counts()` and their `created_by` partial indexes. |
+| `20260926000000_preserve_document_creator.sql` | **Documenti.** Repairs `documents.created_by` nulled by re-syncs and adds the `preserve_document_creator()` trigger so no writer can null or reassign it. |
+| `20260927000000_document_shares_organization_index.sql` | **Documenti.** Adds the missing leading `organization_id` index on `document_shares` (also folded into `20260923000000` for fresh databases). Caught by `scripts/check-rls-coverage.ts`. |
 
 To add a new migration, create a new `supabase/migrations/<timestamp>_<name>.sql` file with a
 timestamp later than the last one, and apply it the same way as the existing ones (see

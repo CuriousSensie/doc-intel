@@ -220,7 +220,7 @@ The boilerplate's generic Files module (`src/modules/files/`) was removed entire
 - `suspendOrganization(actorId, organizationId): Promise<void>`
 - `unsuspendOrganization(actorId, organizationId): Promise<void>`
 - `deleteOrganizationAdmin(actorId, organizationId, metadata?: Json): Promise<void>` — logs the event **before** deleting (the `audit_logs.organization_id` FK requires the row to still exist at insert time).
-- `reprovisionOrganizationAdmin(actorId, organizationId): Promise<void>` — Pomočnik. Throws `ConflictError` unless `provisioning_status` is `pending`/`provisioning_failed`; enqueues `provisionTenant` (reusing its idempotent find-or-create) and logs `admin.organization.reprovision_requested`.
+- `reprovisionOrganizationAdmin(actorId, organizationId): Promise<void>` — Documenti. Throws `ConflictError` unless `provisioning_status` is `pending`/`provisioning_failed`; enqueues `provisionTenant` (reusing its idempotent find-or-create) and logs `admin.organization.reprovision_requested`.
 
 ### `billing.service.ts`
 - `setSubscriptionPlatformStatus(actorId, owner: BillingOwner, disabled: boolean): Promise<void>` — toggles `subscriptions.platform_disabled_at`; throws `NotFoundError` if the owner has no subscription. Never calls Stripe.
@@ -238,7 +238,7 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 - `suspendOrganizationAction(formData: FormData)`
 - `unsuspendOrganizationAction(formData: FormData)`
 - `deleteOrganizationAdminAction(formData: FormData)`
-- `reprovisionOrganizationAction(formData: FormData)` — Pomočnik. `specs/01-architecture.md`'s `POST /admin/orgs/:id/reprovision`, implemented as a Server Action per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md).
+- `reprovisionOrganizationAction(formData: FormData)` — Documenti. `specs/01-architecture.md`'s `POST /admin/orgs/:id/reprovision`, implemented as a Server Action per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md).
 - `adjustCreditsAction(formData: FormData)` — wraps `adminAdjustCredits`.
 - `toggleSubscriptionPlatformStatusAction(formData: FormData)`
 
@@ -253,7 +253,7 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 - `logEvent(event: AppEvent): Promise<void>` — fans out to `sinks: EventSink[]` (currently `[consoleSink, auditLogSink]`); never throws — a sink's failure is caught and logged.
 
 ### `types.ts`
-- `type AppEvent = { actorId: string | null; actorType?: "user"|"system"|"rule"|"import"|"ai"; action: string; entityType?; entityId?; organizationId?: string | null; metadata?: Json; ipAddress?: string | null; userAgent?: string | null }` — `actorType` defaults to `"user"` in the sink (ADR-0005, Pomočnik).
+- `type AppEvent = { actorId: string | null; actorType?: "user"|"system"|"rule"|"import"|"ai"; action: string; entityType?; entityId?; organizationId?: string | null; metadata?: Json; ipAddress?: string | null; userAgent?: string | null }` — `actorType` defaults to `"user"` in the sink (ADR-0005, Documenti).
 - `type EventSink = { name: string; handle(event: AppEvent): Promise<void> }`
 
 ### `sinks/console-sink.ts` / `sinks/audit-log-sink.ts`
@@ -265,7 +265,7 @@ All `requireFeature("admin")` + `requireAdmin()` gated:
 
 ## `src/lib/paperless/`
 
-Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; `paperlessAdminClient()` is provisioning-only (ESLint-restricted to `src/modules/tenants/**` and `worker/jobs/provision-tenant.ts`).
+Documenti. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; `paperlessAdminClient()` is provisioning-only (ESLint-restricted to `src/modules/tenants/**` and `worker/jobs/provision-tenant.ts`).
 
 ### `client.ts`
 - `class PaperlessClient` — `get<T>(path)`, `post<T>(path, body)`, `patch<T>(path, body)`, `delete(path)`, `postForm<T>(path, form)` (120s timeout), `createOwnedObject<T>(path, body, { ownerId, groupId })` (permissions required, validated against the client's own tenant — isolation test #20), `getStream(path): Promise<Response>` — raw fetch Response for binary content (document preview/download), no retry, so a Route Handler can pipe `.body` straight through without JSON-decoding mangling it.
@@ -284,7 +284,7 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `type PaperlessTask`, `type PaperlessDocument` (includes `custom_fields: {field, value}[]`, confirmed live), `type PaperlessDocumentHistoryEntry`, `type PaperlessSetPermissions`, `type PaperlessListEnvelope<T>`
 - `const TENANT_MODEL_PERMISSIONS: string[]` — Django group permission codenames a tenant group needs (bare `codename`, confirmed live — `docs/spike-findings.md` §1).
 
-### `documents.ts` — Pomočnik
+### `documents.ts` — Documenti
 - `getPaperlessDocument(client, paperlessDocumentId): Promise<PaperlessDocument>`
 - `updatePaperlessDocument(client, paperlessDocumentId, patch: {title?, created?, document_type?, custom_fields?}): Promise<PaperlessDocument>` — specs/03-api.md `PATCH /documents/:id`'s write-through; returns Paperless's own post-write shape so the caller mirrors what was actually stored.
 - `getPaperlessDocumentHistory(client, paperlessDocumentId): Promise<PaperlessDocumentHistoryEntry[]>` — confirmed live: a plain array, not paginated on this version.
@@ -303,17 +303,17 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `createUploadIntent(userId, organizationId, { filename, size, mimeType }): Promise<{ uploadId, signedUrl, token, path }>` — validates against `src/config/documents.ts`; inserts via the caller's own RLS-scoped client; deletes the row if `createSignedUploadUrl()` fails.
 - `completeUpload(userId, uploadId): Promise<DocumentUpload>` — confirms the object exists in storage (`storage.list()`) before flipping `pending` → `uploaded` and enqueueing `validateUpload`.
 - `listDocuments(organizationId, options?: ListDocumentsOptions): Promise<{items, nextCursor}>` — mixed-filter (specs/05): `documentTypeKey`/`status`/`dateFrom`/`dateTo` served from our mirror; `q`/`tag` delegated to Paperless first (capped at `MAX_PAPERLESS_ID_SET` = 2000 ids), then intersected; `entityId`/`hasNoConnections` business filters resolved entirely from our DB.
-- `listDocumentIds(organizationId, options?, cap?): Promise<string[]>` — Pomočnik Milestone 7. Loops `listDocuments()`'s own cursor to resolve a filter into a capped id set — backs "select all matching filter" for bulk actions and export.
+- `listDocumentIds(organizationId, options?, cap?): Promise<string[]>` — Documenti Milestone 7. Loops `listDocuments()`'s own cursor to resolve a filter into a capped id set — backs "select all matching filter" for bulk actions and export.
 - `getDocument(documentId): Promise<DocumentDetails>` — no `organizationId` param (derived from the fetched row; RLS scopes the read). One parallel `Promise.all` fan-out: mirror row's connections (`getConnections()`), a best-effort live Paperless read (`paperless: null` on any failure, never fails the page), and history.
 - `getDocumentHistory(documentId, options?: {db?, organizationId?, paperlessDocumentId?}): Promise<DocumentHistoryEntry[]>` — merged Paperless `/api/documents/:id/history/` + our own `audit_logs`, sorted by timestamp. Options let `getDocument()` pass through what it already fetched, skipping a redundant row lookup.
 - `updateDocument(userId, organizationId, documentId, {title?, documentDate?, documentTypeId?, customFieldValues?}): Promise<Document>` — write-through to Paperless first, mirror updated via the admin client from Paperless's own response (`documents` has no update RLS policy); explicitly rejects a `read-only` member before calling Paperless at all.
 
 ### `documents.actions.ts`
 - `listDocumentsAction`, `getDocumentAction`, `getDocumentHistoryAction`, `updateDocumentAction` — typed Server Action wrappers (ADR-0009), `buildRequestContext()`-based.
-- `countDocumentsMatchingFilterAction(filter?): Promise<{count}>` — Pomočnik Milestone 7. The count-confirmation step before a filter-scoped bulk action or export fires.
-- `bulkEditDocumentsAction({paperlessDocumentIds, method, parameters?}): Promise<{operationId}>` — Pomočnik Milestone 7. Proxies Paperless's own `bulk_edit` (never reimplemented); writes a completed `background_operations` row purely for history/audit, since Paperless applies the edit atomically and synchronously server-side.
+- `countDocumentsMatchingFilterAction(filter?): Promise<{count}>` — Documenti Milestone 7. The count-confirmation step before a filter-scoped bulk action or export fires.
+- `bulkEditDocumentsAction({paperlessDocumentIds, method, parameters?}): Promise<{operationId}>` — Documenti Milestone 7. Proxies Paperless's own `bulk_edit` (never reimplemented); writes a completed `background_operations` row purely for history/audit, since Paperless applies the edit atomically and synchronously server-side.
 
-## `src/modules/entities/` and `src/modules/entity-types/` — Pomočnik Level 1
+## `src/modules/entities/` and `src/modules/entity-types/` — Documenti Level 1
 
 ### `entities.service.ts`
 - `type Entity`, `type EntityIdentifier`
@@ -334,41 +334,42 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 ### `entities.actions.ts` / `entity-types.actions.ts`
 - `createEntityFormAction(formData)`, `createEntityTypeFormAction(formData)`, `addFieldFormAction(formData)`, `removeFieldFormAction(formData)` — native-form Server Actions (ADR-0009); every success path redirects via `withStatus()` (a query-param-bearing URL), not the bare list path — this codebase has no `revalidatePath`, so a same-URL redirect does not refetch stale Server Component data (a real bug found via e2e testing).
 
-## `src/modules/connections/` — Pomočnik Level 1
+## `src/modules/connections/` — Documenti Level 1
 
 ### `connections.service.ts`
 - `type Connection`, `type ConnectableKind = "document" | "entity"`, `type Relation`, `type ConnectionWithOther`
 - `getConnections(ctx, kind, id): Promise<ConnectionWithOther[]>` — the one union-query helper (both directions, hydrated with the other side's label/entity-type).
 - `createConnection(ctx, {sourceKind, sourceId, targetKind, targetId, relation?, createdVia?, ruleId?}): Promise<Connection>` — rejects self-connection; rejects a source/target id that doesn't belong to the caller's org (`assertBelongsToOrg()`, isolation test #9); maps a unique-pair violation to `ConflictError`.
 - `deleteConnection(ctx, connectionId): Promise<void>` — soft delete.
-- `bulkCreateConnections(ctx, {sourceKind, sourceIds, targetKind, targetId, relation?, createdVia?}, onProgress?): Promise<{createdIds, skippedIds, failures}>` — Pomočnik Milestone 7. Loops `createConnection()` per item.
+- `bulkCreateConnections(ctx, {sourceKind, sourceIds, targetKind, targetId, relation?, createdVia?}, onProgress?): Promise<{createdIds, skippedIds, failures}>` — Documenti Milestone 7. Loops `createConnection()` per item.
 
 ### `entity-merge.service.ts`
 - `mergeEntities(ctx, {keepId, mergeId}): Promise<void>` — thin wrapper over the `merge_entities()` Postgres function (`docs/DATABASE.md`). Requires a request-context `ctx` (the RPC checks `auth.uid()` itself).
 
 ### `connections.actions.ts`
 - `createConnectionAction`, `deleteConnectionAction`, `getConnectionsAction`, `mergeEntitiesAction` — Server Action wrappers.
-- `bulkConnectDocumentsAction({documentIds?, filter?, targetKind, targetId, relation?}): Promise<{mode:"sync",operationId,created,skipped,failed} | {mode:"async",operationId,total}>` — Pomočnik Milestone 7. ≤50 items resolved runs synchronously; above that, enqueues `worker/jobs/bulk-action.ts`.
+- `bulkConnectDocumentsAction({documentIds?, filter?, targetKind, targetId, relation?}): Promise<{mode:"sync",operationId,created,skipped,failed} | {mode:"async",operationId,total}>` — Documenti Milestone 7. ≤50 items resolved runs synchronously; above that, enqueues `worker/jobs/bulk-action.ts`.
 - `undoBulkConnectAction(operationId): Promise<void>` — reverses the connections a given bulk-connect operation created.
 - `getBackgroundOperationAction(operationId)` — polling read for both bulk-connect and export progress.
 
-## `src/modules/saved-views/` — Pomočnik Level 1
+## `src/modules/saved-views/` — Documenti Level 1
 - `ensureStarterViews(ctx): Promise<SavedView[]>` — lazily seeds the five spec-required starter views on first call, no-ops if any already exist.
 - `listSavedViews(ctx): Promise<SavedView[]>`
+- `createSavedView`, `getSavedView`, `renameSavedView`, `deleteSavedView` — plus `*Action` wrappers. `view_kind` is `dynamic` (stores `filters`) or `static` (stores `document_ids`).
 
-## `src/modules/background-operations/` — Pomočnik Level 1
+## `src/modules/background-operations/` — Documenti Level 1
 - `type BackgroundOperation`
 - `createBackgroundOperation(ctx, {kind, params, totalCount?}): Promise<BackgroundOperation>`, `getBackgroundOperation(ctx, id): Promise<BackgroundOperation>`
 - `updateBackgroundOperationProgress(ctx, id, {processedCount, successCount?, failureCount?}): Promise<void>`, `completeBackgroundOperation(ctx, id, {successCount, failureCount, failures?, result?}): Promise<void>`, `failBackgroundOperation(ctx, id, errorMessage): Promise<void>` — worker-only (no update RLS policy on this table; callers use the admin client from a job context).
 
-## `src/modules/exports/` — Pomočnik Level 1
+## `src/modules/exports/` — Documenti Level 1
 - `resolveExportData(ctx, documentIds): Promise<{rows, entityTypeColumns}>` — batched (one connections query per direction, one entities query, one entity_types query) connected-entity column resolution.
 - `buildCsv(data): string` (`file-builders.ts`) — `;` delimiter, UTF-8 BOM, `dd.mm.yyyy` dates.
 - `buildXlsx(data): Promise<Buffer>` — streams via `exceljs`.
 - `createExportAction({documentIds?, filter?, format}): Promise<{operationId, total}>` — always enqueues `worker/jobs/export.ts` (never runs synchronously, regardless of row count).
 - `getExportAction(operationId)` — polling read.
 
-## `src/modules/imports/` — Pomočnik Level 1
+## `src/modules/imports/` — Documenti Level 1
 - `type ImportJob`, `type ImportRow`, `type ImportMappingRecord`
 - `createImportJob(ctx, {kind, filename, size, fromMappingId?}): Promise<{importJobId, signedUrl, token, path}>` — validates file kind/size, inserts a draft via the caller context, and signs an upload URL in the private `import-sources` bucket.
 - `analyzeImportJob(ctx, id, {encoding?, delimiter?} = {}): Promise<{columns, rowCount, encoding?, delimiter?}>` — parses CSV/TSV/XLSX or a ZIP manifest, materializes every source row into `import_rows`, and persists a bounded preview in `import_jobs.options.analysis`.
@@ -383,7 +384,34 @@ Pomočnik. `paperlessFor(orgId)` is the only way to get a tenant-scoped client; 
 - `imports.actions.ts`: typed Server Action wrappers for the UI. These return `{data}` / `{error}` objects instead of redirecting because the wizard is interactive.
 - `imports.report.ts`: `buildImportReportCsv(job, rows): string`
 
-## Route Handlers — Pomočnik
+## `src/modules/documents/document-shares.*` — Documenti Level 1
+
+- `getDocumentPermissions` / `loadDocumentPermissions(documentId)` — wrappers over the `get_document_permissions()` RPC (one round trip for the Permissions tab).
+- `shareDocument(...)` / `unshareDocument(...)` (see `document-shares.service.ts` for the exact signature) — call the `share_document()`/`unshare_document()` SQL functions (audit in the same transaction, ADR-0008). `userId` null = everyone in the org.
+- `shareDocumentAction(input)`, `unshareDocumentAction(input)` — Server Actions returning the refreshed `DocumentPermissions`. Schemas in `document-shares.schemas.ts`.
+
+## `src/modules/rules/` — Documenti Level 1
+
+- `rules.schemas.ts` — the DSL: `ruleTriggerSchema`, recursive `all`/`any` conditions with `CONDITION_OPERATORS`, and the action discriminated union (`connect_entity`, `disconnect_entity`, `set_custom_field`, `set_document_type`, `add_tag`/`remove_tag`, `set_correspondent`, `set_storage_path`, `assign_responsible`, `create_reminder`, `notify`). Shared by the API and the builder UI.
+- `rules.service.ts` — `getRule`, `listRules`, `createRule`, `updateRule`, `deleteRule`, `listRulesForTrigger`, `listRuleRunsForRule`, `listRuleRunsForDocument`, `countRuleRunsForRules`. Test and backfill orchestration live in `rules.actions.ts` and `worker/jobs/backfill-rule.ts`.
+- `rules.evaluator.ts` (pure, unit-tested) and `rules.dispatcher.ts` (applies actions through `apply_rule_action()`); `rules.context.ts` builds the per-document evaluation context.
+- `rules.delegation.ts` — `evaluateForDelegation()`: intentional no-op returning `{delegated: false}` (ADR-0006).
+- Actions: `createRuleAction`, `updateRuleAction`, `deleteRuleAction`, `listRulesAction`, `getRuleAction`, `listRuleRunsForRuleAction`, `listRuleRunsForDocumentAction`, `testRuleAction`, `previewRuleBackfillAction`, `startRuleBackfillAction`, `pauseRuleBackfillAction`, `resumeRuleBackfillAction`, `cancelRuleBackfillAction`, `undoRuleBackfillAction`, `listRuleBackfillsForRuleAction`, plus `*FormAction` variants for `<form action>` usage.
+- `src/config/rules.ts` — cascade depth, evaluation timeout, regex length cap, backfill chunking.
+
+## `src/modules/attributes/` and `src/modules/custom-fields/` — Documenti Level 1
+
+- `attributes.actions.ts` — `saveAttributeFormAction(formData)`, `deleteAttributeFormAction(formData)`; `kind` is `tags | correspondents | document-types | custom-fields`.
+- `attributes.schemas.ts` — `attributeKindSchema`, `customFieldDataTypeSchema`, `matchingAlgorithmSchema`, and the combined form schema.
+- `custom-field-defs.service.ts` — the only permitted reader/writer of `custom_field_defs`.
+- `custom-field-defs.actions.ts` — `listCustomFieldDefsAction`, `createCustomFieldDefAction`, `updateCustomFieldDefAction`, `deleteCustomFieldDefAction`.
+- `custom-field-values.ts` — `mapRawCustomFieldValues()` converts Paperless's raw values into `KeyedCustomFieldValues`.
+
+## `src/modules/dashboard/` — Documenti Level 1
+
+- `getOrgStats(organizationId)`, `getMemberStats(...)`, `getPendingInvitesCount`, `getProvisioningStatus`, `getAttentionDocuments`, `getRecentUploads` — SQL-count backed (`get_org_dashboard_counts`, `get_member_dashboard_counts`).
+
+## Route Handlers — Documenti
 
 Per [ADR-0009](adr/0009-route-handlers-vs-server-actions.md): fetch/polling/streaming/download
 surfaces only; everything else is a Server Action (see the modules above).
@@ -394,15 +422,19 @@ surfaces only; everything else is a Server Action (see the modules above).
 | `POST /api/documents/upload-complete` | Confirms the storage object landed — `completeUpload()`. |
 | `GET /api/documents/[id]/preview` | Streams the file inline (sandboxed `<object>` target) — pipes `PaperlessClient#getStream()`'s body straight through, never a redirect to a raw Paperless URL carrying the tenant token. |
 | `GET /api/documents/[id]/download` | Same shape as preview; Paperless itself sets `Content-Disposition: attachment`. |
+| `GET /api/documents/[id]/thumbnail` | Streams the document thumbnail from Paperless for list/grid views, scoped by the RLS-checked document row. |
+| `GET /api/rule-backfills/[id]` | Polling endpoint for a rule backfill's status and counters (RLS-scoped `rule_backfills` read). |
+| `POST /api/webhooks/stripe` | Stripe webhook; signature-verified, idempotent via `webhook_events`. |
+| `GET /api/health` | Liveness: `{ok, service, timestamp}`. Used by uptime monitoring. |
 | `POST /api/internal/paperless/document-consumed` | HMAC-verified post-consume webhook — see `docs/SECURITY.md`. |
-| `GET /api/search?q=` | Pomočnik Level 1. Entity name/identifier match, scoped to the active org — backs the two-interaction connection picker. Entities only today; documents aren't searchable from this endpoint. |
-| `GET /api/exports/[id]/download` | Pomočnik Level 1 (Milestone 7). Loads the `background_operations` row (RLS-scoped), issues a 5-minute signed URL against the private `exports` bucket, 307-redirects. |
-| `GET /api/imports/[id]` | Pomočnik Level 1 (Phase 3). Polling endpoint for import job state, validation summary, row counters, and document/OCR progress for document imports. |
-| `GET /api/imports/[id]/report` | Pomočnik Level 1 (Phase 3). Streams the current `import_rows` report as CSV with RFC 5987 filename support for non-ASCII source names. |
+| `GET /api/search?q=` | Documenti Level 1. Entity name/identifier match, scoped to the active org — backs the two-interaction connection picker. Entities only today; documents aren't searchable from this endpoint. |
+| `GET /api/exports/[id]/download` | Documenti Level 1 (Milestone 7). Loads the `background_operations` row (RLS-scoped), issues a 5-minute signed URL against the private `exports` bucket, 307-redirects. |
+| `GET /api/imports/[id]` | Documenti Level 1 (Phase 3). Polling endpoint for import job state, validation summary, row counters, and document/OCR progress for document imports. |
+| `GET /api/imports/[id]/report` | Documenti Level 1 (Phase 3). Streams the current `import_rows` report as CSV with RFC 5987 filename support for non-ASCII source names. |
 
 ## `src/lib/api-response.ts`
 
-`specs/03-api.md`'s `{data,meta}`/`{error}` envelope for Route Handlers — Pomočnik.
+`specs/03-api.md`'s `{data,meta}`/`{error}` envelope for Route Handlers — Documenti.
 - `apiSuccess<T>(data, meta?, init?: { status? }): NextResponse`
 - `apiError(error, details?): NextResponse` — maps any thrown value through `toSafeError()`; error codes are the existing lowercase `AppError` convention, not `specs/03-api.md`'s literal UPPER_SNAKE (`docs/GLOSSARY.md`).
 
@@ -439,7 +471,7 @@ surfaces only; everything else is a Server Action (see the modules above).
 - `billingConfig` — `{ currency, creditPacks, plans }`.
 
 ### `documents.ts`
-- `documentsConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes, pendingExpiryMinutes }` — Pomočnik, direct-to-storage, no spec'd size limit (see the file's own comment for the reasoning).
+- `documentsConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes, pendingExpiryMinutes }` — Documenti, direct-to-storage, no spec'd size limit (see the file's own comment for the reasoning).
 
 ### `avatar.ts`
 - `avatarConfig` — `{ bucket, maxSizeBytes, allowedMimeTypes }`.

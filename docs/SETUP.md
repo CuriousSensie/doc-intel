@@ -105,9 +105,9 @@ SMTP provider works the same way — nothing in the app is Hostinger-specific. S
 `docs/SECURITY.md` for how the `EmailProvider` abstraction and dev-recipient override work, and
 `docs/MODULES.md` for how to add another provider (e.g. a transactional API like Resend) later.
 
-## Pomočnik infrastructure (Paperless, worker, Docker Compose)
+## Documenti infrastructure (Paperless, worker, Docker Compose)
 
-Pomočnik adds a Paperless-ngx document engine and a BullMQ worker on top of this boilerplate.
+Documenti adds a Paperless-ngx document engine and a BullMQ worker on top of this boilerplate.
 Per D4 (`specs/01-architecture.md`) these — and the Next.js app itself — deploy via
 `infra/docker-compose.yml` on a single VPS, not Vercel; see the note under
 [Deployment](#deployment) below for why the Vercel walkthrough still exists in this file.
@@ -121,11 +121,11 @@ stack.
 cd infra
 cp .env.example .env
 # fill in PAPERLESS_DBPASS, PAPERLESS_ADMIN_USER/PASSWORD/MAIL, PAPERLESS_TOKEN_ENCRYPTION_KEY
-# (openssl rand -base64 32), POMOCNIK_WEBHOOK_SECRET (openssl rand -hex 32), CLAMAV_HOST/PORT
+# (openssl rand -base64 32), DOCUMENTI_WEBHOOK_SECRET (openssl rand -hex 32), CLAMAV_HOST/PORT
 # (defaults are fine: localhost/3310 outside Docker, clamav/3310 inside the compose network),
 # and the app's Supabase/Stripe/SMTP vars from the repo root .env.example.
 
-# Just Paperless + its dependencies — enough for the Phase 0 spike scripts:
+# Just Paperless + its dependencies — enough to run web/worker natively against it:
 docker compose --profile paperless up -d
 
 # Everything, including our app, worker, and ClamAV:
@@ -147,36 +147,51 @@ a generous `start_period` on its healthcheck — `worker` won't start until it r
 
 ### What's in the compose file
 
-See the header comment in `infra/docker-compose.yml` for the pinned image versions and why the
-Celery worker is split into its own container (`paperless-worker`) from day one — that split
-is a documented community pattern, not an officially packaged Paperless deployment mode, and is
-explicitly flagged there for verification during the Phase 0 import-throughput spike.
+`infra/docker-compose.yml` has two profiles: `paperless` (Paperless-ngx + Postgres, Redis, Gotenberg,
+Tika) and `full` (adds `redis-app`, `clamav`, `web`, `worker`, `nginx`). Image versions are pinned;
+see the header comment in the file. Paperless runs in its all-in-one mode: the separate
+`paperless-worker` service is defined but disabled (profile `paperless-worker-disabled-pending-fix`)
+because it crash-loops on the pinned 3.1.3 image (`docs/spike-findings.md` §0). Upgrade Paperless only
+after re-running the isolation suite.
 
-### Phase 0 spike scripts
+`web` is built with the four `NEXT_PUBLIC_*` variables as **build args**, read from `infra/.env`
+(they are inlined into the client bundle at build time). Changing one requires
+`docker compose --profile full up -d --build web`.
 
-Before building product code against Paperless, `scripts/spike/` answers the four de-risking
-questions in `specs/11-roadmap.md` — isolation, event-bridge reliability, Slovenian OCR
-fidelity, import throughput — against this real running instance. See
-`scripts/spike/README.md` for how to run each one, and `docs/spike-findings.md` for recorded
-results.
+### Running natively (day-to-day development)
+
+```bash
+cd infra && docker compose --profile paperless up -d        # Paperless + deps
+docker compose --profile full up -d redis-app clamav         # queue + AV, host-exposed on 6380/3310
+cd .. && npm run dev                                          # web on :3000
+npm run worker:start                                          # worker (separate terminal)
+```
+
+The worker must be running for provisioning, uploads, imports, rules and exports to make progress.
+
+### Historical spike scripts
+
+The Phase 0 spike scripts were removed; their findings are in `docs/spike-findings.md` and their
+isolation checks live on in `e2e/isolation*.spec.ts`.
 
 ### Event bridge
 
-`infra/scripts/notify-pomocnik.sh` is mounted into `paperless-webserver` and set as
-`PAPERLESS_POST_CONSUME_SCRIPT`. It needs `POMOCNIK_WEBHOOK_SECRET` (shared with
+`infra/scripts/notify-documenti.sh` is mounted into `paperless-webserver` and set as
+`PAPERLESS_POST_CONSUME_SCRIPT`. It needs `DOCUMENTI_WEBHOOK_SECRET` (shared with
 `src/app/api/internal/paperless/document-consumed/route.ts`, Phase 1) and
-`POMOCNIK_INTERNAL_URL` pointing at the `web` service's Docker-network address — never a
+`DOCUMENTI_INTERNAL_URL` pointing at the `web` service's Docker-network address — never a
 public URL, since that route is nginx-blocked from outside (`infra/nginx/conf.d/default.conf`).
 
 ## Deployment
 
-This is a standard Next.js app — any host that runs `next build`/`next start` (or the Next.js
-runtime directly) works, and the steps below (Vercel) are kept as the generic boilerplate's
-default walkthrough for other products cloned from it. **Pomočnik itself does not use this path**
-— per D4, the app, worker, and Paperless stack deploy together via `infra/docker-compose.yml`
-on a single VPS (see [Pomočnik infrastructure](#pomočnik-infrastructure-paperless-worker-docker-compose)
-above); only Supabase (Postgres/Auth/Storage) is the managed Cloud service this Vercel-era section
-already assumes.
+**Documenti's production deployment is documented in [RELEASE_PLAN.md](RELEASE_PLAN.md)** (single VPS
+via `infra/docker-compose.yml`, Supabase Cloud for Postgres/Auth/Storage, per D4 and ADR-0003):
+environment checklist, staging rehearsal, migration order, rollback and monitoring. Use that, not
+the Vercel walkthrough below.
+
+The steps below are the generic boilerplate walkthrough, kept for other products cloned from this
+repo. Steps 2–6 (production Supabase project, env vars, redirect allow list, Stripe webhook, live
+mode) apply to Documenti verbatim; the Vercel-specific steps 1 and 7 do not.
 
 1. **Push the repo** to GitHub/GitLab/Bitbucket and import it into Vercel (or run `vercel` from
    the CLI). Vercel auto-detects Next.js — no build config needed beyond the env vars below.

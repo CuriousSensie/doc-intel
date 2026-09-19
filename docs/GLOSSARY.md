@@ -33,7 +33,7 @@ mentions `org_id` or `audit_events` is describing the same thing as the code's
 |---|---|---|
 | ORM: Drizzle | None — Supabase-JS + raw SQL migrations | [ADR-0001](adr/0001-native-supabase-over-drizzle.md) |
 | `apps/web`, `apps/worker`, `packages/*` monorepo | Single repo; `src/` (app) + `worker/` (worker) | [ADR-0002](adr/0002-single-repo-worker-entrypoint.md) |
-| `pomocnik-infra` (separate repo) | `infra/` (inside the main repo) | [ADR-0002](adr/0002-single-repo-worker-entrypoint.md) |
+| `documenti-infra` (separate repo) | `infra/` (inside the main repo) | [ADR-0002](adr/0002-single-repo-worker-entrypoint.md) |
 | Postgres (unspecified hosting) | Supabase Cloud (EU/Frankfurt region) | [ADR-0003](adr/0003-supabase-cloud-over-self-hosted.md) |
 | S3-compatible object storage | Supabase Cloud Storage (EU/Frankfurt region) | [ADR-0003](adr/0003-supabase-cloud-over-self-hosted.md) |
 | REST API routes (`specs/03-api.md`) | Server Actions (mutations) + Route Handlers (fetched/polled/webhook endpoints) | [ADR-0009](adr/0009-route-handlers-vs-server-actions.md) |
