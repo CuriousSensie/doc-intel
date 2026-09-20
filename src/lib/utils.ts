@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function absoluteUrl(path = "/") {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.documenti.net";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dokumenti.net";
   return new URL(path, baseUrl).toString();
 }
 

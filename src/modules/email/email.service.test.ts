@@ -11,7 +11,7 @@ const variables = {
   organizationName: "Acme Inc",
   inviterName: "Ada Lovelace",
   role: "admin",
-  acceptUrl: "https://www.documenti.net/invitations/abc123"
+  acceptUrl: "https://www.dokumenti.net/invitations/abc123"
 };
 
 describe("sendEmail", () => {

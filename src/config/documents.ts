@@ -1,4 +1,4 @@
-// Documenti document uploads. Direct-to-storage (specs/01-architecture.md §Upload), not
+// Dokumenti document uploads. Direct-to-storage (specs/01-architecture.md §Upload), not
 // server-buffered like avatar upload.
 export const documentsConfig = {
   bucket: "document-uploads",

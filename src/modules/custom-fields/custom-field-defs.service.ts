@@ -22,7 +22,7 @@ export type CustomFieldSelectOption = { id?: string; label: string };
 const UNIQUE_VIOLATION = "23505";
 
 // specs/02-data-model.md's decision table: "a link to a business entity (customer, project) —
-// Documenti connections — never a Paperless field." `documentlink` is the data type that
+// Dokumenti connections — never a Paperless field." `documentlink` is the data type that
 // represents exactly this, so it can never be backed by a real Paperless custom field —
 // specs/12-agent-rules.md rule 6, the single most likely wrong turn in this build. This is a
 // runtime assertion, not just a comment: violating it is rejected, not merely discouraged.

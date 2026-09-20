@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-// Must match infra/scripts/notify-documenti.sh's tolerance expectations — that script signs
+// Must match infra/scripts/notify-dokumenti.sh's tolerance expectations — that script signs
 // body+timestamp together specifically so a captured request can't be replayed indefinitely; a
 // signature alone (no timestamp binding) would never expire.
 const MAX_CLOCK_SKEW_SECONDS = 5 * 60;

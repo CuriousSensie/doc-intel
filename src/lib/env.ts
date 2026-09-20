@@ -3,9 +3,9 @@ import { z } from "zod";
 const emailProviderSchema = z.enum(["console", "smtp"]);
 
 export const envSchema = z.object({
-  NEXT_PUBLIC_APP_URL: z.string().url().default("https://www.documenti.net"),
-  NEXT_PUBLIC_APP_NAME: z.string().min(1).default("Documenti"),
-  SUPPORT_EMAIL: z.string().email().default("support@documenti.net"),
+  NEXT_PUBLIC_APP_URL: z.string().url().default("https://www.dokumenti.net"),
+  NEXT_PUBLIC_APP_NAME: z.string().min(1).default("Dokumenti"),
+  SUPPORT_EMAIL: z.string().email().default("support@dokumenti.net"),
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional().or(z.literal("")),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
@@ -19,7 +19,7 @@ export const envSchema = z.object({
   STRIPE_PRICE_CREDITS_GROWTH: z.string().optional(),
   STRIPE_PRICE_CREDITS_SCALE: z.string().optional(),
   EMAIL_PROVIDER: emailProviderSchema.default("console"),
-  EMAIL_FROM: z.string().min(1).default("Documenti <no-reply@documenti.net>"),
+  EMAIL_FROM: z.string().min(1).default("Dokumenti <no-reply@dokumenti.net>"),
   EMAIL_DEV_RECIPIENT: z.string().email().optional().or(z.literal("")),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
@@ -47,9 +47,9 @@ export const envSchema = z.object({
   // validate-upload.ts's AV scan (specs/10-nonfunctional.md §Security). clamd's INSTREAM port.
   CLAMAV_HOST: z.string().default("localhost"),
   CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
-  // Shared with infra/scripts/notify-documenti.sh (Paperless container's env) — signs the
+  // Shared with infra/scripts/notify-dokumenti.sh (Paperless container's env) — signs the
   // post-consume webhook's body+timestamp. /api/internal/paperless/document-consumed.
-  DOCUMENTI_WEBHOOK_SECRET: z.string().optional()
+  DOKUMENTI_WEBHOOK_SECRET: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
@@ -101,7 +101,7 @@ function readProcessEnv(): Record<string, string | undefined> {
     PAPERLESS_TOKEN_ENCRYPTION_KEY: process.env.PAPERLESS_TOKEN_ENCRYPTION_KEY,
     CLAMAV_HOST: process.env.CLAMAV_HOST,
     CLAMAV_PORT: process.env.CLAMAV_PORT,
-    DOCUMENTI_WEBHOOK_SECRET: process.env.DOCUMENTI_WEBHOOK_SECRET
+    DOKUMENTI_WEBHOOK_SECRET: process.env.DOKUMENTI_WEBHOOK_SECRET
   };
 }
 

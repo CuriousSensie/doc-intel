@@ -16,7 +16,7 @@ COPY . .
 # NEXT_PUBLIC_* is inlined into the client bundle at build time, so it must exist here, not only
 # at runtime (docs/RELEASE_PLAN.md §Build).
 ARG NEXT_PUBLIC_APP_URL
-ARG NEXT_PUBLIC_APP_NAME=Documenti
+ARG NEXT_PUBLIC_APP_NAME=Dokumenti
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \

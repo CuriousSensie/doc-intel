@@ -6,8 +6,8 @@ describe("parseEnv", () => {
   it("applies safe development defaults", () => {
     const env = parseEnv({});
 
-    expect(env.NEXT_PUBLIC_APP_URL).toBe("https://www.documenti.net");
-    expect(env.NEXT_PUBLIC_APP_NAME).toBe("Documenti");
+    expect(env.NEXT_PUBLIC_APP_URL).toBe("https://www.dokumenti.net");
+    expect(env.NEXT_PUBLIC_APP_NAME).toBe("Dokumenti");
     expect(env.EMAIL_PROVIDER).toBe("console");
     expect(env.SMTP_SECURE).toBe(false);
   });

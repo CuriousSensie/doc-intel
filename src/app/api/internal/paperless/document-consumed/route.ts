@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({ paperless_document_id: z.number().int().positive().nullable() });
 
 /**
- * specs/01-architecture.md §Event bridge's primary path: infra/scripts/notify-documenti.sh POSTs
+ * specs/01-architecture.md §Event bridge's primary path: infra/scripts/notify-dokumenti.sh POSTs
  * here from Paperless's post-consume hook, HMAC-signed over body+timestamp
  * (verifyPaperlessWebhookSignature). "Resolve the owning tenant... then continue as that
  * tenant... Enqueue a job. Do not do work in the request handler" — this handler's only real
@@ -24,8 +24,8 @@ const bodySchema = z.object({ paperless_document_id: z.number().int().positive()
 export async function POST(request: Request) {
   try {
     const body = await request.text();
-    const signature = request.headers.get("x-documenti-signature");
-    const timestamp = request.headers.get("x-documenti-timestamp");
+    const signature = request.headers.get("x-dokumenti-signature");
+    const timestamp = request.headers.get("x-dokumenti-timestamp");
 
     if (!signature || !timestamp) {
       throw new AuthenticationError("Missing webhook signature headers");
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       body,
       timestamp,
       signature,
-      requireEnv("DOCUMENTI_WEBHOOK_SECRET")
+      requireEnv("DOKUMENTI_WEBHOOK_SECRET")
     );
     if (!valid) {
       throw new AuthenticationError("Invalid or stale webhook signature");
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     const paperlessDocumentId = parsed.data.paperless_document_id;
     if (paperlessDocumentId == null) {
-      // notify-documenti.sh sends `paperless_document_id: null` when Paperless didn't pass
+      // notify-dokumenti.sh sends `paperless_document_id: null` when Paperless didn't pass
       // $DOCUMENT_ID — a validly-signed request with nothing to act on, not an error.
       return NextResponse.json({ received: true });
     }
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
 
     // Dedup/replay: reuse the generic webhook_events table (provider='paperless'), keyed by the
-    // signature itself — notify-documenti.sh has no event id of its own to give us, and the
+    // signature itself — notify-dokumenti.sh has no event id of its own to give us, and the
     // signature is already a deterministic, unique-per-request value within the timestamp
     // tolerance window. Same pattern as src/app/api/webhooks/stripe/route.ts.
     const { data: existing } = await admin
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     }
 
     // The webhook body carries no org info — resolve via paperless_object_map. Unresolvable (a
-    // document Documenti hasn't synced yet) is not an error: the reconciliation sweep
+    // document Dokumenti hasn't synced yet) is not an error: the reconciliation sweep
     // (specs/01-architecture.md §Event bridge, not yet built) is this path's designed backstop,
     // so skip enqueueing rather than guessing a tenant.
     const orgId = await resolveTenantForPaperlessDocument(paperlessDocumentId);

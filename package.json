@@ -1,8 +1,8 @@
 {
-  "name": "documenti",
+  "name": "dokumenti",
   "version": "0.1.0",
   "private": true,
-  "description": "Documenti document intelligence workspace built with Next.js, Supabase, Paperless, Stripe, SMTP email, and TypeScript.",
+  "description": "Dokumenti document intelligence workspace built with Next.js, Supabase, Paperless, Stripe, SMTP email, and TypeScript.",
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",

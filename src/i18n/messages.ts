@@ -11,7 +11,7 @@ const namespaces = [
   "admin",
   "billing",
   "emails",
-  // Documenti Level 1 — not part of the upstream Documenti.
+  // Dokumenti Level 1 — not part of the upstream Dokumenti.
   "documents",
   "entities",
   "entityTypes",

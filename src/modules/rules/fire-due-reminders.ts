@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/modules/notifications/notifications.service";
 
-// specs/07-rules-engine.md §Actions: create_reminder is delivered via "Documenti's
+// specs/07-rules-engine.md §Actions: create_reminder is delivered via "Dokumenti's
 // notification and email infrastructure" — no new task system. Global sweep (not tenant-scoped),
 // same shape as expire-abandoned-uploads.ts: selects every due, unfired reminder across every
 // tenant and notifies its assignee role's members.

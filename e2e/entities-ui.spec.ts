@@ -11,7 +11,7 @@ import {
 } from "./helpers/test-fixtures";
 
 // Milestone 6 (specs/05 Dashboard IA) — entity types, entities, views, and the connection
-// picker, all pure-Documenti-DB flows with no Paperless dependency, so this drives them through
+// picker, all pure-Dokumenti-DB flows with no Paperless dependency, so this drives them through
 // the real browser against the real Supabase Cloud project rather than mocking anything.
 //
 // Form-submission assertions use a longer-than-default timeout: ADR-0013 measured every simple

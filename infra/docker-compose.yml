@@ -1,4 +1,4 @@
-# Documenti infra — single EU-region host, Docker Compose (D4).
+# Dokumenti infra — single EU-region host, Docker Compose (D4).
 # Business Postgres/Auth/Storage is Supabase Cloud (ADR-0003), not a service here.
 #
 # Pinned: paperless-ngx 3.1.3, postgres 16, redis 7 (x2, independent), gotenberg 8,
@@ -11,10 +11,10 @@
 # Every host port is overridable (WEB_HOST_PORT, PAPERLESS_HOST_PORT, PAPERLESS_DB_HOST_PORT,
 # REDIS_APP_HOST_PORT, CLAMAV_HOST_PORT, NGINX_HTTP_PORT, NGINX_HTTPS_PORT) for shared hosts.
 
-name: documenti
+name: dokumenti
 
 networks:
-  documenti:
+  dokumenti:
     driver: bridge
 
 volumes:
@@ -34,7 +34,7 @@ services:
     image: postgres:16-alpine
     profiles: ["paperless", "full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     environment:
       POSTGRES_DB: ${PAPERLESS_DBNAME:-paperless}
       POSTGRES_USER: ${PAPERLESS_DBUSER:-paperless}
@@ -54,7 +54,7 @@ services:
     image: redis:7-alpine
     profiles: ["paperless", "full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     volumes:
       - redis-paperless-data:/data
     healthcheck:
@@ -67,7 +67,7 @@ services:
     image: gotenberg/gotenberg:8
     profiles: ["paperless", "full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     command:
       - "gotenberg"
       - "--chromium-disable-javascript=true"
@@ -77,7 +77,7 @@ services:
     image: apache/tika:2.9.2.1-full
     profiles: ["paperless", "full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
 
   # KNOWN GAP: paperless-worker below crash-loops on this pinned image (celery beat +
   # PAPERLESS_SECRET_KEY, root cause undiagnosed — see docs/spike-findings.md §0). Running
@@ -86,7 +86,7 @@ services:
     image: paperlessngx/paperless-ngx:3.1.3
     profiles: ["paperless", "full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     # host.docker.internal needs this on Linux (unlike Docker Desktop) — docs/spike-findings.md §2.
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -111,7 +111,7 @@ services:
       PAPERLESS_OCR_LANGUAGES: slv eng
       PAPERLESS_TIME_ZONE: Europe/Ljubljana
       PAPERLESS_URL: ${PAPERLESS_URL:?set in .env, e.g. https://paperless.internal}
-      PAPERLESS_POST_CONSUME_SCRIPT: /scripts/notify-documenti.sh
+      PAPERLESS_POST_CONSUME_SCRIPT: /scripts/notify-dokumenti.sh
       # All-in-one mode (see KNOWN GAP above) — this container does its own OCR/Celery work.
       PAPERLESS_TASK_WORKERS: "2"
       PAPERLESS_THREADS_PER_WORKER: "1"
@@ -120,7 +120,7 @@ services:
       - paperless-media:/usr/src/paperless/media
       - paperless-export:/usr/src/paperless/export
       - paperless-consume:/usr/src/paperless/consume
-      - ./scripts/notify-documenti.sh:/scripts/notify-documenti.sh:ro
+      - ./scripts/notify-dokumenti.sh:/scripts/notify-dokumenti.sh:ro
     ports:
       # Host-exposed for local dev only; nginx is the sole public entrypoint once `web` exists.
       - "127.0.0.1:${PAPERLESS_HOST_PORT:-8010}:8000"
@@ -130,7 +130,7 @@ services:
     image: paperlessngx/paperless-ngx:3.1.3
     profiles: ["paperless-worker-disabled-pending-fix"]
     restart: "no"
-    networks: [documenti]
+    networks: [dokumenti]
     depends_on:
       postgres-paperless: { condition: service_healthy }
       redis-paperless: { condition: service_healthy }
@@ -167,7 +167,7 @@ services:
     image: redis:7-alpine
     profiles: ["full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     volumes:
       - redis-app-data:/data
     healthcheck:
@@ -188,7 +188,7 @@ services:
     image: clamav/clamav:1.5.4
     profiles: ["full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     volumes:
       - clamav-data:/var/lib/clamav
     healthcheck:
@@ -208,12 +208,12 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
-        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Documenti}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Dokumenti}
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
     profiles: ["full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     env_file: .env
     environment:
       REDIS_URL: redis://redis-app:6379
@@ -228,7 +228,7 @@ services:
       dockerfile: Dockerfile.worker
     profiles: ["full"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     env_file: .env
     environment:
       REDIS_URL: redis://redis-app:6379
@@ -244,7 +244,7 @@ services:
     image: nginx:1.27-alpine
     profiles: ["nginx"]
     restart: unless-stopped
-    networks: [documenti]
+    networks: [dokumenti]
     depends_on: [web]
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro

@@ -56,7 +56,7 @@ describe("createCustomFieldDef — decision-rule enforcement (specs/02, rule 6)"
     ).rejects.toThrow(/never be.*backed by a Paperless custom field/);
   });
 
-  it("allows a documentlink field with no Paperless backing (Documenti-only)", async () => {
+  it("allows a documentlink field with no Paperless backing (Dokumenti-only)", async () => {
     vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
     const db = makeDb({
       custom_field_defs: [{ data: { id: "cfd-1", key: "linked_customer" }, error: null }]

@@ -2,16 +2,16 @@ import { billingConfig } from "@/config/billing";
 import { featureConfig } from "@/config/features";
 
 export const appConfig = {
-  name: process.env.NEXT_PUBLIC_APP_NAME ?? "Documenti",
+  name: process.env.NEXT_PUBLIC_APP_NAME ?? "Dokumenti",
   description:
-    "Documenti turns Paperless documents, entities, rules, imports, and team workflows into one connected document intelligence workspace.",
-  url: process.env.NEXT_PUBLIC_APP_URL ?? "https://www.documenti.net",
-  supportEmail: process.env.SUPPORT_EMAIL ?? "support@documenti.net",
+    "Dokumenti turns Paperless documents, entities, rules, imports, and team workflows into one connected document intelligence workspace.",
+  url: process.env.NEXT_PUBLIC_APP_URL ?? "https://www.dokumenti.net",
+  supportEmail: process.env.SUPPORT_EMAIL ?? "support@dokumenti.net",
   logo: {
-    label: "Documenti"
+    label: "Dokumenti"
   },
   social: {
-    github: "https://github.com/documenti/documenti"
+    github: "https://github.com/dokumenti/dokumenti"
   },
   auth: {
     password: true,
