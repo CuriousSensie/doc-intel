@@ -128,8 +128,10 @@ cp .env.example .env
 # Just Paperless + its dependencies — enough to run web/worker natively against it:
 docker compose --profile paperless up -d
 
-# Everything, including our app, worker, and ClamAV:
+# Everything except nginx: app, worker, queue, ClamAV, Paperless:
 docker compose --profile full up -d
+# Also the bundled nginx on 80/443 (skip if the host has its own reverse proxy):
+docker compose --profile full --profile nginx up -d
 ```
 
 Paperless's web UI/API is reachable at `http://localhost:8010` in this local setup (see the
@@ -156,7 +158,7 @@ after re-running the isolation suite.
 
 `web` is built with the four `NEXT_PUBLIC_*` variables as **build args**, read from `infra/.env`
 (they are inlined into the client bundle at build time). Changing one requires
-`docker compose --profile full up -d --build web`.
+`docker compose --profile full up -d --build web`. All host ports are overridable via env (see `infra/.env.example`); nginx is opt-in (`--profile nginx`) and is not started by `full`.
 
 ### Running natively (day-to-day development)
 
