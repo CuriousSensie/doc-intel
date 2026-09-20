@@ -1,12 +1,12 @@
 # Runs worker/index.ts via tsx, no build step — plain Node process (docs/adr/0002).
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 
 # re2 (src/lib/safe-regex.ts, used by worker/jobs/run-rule.ts's rule evaluation) falls back to
 # node-gyp compilation when no prebuilt binary matches musl libc — see Dockerfile's identical
 # comment.
-RUN apk add --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++ linux-headers
 COPY package.json package-lock.json ./
 RUN npm ci
 
