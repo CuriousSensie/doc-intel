@@ -524,6 +524,8 @@ export type Database = {
           created_at: string;
           updated_at: string;
           deleted_at: string | null;
+          // ADR-0019 — nullable, null ("unfiled") is a permanent supported state.
+          folder_id: string | null;
         };
         Insert: {
           id?: string;
@@ -545,6 +547,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
+          folder_id?: string | null;
         };
         Update: {
           title?: string;
@@ -559,6 +562,7 @@ export type Database = {
           synced_at?: string | null;
           updated_at?: string;
           deleted_at?: string | null;
+          folder_id?: string | null;
         };
         Relationships: [];
       };
@@ -633,6 +637,76 @@ export type Database = {
           import_row_id?: number | null;
           source_archive_key?: string | null;
           document_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // ADR-0019 — written only via create_folder/rename_folder/move_folder/delete_folder.
+      folders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          parent_folder_id: string | null;
+          name: string;
+          path: string;
+          path_ids: string[];
+          depth: number;
+          match_conditions: Json | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          parent_folder_id?: string | null;
+          name: string;
+          path: string;
+          path_ids?: string[];
+          depth?: number;
+          match_conditions?: Json | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          path?: string;
+          path_ids?: string[];
+          depth?: number;
+          match_conditions?: Json | null;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // ADR-0019 — written only via grant_folder_access/revoke_folder_access (no insert/update/
+      // delete RLS policies), mirroring document_shares.
+      folder_access: {
+        Row: {
+          id: string;
+          organization_id: string;
+          folder_id: string;
+          granted_to: string;
+          permission: "view" | "edit";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          folder_id: string;
+          granted_to: string;
+          permission: "view" | "edit";
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          permission?: "view" | "edit";
           updated_at?: string;
         };
         Relationships: [];
@@ -1540,6 +1614,59 @@ export type Database = {
       };
       unshare_document: {
         Args: { p_document_id: string; p_user_id: string | null };
+        Returns: undefined;
+      };
+      can_manage_folder: {
+        Args: { p_folder_id: string };
+        Returns: boolean;
+      };
+      can_access_folder: {
+        Args: { p_folder_id: string; p_require?: "view" | "edit" };
+        Returns: boolean;
+      };
+      can_access_document_via_folder: {
+        Args: { p_document_id: string };
+        Returns: boolean;
+      };
+      filter_folder_ids: {
+        Args: { p_organization_id: string; p_ids: string[]; p_required: "view" | "edit" | "manage" };
+        Returns: string[];
+      };
+      create_folder: {
+        Args: {
+          p_organization_id: string;
+          p_parent_folder_id: string | null;
+          p_name: string;
+          p_match_conditions?: Json | null;
+        };
+        Returns: string;
+      };
+      rename_folder: {
+        Args: { p_folder_id: string; p_new_name: string };
+        Returns: undefined;
+      };
+      move_folder: {
+        Args: { p_folder_id: string; p_new_parent_folder_id: string | null };
+        Returns: undefined;
+      };
+      delete_folder: {
+        Args: {
+          p_folder_id: string;
+          p_mode?:
+            | "require_empty"
+            | "reassign_documents_to_null"
+            | "reassign_documents_to"
+            | "cascade_delete_subfolders";
+          p_reassign_to_folder_id?: string | null;
+        };
+        Returns: undefined;
+      };
+      grant_folder_access: {
+        Args: { p_folder_id: string; p_user_id: string; p_permission: "view" | "edit" };
+        Returns: undefined;
+      };
+      revoke_folder_access: {
+        Args: { p_folder_id: string; p_user_id: string };
         Returns: undefined;
       };
       get_org_dashboard_counts: {
