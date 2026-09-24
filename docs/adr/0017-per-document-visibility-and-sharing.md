@@ -51,3 +51,20 @@ tenant, never member from member. The enforcement point therefore has to be our 
 - A change to `documents_select_member` is a security change: it needs the isolation suite
   (`e2e/isolation*.spec.ts`) plus a same-tenant two-member check before merge.
 - Deviates from the spec; recorded here and in `docs/SPEC_TRACEABILITY.md`.
+
+## Amendment (2026-09-24) — admin gets owner-equivalent document access
+
+Post-launch feedback (organizations/team revamp, see
+[ADR-0018](0018-one-organization-per-account.md)) established that "admin" is meant to be full
+management short of ownership. This ADR's original `array['owner']` checks made an admin unable
+to see, manage, or share a document they didn't create — the same gap the original decision
+above was written to close for ordinary members, just left open for admins.
+
+`20260929000000_admin_document_management_parity.sql` extends `documents_select_member`,
+`document_uploads_select_member`, `can_manage_document()`, `can_edit_document()`, and
+`get_document_permissions()` from `array['owner']` to `array['owner', 'admin']`. Owner-exclusive
+actions — transfer ownership, delete organization, block/remove members — are untouched; those
+still check `array['owner']` alone. The same migration also closed a related gap:
+`has_organization_write_access()` ran its own raw query instead of going through
+`is_organization_member()`/`has_organization_role()`, so a blocked member (ADR-0018) kept write
+access to documents after being blocked.
