@@ -61,3 +61,10 @@ export const moveDocumentsToFolderSchema = z.object({
   documentIds: z.array(z.string().uuid()).min(1),
   folderId: z.string().uuid().nullable()
 });
+
+// Phase D bulk folder upload — one relative path per file's directory (e.g.
+// "Documents/Invoices/2025"), capped well above what a real directory picker produces in one
+// batch (no spec'd number, chosen to be generous without being unbounded).
+export const resolveOrCreateFolderPathsSchema = z.object({
+  paths: z.array(z.string().trim().min(1).max(2000)).min(1).max(2000)
+});

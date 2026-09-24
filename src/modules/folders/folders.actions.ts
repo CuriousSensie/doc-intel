@@ -10,6 +10,7 @@ import {
   moveDocumentsToFolderSchema,
   moveFolderSchema,
   renameFolderSchema,
+  resolveOrCreateFolderPathsSchema,
   revokeFolderAccessSchema,
   updateFolderMatchConditionsSchema
 } from "./folders.schemas";
@@ -25,6 +26,7 @@ import {
   moveDocumentsToFolder,
   moveFolder,
   renameFolder,
+  resolveOrCreateFolderPaths,
   revokeFolderAccess,
   updateFolderMatchConditions
 } from "./folders.service";
@@ -103,4 +105,13 @@ export async function moveDocumentsToFolderAction(
   const parsed = moveDocumentsToFolderSchema.parse(input);
   const ctx = await buildRequestContext();
   return moveDocumentsToFolder(ctx, parsed.documentIds, parsed.folderId);
+}
+
+// Phase D bulk folder upload — called once per upload batch with every unique directory path
+// the picked files span, before any file itself is uploaded (see folder-upload-form.tsx).
+export async function resolveOrCreateFolderPathsAction(paths: string[]): Promise<Record<string, string>> {
+  requireFeature("folders");
+  const parsed = resolveOrCreateFolderPathsSchema.parse({ paths });
+  const ctx = await buildRequestContext();
+  return resolveOrCreateFolderPaths(ctx, parsed.paths);
 }

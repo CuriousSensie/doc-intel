@@ -272,6 +272,66 @@ export async function moveDocumentsToFolder(
   return { movedCount: allowed.length, skippedCount: documentIds.length - allowed.length };
 }
 
+// Phase D bulk folder upload. Walks each path's segments top-down, creating any missing folder
+// idempotently (get-or-create per segment against the already-resolved parent), so
+// "Invoices/2025" and "Invoices/2026" create "Invoices" exactly once and reuse it for both. No
+// dedicated get-or-create RPC exists (createFolder()/create_folder throws on a name collision
+// under the same parent) — resolved instead by seeding a (parentId, name) -> id lookup from
+// listFolderTree()'s already-RLS-scoped flat list, which also avoids adding SQL for something a
+// single extra read plus a fallback (below) already covers. The remaining race — two concurrent
+// callers creating the exact same missing segment at once — is handled by catching the
+// ValidationError create_folder's unique constraint raises for the loser and re-resolving that
+// segment against a fresh listFolderTree() read rather than failing the whole batch.
+export async function resolveOrCreateFolderPaths(
+  ctx: ServiceContext,
+  paths: string[]
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  if (paths.length === 0) return result;
+
+  let allFolders = await listFolderTree(ctx);
+  const idByParentAndName = new Map<string, string>();
+  for (const folder of allFolders) {
+    idByParentAndName.set(`${folder.parentFolderId ?? "root"}::${folder.name}`, folder.id);
+  }
+
+  for (const path of paths) {
+    const segments = path.split("/").map((s) => s.trim()).filter((s) => s.length > 0);
+    if (segments.length === 0) continue;
+
+    let parentId: string | null = null;
+    for (const segment of segments) {
+      const key = `${parentId ?? "root"}::${segment}`;
+      let folderId = idByParentAndName.get(key);
+
+      if (!folderId) {
+        try {
+          folderId = await createFolder(ctx, {
+            parentFolderId: parentId,
+            name: segment,
+            matchConditions: null
+          });
+        } catch (err) {
+          if (!(err instanceof ValidationError)) throw err;
+          // Lost the create race — someone else's identical segment landed first. Refresh and
+          // look it up rather than failing the batch.
+          allFolders = await listFolderTree(ctx);
+          const match = allFolders.find((f) => f.parentFolderId === parentId && f.name === segment);
+          if (!match) throw err;
+          folderId = match.id;
+        }
+        idByParentAndName.set(key, folderId);
+      }
+
+      parentId = folderId;
+    }
+
+    result[path] = parentId as string;
+  }
+
+  return result;
+}
+
 // ADR-0019's "folders have a matching pattern, like tags/document types" — evaluated on every
 // document.ingested fire (worker/jobs/run-rule.ts), independent of the tenant's authored rules:
 // a folder's own match_conditions is checked directly, not through the rules table. Deepest

@@ -132,3 +132,114 @@ describe("moveDocumentToFolder", () => {
     expect(from).not.toHaveBeenCalled();
   });
 });
+
+// Mocks listFolderTree()'s query chain (`.select().eq().is().order().order()`) — folder rows come
+// from `getRows()` so a test can simulate a fresh read returning newly-created rows (the
+// concurrent-create-race fallback path).
+function makeFoldersTable(getRows: () => unknown[]) {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+  chain.select = vi.fn(() => chain);
+  chain.eq = vi.fn(() => chain);
+  chain.is = vi.fn(() => ({
+    order: vi.fn(() => ({
+      order: vi.fn(() => Promise.resolve({ data: getRows(), error: null }))
+    }))
+  }));
+  return chain;
+}
+
+describe("resolveOrCreateFolderPaths", () => {
+  it("returns an empty map without touching the database for an empty input", async () => {
+    const from = vi.fn();
+    const ctx = makeCtx({ from } as never);
+    const { resolveOrCreateFolderPaths } = await import("./folders.service");
+
+    expect(await resolveOrCreateFolderPaths(ctx, [])).toEqual({});
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("creates each missing segment once and reuses it across sibling paths", async () => {
+    let rows: unknown[] = [];
+    const from = vi.fn((table: string) => (table === "folders" ? makeFoldersTable(() => rows) : undefined));
+    let nextId = 0;
+    const rpc = vi.fn((_fn: string, args: { p_parent_folder_id: string | null; p_name: string }) => {
+      const id = `folder-${++nextId}`;
+      rows = [
+        ...rows,
+        { id, parent_folder_id: args.p_parent_folder_id, name: args.p_name, path: "", depth: 0, match_conditions: null, created_by: null, created_at: "" }
+      ];
+      return Promise.resolve({ data: id, error: null });
+    });
+    const ctx = makeCtx({ from, rpc } as never);
+    const { resolveOrCreateFolderPaths } = await import("./folders.service");
+
+    const result = await resolveOrCreateFolderPaths(ctx, ["Invoices/2025", "Invoices/2026"]);
+
+    // "Invoices" created exactly once and reused as the parent for both "2025" and "2026".
+    expect(rpc).toHaveBeenCalledTimes(3);
+    const invoicesCreateCalls = rpc.mock.calls.filter((call) => call[1].p_name === "Invoices");
+    expect(invoicesCreateCalls).toHaveLength(1);
+    const call2025 = rpc.mock.calls.find((call) => call[1].p_name === "2025")!;
+    const call2026 = rpc.mock.calls.find((call) => call[1].p_name === "2026")!;
+    expect(call2025[1].p_parent_folder_id).toBe(call2026[1].p_parent_folder_id);
+    expect(Object.keys(result)).toEqual(["Invoices/2025", "Invoices/2026"]);
+    expect(result["Invoices/2025"]).not.toBe(result["Invoices/2026"]);
+  });
+
+  it("reuses an already-existing folder instead of recreating it", async () => {
+    const rows = [
+      {
+        id: "existing-invoices",
+        parent_folder_id: null,
+        name: "Invoices",
+        path: "/Invoices",
+        depth: 0,
+        match_conditions: null,
+        created_by: null,
+        created_at: ""
+      }
+    ];
+    const from = vi.fn((table: string) => (table === "folders" ? makeFoldersTable(() => rows) : undefined));
+    const rpc = vi.fn().mockResolvedValue({ data: "new-2025", error: null });
+    const ctx = makeCtx({ from, rpc } as never);
+    const { resolveOrCreateFolderPaths } = await import("./folders.service");
+
+    const result = await resolveOrCreateFolderPaths(ctx, ["Invoices/2025"]);
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      "create_folder",
+      expect.objectContaining({ p_parent_folder_id: "existing-invoices", p_name: "2025" })
+    );
+    expect(result["Invoices/2025"]).toBe("new-2025");
+  });
+
+  it("resolves a lost create race by re-reading instead of failing the batch", async () => {
+    let rows: unknown[] = [];
+    const from = vi.fn((table: string) => (table === "folders" ? makeFoldersTable(() => rows) : undefined));
+    const rpc = vi.fn().mockResolvedValueOnce({
+      error: { code: "P0001", message: "duplicate folder name" }
+    });
+    const ctx = makeCtx({ from, rpc } as never);
+    const { resolveOrCreateFolderPaths } = await import("./folders.service");
+
+    // Simulate a concurrent caller's create landing between the initial listFolderTree() read
+    // (empty) and this call's own create_folder attempt (which loses the race and throws).
+    rows = [
+      {
+        id: "winner-id",
+        parent_folder_id: null,
+        name: "Invoices",
+        path: "/Invoices",
+        depth: 0,
+        match_conditions: null,
+        created_by: null,
+        created_at: ""
+      }
+    ];
+
+    const result = await resolveOrCreateFolderPaths(ctx, ["Invoices"]);
+
+    expect(result.Invoices).toBe("winner-id");
+  });
+});
