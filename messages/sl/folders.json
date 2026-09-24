@@ -75,14 +75,14 @@
     "cleared": "Vzorec izbrisan",
     "clearPattern": "Izbriši vzorec",
     "field": {
-      "document.type": "Vrsta dokumenta",
-      "document.title": "Naslov",
-      "document.content": "Vsebina",
-      "document.correspondent": "Korespondent",
-      "document.date": "Datum",
-      "document.tags": "Oznake",
-      "document.filename": "Ime datoteke",
-      "document.source": "Vir"
+      "document_type": "Vrsta dokumenta",
+      "document_title": "Naslov",
+      "document_content": "Vsebina",
+      "document_correspondent": "Korespondent",
+      "document_date": "Datum",
+      "document_tags": "Oznake",
+      "document_filename": "Ime datoteke",
+      "document_source": "Vir"
     },
     "op": {
       "eq": "je",

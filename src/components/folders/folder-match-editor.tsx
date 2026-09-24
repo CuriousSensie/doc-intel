@@ -29,6 +29,21 @@ const MATCH_FIELDS = [
 ] as const;
 type MatchField = (typeof MATCH_FIELDS)[number];
 
+// next-intl splits a t() key on "." for nested-message lookup (same gotcha rules.schemas.ts's
+// TRIGGER_MESSAGE_KEYS documents), so a field value like "document.type" can never be used
+// directly as part of a key — messages/*/folders.json's `match.field` keys are the underscore
+// form specifically so this map is the only place that has to know it.
+const FIELD_MESSAGE_KEYS = {
+  "document.type": "document_type",
+  "document.title": "document_title",
+  "document.content": "document_content",
+  "document.correspondent": "document_correspondent",
+  "document.date": "document_date",
+  "document.tags": "document_tags",
+  "document.filename": "document_filename",
+  "document.source": "document_source"
+} as const satisfies Record<MatchField, string>;
+
 const OPS_NEEDING_NO_VALUE: ConditionOperator[] = ["is_empty", "is_not_empty"];
 const OPS_NEEDING_LIST: ConditionOperator[] = ["in", "not_in", "between"];
 
@@ -173,7 +188,7 @@ export function FolderMatchEditor({ folder }: { folder: Folder }) {
             >
               {MATCH_FIELDS.map((field) => (
                 <option key={field} value={field}>
-                  {t(`field.${field}`)}
+                  {t(`field.${FIELD_MESSAGE_KEYS[field]}`)}
                 </option>
               ))}
             </select>

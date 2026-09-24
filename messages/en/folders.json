@@ -75,14 +75,14 @@
     "cleared": "Pattern cleared",
     "clearPattern": "Clear pattern",
     "field": {
-      "document.type": "Document type",
-      "document.title": "Title",
-      "document.content": "Content",
-      "document.correspondent": "Correspondent",
-      "document.date": "Date",
-      "document.tags": "Tags",
-      "document.filename": "Filename",
-      "document.source": "Source"
+      "document_type": "Document type",
+      "document_title": "Title",
+      "document_content": "Content",
+      "document_correspondent": "Correspondent",
+      "document_date": "Date",
+      "document_tags": "Tags",
+      "document_filename": "Filename",
+      "document_source": "Source"
     },
     "op": {
       "eq": "is",
