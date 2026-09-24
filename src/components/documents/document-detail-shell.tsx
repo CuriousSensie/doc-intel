@@ -125,6 +125,7 @@ export function DocumentDetailShell({
   const [tagOptions, setTagOptions] = useState(filterOptions.tags);
   const [correspondentOptions, setCorrespondentOptions] = useState(filterOptions.correspondents);
   const [documentTypeOptions, setDocumentTypeOptions] = useState(filterOptions.documentTypes);
+  const [customFieldDefOptions, setCustomFieldDefOptions] = useState(customFieldDefs);
 
   const initialTypeId = useMemo(
     () => documentTypeOptions.find((dt) => toDocumentTypeKey(dt.name) === document.document_type_key)?.id ?? null,
@@ -173,7 +174,7 @@ export function DocumentDetailShell({
       draft
     );
     if (customFieldChanged) {
-      const applicableDefs = customFieldDefs.filter(
+      const applicableDefs = customFieldDefOptions.filter(
         (def) => def.data_type !== "documentlink" && isCustomFieldApplicable(def, document.document_type_key)
       );
       input.customFieldValues = applicableDefs
@@ -262,10 +263,11 @@ export function DocumentDetailShell({
                   document={document}
                   documentTypeOptions={documentTypeOptions}
                   draft={draft}
-                  customFieldDefs={customFieldDefs.filter(
+                  customFieldDefs={customFieldDefOptions.filter(
                     (def) => def.data_type !== "documentlink" && isCustomFieldApplicable(def, document.document_type_key)
                   )}
                   onCorrespondentCreated={(c) => setCorrespondentOptions((prev) => [...prev, c])}
+                  onCustomFieldDefCreated={(def) => setCustomFieldDefOptions((prev) => [...prev, def])}
                   onDocumentTypeCreated={(dt) => setDocumentTypeOptions((prev) => [...prev, dt])}
                   onDraftChange={handleDraftChange}
                   onTagCreated={(tag) => setTagOptions((prev) => [...prev, tag])}

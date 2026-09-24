@@ -29,6 +29,7 @@ import {
   listCustomFieldDefs,
   updateCustomFieldDef,
   type CustomFieldDataType,
+  type CustomFieldDef,
   type CustomFieldSelectOption
 } from "@/modules/custom-fields/custom-field-defs.service";
 
@@ -170,7 +171,7 @@ export async function createAttribute(
   ctx: ServiceContext,
   kind: AttributeKind,
   input: AttributeInput
-): Promise<void> {
+): Promise<CustomFieldDef | void> {
   if (kind === "custom-fields") {
     const dataType = input.dataType ?? "string";
     let paperlessCustomFieldId: number | null = null;
@@ -196,7 +197,7 @@ export async function createAttribute(
       options = created.extra_data?.select_options;
     }
 
-    await createCustomFieldDef(ctx, {
+    return createCustomFieldDef(ctx, {
       key: toCustomFieldKey(input.name),
       label: input.name,
       dataType,
@@ -205,7 +206,6 @@ export async function createAttribute(
       paperlessCustomFieldId,
       isRequired: input.isRequired ?? false
     });
-    return;
   }
 
   const client = await paperlessFor(ctx.orgId);

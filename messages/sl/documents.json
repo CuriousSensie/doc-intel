@@ -184,6 +184,9 @@
       "remove": "Odstrani {name}",
       "saveFailed": "Spremembe ni bilo mogoče shraniti",
       "createFailed": "Ni bilo mogoče ustvariti"
+    },
+    "customFieldPicker": {
+      "createTitle": "Ustvari nestandardno polje"
     }
   },
   "share": {

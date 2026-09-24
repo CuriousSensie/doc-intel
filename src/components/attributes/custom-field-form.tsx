@@ -17,6 +17,7 @@ export function CustomFieldForm({
   action,
   editing,
   defaultName,
+  defaultAppliesTo,
   documentTypeOptions,
   labels,
   dataTypeLabels,
@@ -25,6 +26,9 @@ export function CustomFieldForm({
   action: (formData: FormData) => void | Promise<void>;
   editing?: Pick<AttributeRow, "id" | "name" | "dataType" | "options" | "appliesTo">;
   defaultName?: string;
+  // Used only for a brand-new def (no `editing`) — e.g. the document sidebar's create-from-
+  // picker flow defaults to "scoped to the current document's type" instead of global.
+  defaultAppliesTo?: string[];
   documentTypeOptions: Array<{ key: string; name: string }>;
   labels: {
     name: string;
@@ -48,7 +52,7 @@ export function CustomFieldForm({
   dataTypeLabels: Record<CustomFieldDataType, string>;
   cancelControl: React.ReactNode;
 }) {
-  const initialAppliesTo = editing?.appliesTo ?? [];
+  const initialAppliesTo = editing?.appliesTo ?? defaultAppliesTo ?? [];
   const [scope, setScope] = useState<"global" | "scoped">(
     initialAppliesTo.length > 0 ? "scoped" : "global"
   );

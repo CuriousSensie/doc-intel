@@ -9,6 +9,8 @@ import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { withStatus } from "@/modules/auth/redirects";
 
+import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
+
 import { attributeFormSchema, deleteAttributeSchema, parseAttributeOptionsInput } from "./attributes.schemas";
 import { createAttribute, deleteAttribute, updateAttribute } from "./attributes.service";
 
@@ -78,6 +80,38 @@ export async function saveAttributeFormAction(formData: FormData) {
 
   const key = formData.get("id") ? "actions.saved" : "actions.created";
   return redirect({ href: withStatus(listPath(kind), "message", t(key)), locale });
+}
+
+// Non-redirecting sibling of saveAttributeFormAction, for the document sidebar's inline
+// "create a new field" popup (custom-field-picker.tsx): that dialog lives on the document
+// detail page, not /dashboard/attributes/custom-fields, so it needs the created def back to
+// select it immediately rather than a redirect to the attributes list.
+export async function createCustomFieldDefAction(formData: FormData): Promise<CustomFieldDef> {
+  requireFeature("entities");
+  const ctx = await buildRequestContext();
+  const parsed = attributeFormSchema.parse({
+    kind: "custom-fields",
+    name: formData.get("name"),
+    dataType: formData.get("dataType") || undefined,
+    options: formData.getAll("options").map(String),
+    appliesTo: formData.getAll("appliesTo").map(String),
+    isRequired: false
+  });
+
+  const created = await createAttribute(ctx, "custom-fields", {
+    name: parsed.name,
+    matchingAlgorithm: parsed.matchingAlgorithm,
+    dataType: parsed.dataType,
+    options: parseAttributeOptionsInput(parsed.options),
+    appliesTo: parsed.appliesTo,
+    isRequired: parsed.isRequired
+  });
+
+  if (!created) {
+    throw new Error("Failed to create custom field");
+  }
+
+  return created;
 }
 
 export async function deleteAttributeFormAction(formData: FormData) {

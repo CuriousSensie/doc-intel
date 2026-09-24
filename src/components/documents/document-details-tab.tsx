@@ -1,11 +1,14 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { CustomFieldPicker } from "@/components/documents/custom-field-picker";
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
 import { DocumentCustomFieldInput } from "@/components/documents/document-custom-field-input";
 import { Input } from "@/components/ui/input";
-import type { PaperlessCorrespondent, PaperlessDocumentType, PaperlessTag } from "@/lib/paperless/documents";
+import { toDocumentTypeKey, type PaperlessCorrespondent, type PaperlessDocumentType, type PaperlessTag } from "@/lib/paperless/documents";
+import type { CustomFieldDataType } from "@/modules/attributes/attributes.schemas";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type { DocumentDetails } from "@/modules/documents/documents.service";
 import type { DocumentDraft } from "@/components/documents/document-detail-shell";
@@ -31,6 +34,7 @@ export function DocumentDetailsTab({
   onTagCreated,
   onCorrespondentCreated,
   onDocumentTypeCreated,
+  onCustomFieldDefCreated,
   readOnly = false
 }: {
   document: DocumentDetails;
@@ -43,10 +47,44 @@ export function DocumentDetailsTab({
   onTagCreated: (tag: PaperlessTag) => void;
   onCorrespondentCreated: (c: PaperlessCorrespondent) => void;
   onDocumentTypeCreated: (dt: PaperlessDocumentType) => void;
+  onCustomFieldDefCreated: (def: CustomFieldDef) => void;
   // View-only access (a 'view' share, or a read-only member): fields render but can't change.
   readOnly?: boolean;
 }) {
   const t = useTranslations("documents.detail");
+  const tPicker = useTranslations("documents.detail.picker");
+  const tAttributes = useTranslations("common.attributes");
+
+  // Which fields show a value input — initialized from whichever fields already have a value
+  // (matches how tag/type chips already show what's assigned), then grows as the user picks
+  // more from CustomFieldPicker. Previously every applicable def was always shown, filled or
+  // not — the flat list this replaces.
+  const [visibleKeys, setVisibleKeys] = useState<string[]>(() =>
+    customFieldDefs
+      .filter((def) => {
+        const value = draft.customFieldValues[def.key];
+        return value !== undefined && value !== null && value !== "";
+      })
+      .map((def) => def.key)
+  );
+
+  const visibleDefs = customFieldDefs.filter((def) => visibleKeys.includes(def.key));
+  const availableDefs = customFieldDefs.filter((def) => !visibleKeys.includes(def.key));
+  const documentTypeKeyOptions = useMemo(
+    () => documentTypeOptions.map((dt) => ({ key: toDocumentTypeKey(dt.name), name: dt.name })),
+    [documentTypeOptions]
+  );
+  const dataTypeLabels: Record<CustomFieldDataType, string> = {
+    string: tAttributes("dataTypes.string"),
+    integer: tAttributes("dataTypes.integer"),
+    float: tAttributes("dataTypes.float"),
+    monetary: tAttributes("dataTypes.monetary"),
+    date: tAttributes("dataTypes.date"),
+    boolean: tAttributes("dataTypes.boolean"),
+    select: tAttributes("dataTypes.select"),
+    documentlink: tAttributes("dataTypes.documentlink"),
+    url: tAttributes("dataTypes.url")
+  };
 
   return (
     <div className="grid gap-5 pb-4">
@@ -114,22 +152,73 @@ export function DocumentDetailsTab({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted">
             {t("customFields")}
           </span>
-          <fieldset className="m-0 grid min-w-0 gap-3 border-0 p-0" disabled={readOnly}>
-            {customFieldDefs.map((def) => (
-              <label className="grid gap-1.5 text-sm font-medium" key={def.id}>
-                <span>{def.label}</span>
-                <DocumentCustomFieldInput
-                  def={def}
-                  onChange={(next) =>
-                    onDraftChange({
-                      customFieldValues: { ...draft.customFieldValues, [def.key]: next }
-                    })
-                  }
-                  value={draft.customFieldValues[def.key]}
-                />
-              </label>
-            ))}
-          </fieldset>
+
+          <CustomFieldPicker
+            availableDefs={availableDefs}
+            dataTypeLabels={dataTypeLabels}
+            disabled={readOnly}
+            documentTypeKey={document.document_type_key}
+            documentTypeOptions={documentTypeKeyOptions}
+            onCreated={(def) => {
+              onCustomFieldDefCreated(def);
+              setVisibleKeys((prev) => [...prev, def.key]);
+            }}
+            onRemove={(key) => {
+              setVisibleKeys((prev) => prev.filter((k) => k !== key));
+              const nextValues = { ...draft.customFieldValues };
+              delete nextValues[key];
+              onDraftChange({ customFieldValues: nextValues });
+            }}
+            onSelect={(def) => setVisibleKeys((prev) => [...prev, def.key])}
+            visibleDefs={visibleDefs}
+            labels={{
+              add: tPicker("add"),
+              searchPlaceholder: tPicker("searchPlaceholder"),
+              createNew: (name) => tPicker("createNew", { name }),
+              creating: tPicker("creating"),
+              createFailed: tPicker("createFailed"),
+              done: tPicker("done"),
+              remove: (name) => tPicker("remove", { name }),
+              createTitle: t("customFieldPicker.createTitle"),
+              createDescription: tAttributes("customFieldFormDescription"),
+              formName: tAttributes("form.name"),
+              formCreate: tAttributes("form.create"),
+              formSave: tAttributes("form.save"),
+              formCancel: tAttributes("form.cancel"),
+              formDataType: tAttributes("form.dataType"),
+              formDataTypeImmutableHint: tAttributes("form.dataTypeImmutableHint"),
+              formOptions: tAttributes("form.options"),
+              formOptionsHint: tAttributes("form.optionsHint"),
+              formOptionPlaceholder: tAttributes("form.optionPlaceholder"),
+              formAddOption: tAttributes("form.addOption"),
+              formRemoveOption: tAttributes("form.removeOption"),
+              formScope: tAttributes("form.scope"),
+              formScopeGlobal: tAttributes("form.scopeGlobal"),
+              formScopeGlobalHint: tAttributes("form.scopeGlobalHint"),
+              formScopeDocumentTypes: tAttributes("form.scopeDocumentTypes"),
+              formDocumentTypesSearchPlaceholder: tAttributes("form.documentTypesSearchPlaceholder"),
+              formDocumentTypesEmpty: tAttributes("form.documentTypesEmpty")
+            }}
+          />
+
+          {visibleDefs.length > 0 ? (
+            <fieldset className="m-0 grid min-w-0 gap-3 border-0 p-0" disabled={readOnly}>
+              {visibleDefs.map((def) => (
+                <label className="grid gap-1.5 text-sm font-medium" key={def.id}>
+                  <span>{def.label}</span>
+                  <DocumentCustomFieldInput
+                    def={def}
+                    onChange={(next) =>
+                      onDraftChange({
+                        customFieldValues: { ...draft.customFieldValues, [def.key]: next }
+                      })
+                    }
+                    value={draft.customFieldValues[def.key]}
+                  />
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
         </div>
       ) : null}
 

@@ -184,6 +184,9 @@
       "remove": "Remove {name}",
       "saveFailed": "Could not save this change",
       "createFailed": "Could not create this"
+    },
+    "customFieldPicker": {
+      "createTitle": "Create custom field"
     }
   },
   "share": {
