@@ -1,7 +1,18 @@
 "use client";
 
-import { ChevronDown, ChevronRight, FolderPlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  File,
+  FolderPlus,
+  Lock,
+  MoreHorizontal,
+  Pencil,
+  Sparkles,
+  Trash2
+} from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -30,11 +41,26 @@ import {
 } from "@/modules/folders/folders.actions";
 import type { DeleteFolderMode } from "@/modules/folders/folders.schemas";
 import type { Folder } from "@/modules/folders/folders.service";
+import type { Document } from "@/modules/documents/documents.service";
 
 // The mime type used to tag a folder drag payload — kept distinct from the document drag payload
 // (see document-list-view.tsx) so a drop handler can tell which kind it received.
 const FOLDER_DRAG_MIME = "application/x-doc-intel-folder";
 export const DOCUMENT_DRAG_MIME = "application/x-doc-intel-document-ids";
+
+// Sentinel node key for the root-level "Unfiled" pseudo-folder — it isn't a real `folders` row
+// (no id, no accessLevel, never manageable), so it's addressed by this fixed string everywhere
+// expand/cache state is keyed by folder id.
+export const UNFILED_KEY = "unfiled";
+
+export type DocCacheEntry = {
+  items: Document[];
+  page: number;
+  totalPages: number;
+  totalCount: number;
+  loading: boolean;
+  error: string | null;
+};
 
 type FolderNode = Folder & { children: FolderNode[] };
 
@@ -269,35 +295,131 @@ function NewSubfolderDialog({
   );
 }
 
+// A document leaf row — click navigates to the detail page (same route document-list-view.tsx
+// uses), draggable with the exact payload shape folder nodes' drop handlers already expect.
+function DocumentLeafRow({ document, depth }: { document: Document; depth: number }) {
+  const router = useRouter();
+
+  return (
+    <li
+      className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted hover:bg-panel-strong/60"
+      draggable
+      onClick={() => router.push(`/dashboard/documents/${document.id}`)}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DOCUMENT_DRAG_MIME, JSON.stringify([document.id]));
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      role="button"
+      style={{ paddingLeft: `${depth * 14 + 24}px` }}
+      tabIndex={0}
+    >
+      <File className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{document.title}</span>
+    </li>
+  );
+}
+
+function DocumentLeaves({
+  folderKey,
+  depth,
+  docCache,
+  onLoadMore
+}: {
+  folderKey: string;
+  depth: number;
+  docCache: Record<string, DocCacheEntry>;
+  onLoadMore: (folderKey: string) => void;
+}) {
+  const t = useTranslations("folders");
+  const entry = docCache[folderKey];
+
+  if (!entry) {
+    return (
+      <li className="px-1.5 py-1 text-xs text-muted" style={{ paddingLeft: `${depth * 14 + 24}px` }}>
+        {t("loadingDocuments")}
+      </li>
+    );
+  }
+  if (entry.error) {
+    return (
+      <li className="px-1.5 py-1 text-xs text-danger" style={{ paddingLeft: `${depth * 14 + 24}px` }}>
+        {entry.error}
+      </li>
+    );
+  }
+  if (entry.items.length === 0 && !entry.loading) {
+    return (
+      <li className="px-1.5 py-1 text-xs text-muted" style={{ paddingLeft: `${depth * 14 + 24}px` }}>
+        {t("noDocuments")}
+      </li>
+    );
+  }
+
+  return (
+    <>
+      {entry.items.map((document) => (
+        <DocumentLeafRow depth={depth} document={document} key={document.id} />
+      ))}
+      {entry.page < entry.totalPages ? (
+        <li style={{ paddingLeft: `${depth * 14 + 24}px` }}>
+          <button
+            className="px-1.5 py-1 text-xs text-muted underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+            disabled={entry.loading}
+            onClick={(e) => {
+              e.stopPropagation();
+              onLoadMore(folderKey);
+            }}
+            type="button"
+          >
+            {entry.loading ? t("loadingDocuments") : t("loadMore")}
+          </button>
+        </li>
+      ) : null}
+    </>
+  );
+}
+
 function FolderTreeNode({
   node,
   depth,
   allFolders,
-  selectedFolderId,
-  onNavigate,
+  expandedKeys,
+  docCache,
+  onToggle,
+  onLoadMore,
   onChanged,
+  onManage,
   dragOverId,
   setDragOverId
 }: {
   node: FolderNode;
   depth: number;
   allFolders: Folder[];
-  selectedFolderId: string | null | undefined;
-  onNavigate: (folderId: string) => void;
+  expandedKeys: Set<string>;
+  docCache: Record<string, DocCacheEntry>;
+  onToggle: (folderId: string) => void;
+  onLoadMore: (folderKey: string) => void;
   onChanged: () => void;
+  onManage: (folderId: string, tab: "access" | "match") => void;
   dragOverId: string | null;
   setDragOverId: (id: string | null) => void;
 }) {
   const t = useTranslations("folders");
-  const [expanded, setExpanded] = useState(true);
   const [renameOpen, setRenameOpen] = useState(false);
   const [newSubOpen, setNewSubOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const hasChildren = node.children.length > 0;
+  const isAncestorOnly = node.accessLevel === "ancestor";
+  const hasChildFolders = node.children.length > 0;
+  const canExpand = hasChildFolders || (node.documentCount ?? 0) > 0;
+  const expanded = expandedKeys.has(node.id);
   const isOver = dragOverId === node.id;
 
   function handleDragStart(e: React.DragEvent) {
+    if (isAncestorOnly) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData(FOLDER_DRAG_MIME, node.id);
     e.dataTransfer.effectAllowed = "move";
   }
@@ -305,13 +427,17 @@ function FolderTreeNode({
   function handleDragOver(e: React.DragEvent) {
     if (e.dataTransfer.types.includes(FOLDER_DRAG_MIME) || e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME)) {
       e.preventDefault();
-      setDragOverId(node.id);
+      if (!isAncestorOnly) setDragOverId(node.id);
     }
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOverId(null);
+    if (isAncestorOnly) {
+      toast.error(t("cannotManageAncestor"));
+      return;
+    }
     const draggedFolderId = e.dataTransfer.getData(FOLDER_DRAG_MIME);
     const draggedDocumentIds = e.dataTransfer.getData(DOCUMENT_DRAG_MIME);
 
@@ -347,13 +473,18 @@ function FolderTreeNode({
     }
   }
 
+  const countsLabel = t("counts", {
+    folders: node.childFolderCount ?? 0,
+    documents: node.documentCount ?? 0
+  });
+
   return (
     <li>
       <div
         className={`group flex items-center gap-1 rounded-md px-1.5 py-1 text-sm ${
-          selectedFolderId === node.id ? "bg-panel-strong font-semibold" : "hover:bg-panel-strong/60"
+          isAncestorOnly ? "text-muted opacity-60" : "hover:bg-panel-strong/60"
         } ${isOver ? "ring-2 ring-foreground/40" : ""} ${isPending ? "opacity-60" : ""}`}
-        draggable
+        draggable={!isAncestorOnly}
         onDragLeave={() => setDragOverId(dragOverId === node.id ? null : dragOverId)}
         onDragOver={handleDragOver}
         onDragStart={handleDragStart}
@@ -363,10 +494,11 @@ function FolderTreeNode({
         <button
           aria-label={expanded ? t("collapse") : t("expand")}
           className="flex size-5 shrink-0 items-center justify-center text-muted"
-          onClick={() => setExpanded((v) => !v)}
+          disabled={!canExpand}
+          onClick={() => onToggle(node.id)}
           type="button"
         >
-          {hasChildren ? (
+          {canExpand ? (
             expanded ? (
               <ChevronDown className="size-3.5" />
             ) : (
@@ -375,91 +507,111 @@ function FolderTreeNode({
           ) : null}
         </button>
         <button
-          className="min-w-0 flex-1 truncate text-left"
-          onClick={() => onNavigate(node.id)}
+          className="flex min-w-0 flex-1 items-center gap-2 truncate text-left"
+          onClick={() => onToggle(node.id)}
           type="button"
         >
-          {node.name}
+          <span className="truncate font-medium">{node.name}</span>
+          <span className="shrink-0 text-xs text-muted">{countsLabel}</span>
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              aria-label={t("folderActions")}
-              className="flex size-6 shrink-0 items-center justify-center rounded text-muted opacity-0 group-hover:opacity-100 hover:bg-panel"
-              type="button"
-            >
-              <MoreHorizontal className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setNewSubOpen(true)}>
-              <FolderPlus className="size-4" /> {t("newSubfolder")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
-              <Pencil className="size-4" /> {t("rename")}
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-danger" onSelect={() => setDeleteOpen(true)}>
-              <Trash2 className="size-4" /> {t("delete")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {!isAncestorOnly ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label={t("folderActions")}
+                className="flex size-6 shrink-0 items-center justify-center rounded text-muted opacity-0 group-hover:opacity-100 hover:bg-panel"
+                type="button"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setNewSubOpen(true)}>
+                <FolderPlus className="size-4" /> {t("newSubfolder")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+                <Pencil className="size-4" /> {t("rename")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onManage(node.id, "access")}>
+                <Lock className="size-4" /> {t("manageAccess")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onManage(node.id, "match")}>
+                <Sparkles className="size-4" /> {t("manageMatch")}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-danger" onSelect={() => setDeleteOpen(true)}>
+                <Trash2 className="size-4" /> {t("delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
 
-      {hasChildren && expanded ? (
+      {expanded ? (
         <ul>
           {node.children.map((child) => (
             <FolderTreeNode
               allFolders={allFolders}
               depth={depth + 1}
+              docCache={docCache}
               dragOverId={dragOverId}
+              expandedKeys={expandedKeys}
               key={child.id}
               node={child}
               onChanged={onChanged}
-              onNavigate={onNavigate}
-              selectedFolderId={selectedFolderId}
+              onLoadMore={onLoadMore}
+              onManage={onManage}
+              onToggle={onToggle}
               setDragOverId={setDragOverId}
             />
           ))}
+          {(node.documentCount ?? 0) > 0 ? (
+            <DocumentLeaves depth={depth} docCache={docCache} folderKey={node.id} onLoadMore={onLoadMore} />
+          ) : null}
         </ul>
       ) : null}
 
-      <RenameFolderDialog
-        folder={node}
-        onOpenChange={setRenameOpen}
-        onRenamed={onChanged}
-        open={renameOpen}
-      />
-      <NewSubfolderDialog
-        onCreated={onChanged}
-        onOpenChange={setNewSubOpen}
-        open={newSubOpen}
-        parentFolderId={node.id}
-      />
-      <DeleteFolderDialog
-        folder={node}
-        hasChildren={hasChildren}
-        onDeleted={onChanged}
-        onOpenChange={setDeleteOpen}
-        open={deleteOpen}
-      />
+      {!isAncestorOnly ? (
+        <>
+          <RenameFolderDialog folder={node} onOpenChange={setRenameOpen} onRenamed={onChanged} open={renameOpen} />
+          <NewSubfolderDialog
+            onCreated={onChanged}
+            onOpenChange={setNewSubOpen}
+            open={newSubOpen}
+            parentFolderId={node.id}
+          />
+          <DeleteFolderDialog
+            folder={node}
+            hasChildren={hasChildFolders}
+            onDeleted={onChanged}
+            onOpenChange={setDeleteOpen}
+            open={deleteOpen}
+          />
+        </>
+      ) : null}
     </li>
   );
 }
 
-// Root-level rail: takes the flat Folder[] from listFolderTreeAction(), builds the parent→children
-// map itself (ADR-0019 — the server intentionally returns a flat, depth-sorted list rather than
-// doing N recursive round trips). `selectedFolderId` is `null` for the "Unfiled" pseudo-node,
-// `undefined` for "All documents", and a folder id otherwise.
+// The explorer's single-pane tree: folders AND documents in one expandable structure (ADR-0019
+// redesign — replaces the old always-on rail-next-to-flat-list layout). `docCache`/`onToggle`/
+// `onLoadMore` are owned by the caller (folder-explorer.tsx) so expand/collapse never re-fetches
+// a folder's documents once loaded once.
 export function FolderTree({
   folders,
-  selectedFolderId,
-  onNavigate,
-  onChanged
+  expandedKeys,
+  docCache,
+  onToggle,
+  onLoadMore,
+  onChanged,
+  onManage
 }: {
   folders: Folder[];
-  selectedFolderId: string | null | undefined;
-  onNavigate: (folderId: string | null | undefined) => void;
+  expandedKeys: Set<string>;
+  docCache: Record<string, DocCacheEntry>;
+  onToggle: (folderId: string) => void;
+  onLoadMore: (folderKey: string) => void;
   onChanged: () => void;
+  onManage: (folderId: string, tab: "access" | "match") => void;
 }) {
   const t = useTranslations("folders");
   const [newRootOpen, setNewRootOpen] = useState(false);
@@ -467,6 +619,7 @@ export function FolderTree({
   const [dragOverUnfiled, setDragOverUnfiled] = useState(false);
   const [isPending, startTransition] = useTransition();
   const tree = useMemo(() => buildTree(folders), [folders]);
+  const unfiledExpanded = expandedKeys.has(UNFILED_KEY);
 
   function handleUnfiledDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -500,56 +653,63 @@ export function FolderTree({
         </button>
       </div>
 
-      <button
-        className={`rounded-md px-2.5 py-1.5 text-left text-sm ${
-          selectedFolderId === undefined ? "bg-panel-strong font-semibold" : "hover:bg-panel-strong/60"
-        }`}
-        onClick={() => onNavigate(undefined)}
-        type="button"
-      >
-        {t("allDocuments")}
-      </button>
-
-      <button
-        className={`rounded-md px-2.5 py-1.5 text-left text-sm ${
-          selectedFolderId === null ? "bg-panel-strong font-semibold" : "hover:bg-panel-strong/60"
-        } ${dragOverUnfiled ? "ring-2 ring-foreground/40" : ""} ${isPending ? "opacity-60" : ""}`}
-        onDragLeave={() => setDragOverUnfiled(false)}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME)) {
-            e.preventDefault();
-            setDragOverUnfiled(true);
-          }
-        }}
-        onDrop={handleUnfiledDrop}
-        onClick={() => onNavigate(null)}
-        type="button"
-      >
-        {t("unfiled")}
-      </button>
-
       <ul>
         {tree.map((node) => (
           <FolderTreeNode
             allFolders={folders}
             depth={0}
+            docCache={docCache}
             dragOverId={dragOverId}
+            expandedKeys={expandedKeys}
             key={node.id}
             node={node}
             onChanged={onChanged}
-            onNavigate={(id) => onNavigate(id)}
-            selectedFolderId={selectedFolderId}
+            onLoadMore={onLoadMore}
+            onManage={onManage}
+            onToggle={onToggle}
             setDragOverId={setDragOverId}
           />
         ))}
+
+        <li>
+          <div
+            className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-sm hover:bg-panel-strong/60 ${
+              dragOverUnfiled ? "ring-2 ring-foreground/40" : ""
+            } ${isPending ? "opacity-60" : ""}`}
+            onDragLeave={() => setDragOverUnfiled(false)}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes(DOCUMENT_DRAG_MIME)) {
+                e.preventDefault();
+                setDragOverUnfiled(true);
+              }
+            }}
+            onDrop={handleUnfiledDrop}
+          >
+            <button
+              aria-label={unfiledExpanded ? t("collapse") : t("expand")}
+              className="flex size-5 shrink-0 items-center justify-center text-muted"
+              onClick={() => onToggle(UNFILED_KEY)}
+              type="button"
+            >
+              {unfiledExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            </button>
+            <button
+              className="min-w-0 flex-1 truncate text-left"
+              onClick={() => onToggle(UNFILED_KEY)}
+              type="button"
+            >
+              {t("unfiled")}
+            </button>
+          </div>
+          {unfiledExpanded ? (
+            <ul>
+              <DocumentLeaves depth={0} docCache={docCache} folderKey={UNFILED_KEY} onLoadMore={onLoadMore} />
+            </ul>
+          ) : null}
+        </li>
       </ul>
 
-      <NewSubfolderDialog
-        onCreated={onChanged}
-        onOpenChange={setNewRootOpen}
-        open={newRootOpen}
-        parentFolderId={null}
-      />
+      <NewSubfolderDialog onCreated={onChanged} onOpenChange={setNewRootOpen} open={newRootOpen} parentFolderId={null} />
     </nav>
   );
 }
