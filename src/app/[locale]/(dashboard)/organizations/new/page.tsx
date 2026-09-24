@@ -25,9 +25,9 @@ export default async function NewOrganizationPage({
       <div>
         <Link
           className="text-sm font-semibold text-muted hover:text-foreground"
-          href="/organizations"
+          href="/dashboard"
         >
-          {t("new.backToOrganizations")}
+          {t("new.backToDashboard")}
         </Link>
         <h1 className="mt-4 text-3xl font-black">{t("new.title")}</h1>
         <p className="mt-1 text-sm text-muted">{t("new.description")}</p>

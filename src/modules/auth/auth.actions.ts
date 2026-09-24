@@ -10,6 +10,7 @@ import { appConfig } from "@/config/app";
 import { logEvent } from "@/lib/events";
 import { absoluteUrl } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
+import { createOrganization } from "@/modules/organizations/organizations.service";
 import { updateProfile } from "@/modules/users/profiles.service";
 import {
   emailSchema,
@@ -47,7 +48,11 @@ export async function registerAction(formData: FormData) {
     password: parsed.data.password,
     options: {
       data: {
-        name: parsed.data.name
+        name: parsed.data.name,
+        // No session exists yet until the confirmation link is followed (see
+        // /auth/callback), so the organization can't be created here — it's created there,
+        // right when the owner's session first becomes valid, from this stashed name.
+        organizationName: parsed.data.organizationName
       },
       emailRedirectTo: absoluteUrl(`/auth/callback?next=${encodeURIComponent("/onboarding")}`)
     }

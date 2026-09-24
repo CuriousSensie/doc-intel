@@ -94,6 +94,7 @@ export type Database = {
           organization_id: string;
           user_id: string;
           role: "owner" | "admin" | "member" | "read-only";
+          blocked_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -102,11 +103,13 @@ export type Database = {
           organization_id: string;
           user_id: string;
           role?: "owner" | "admin" | "member" | "read-only";
+          blocked_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           role?: "owner" | "admin" | "member" | "read-only";
+          blocked_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -116,6 +119,7 @@ export type Database = {
           id: string;
           organization_id: string;
           email: string;
+          invitee_name: string | null;
           role: "owner" | "admin" | "member" | "read-only";
           token_hash: string;
           invited_by: string | null;
@@ -130,6 +134,7 @@ export type Database = {
           id?: string;
           organization_id: string;
           email: string;
+          invitee_name?: string | null;
           role?: "owner" | "admin" | "member" | "read-only";
           token_hash: string;
           invited_by?: string | null;
@@ -1336,6 +1341,7 @@ export type Database = {
           organization_id: string;
           organization_name: string;
           email: string;
+          invitee_name: string | null;
           role: "owner" | "admin" | "member" | "read-only";
           expires_at: string;
           accepted_at: string | null;
@@ -1361,6 +1367,18 @@ export type Database = {
       leave_organization: {
         Args: { p_organization_id: string };
         Returns: undefined;
+      };
+      block_member: {
+        Args: { p_member_id: string };
+        Returns: undefined;
+      };
+      unblock_member: {
+        Args: { p_member_id: string };
+        Returns: undefined;
+      };
+      count_documents_by_creator: {
+        Args: { p_organization_id: string };
+        Returns: { created_by: string; document_count: number }[];
       };
       increment_usage_counter: {
         Args: {

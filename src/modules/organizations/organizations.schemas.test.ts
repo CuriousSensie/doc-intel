@@ -20,29 +20,34 @@ describe("organizations schemas", () => {
   });
 
   it("lowercases invite emails and restricts assignable roles", () => {
-    const result = inviteMemberSchema.safeParse({ email: "Member@Example.COM", role: "admin" });
+    const result = inviteMemberSchema.safeParse({
+      name: "Jamie Doe",
+      email: "Member@Example.COM",
+      role: "admin"
+    });
     expect(result.success).toBe(true);
     expect(result.success && result.data.email).toBe("member@example.com");
 
     expect(
-      inviteMemberSchema.safeParse({ email: "member@example.com", role: "owner" }).success
+      inviteMemberSchema.safeParse({ name: "Jamie Doe", email: "member@example.com", role: "owner" })
+        .success
+    ).toBe(false);
+    expect(
+      inviteMemberSchema.safeParse({ email: "member@example.com", role: "admin" }).success
     ).toBe(false);
   });
 
   it("allows the read-only role as an assignable role", () => {
     // 4th role — never "owner", which stays rejected above.
     expect(
-      inviteMemberSchema.safeParse({ email: "viewer@example.com", role: "read-only" }).success
+      inviteMemberSchema.safeParse({ name: "Jamie Doe", email: "viewer@example.com", role: "read-only" })
+        .success
     ).toBe(true);
   });
 
   it("validates update organization and transfer ownership payloads", () => {
-    expect(updateOrganizationSchema.safeParse({ name: "Acme Inc", logoUrl: "" }).success).toBe(
-      true
-    );
-    expect(
-      updateOrganizationSchema.safeParse({ name: "Acme Inc", logoUrl: "not-a-url" }).success
-    ).toBe(false);
+    expect(updateOrganizationSchema.safeParse({ name: "Acme Inc" }).success).toBe(true);
+    expect(updateOrganizationSchema.safeParse({ name: "A" }).success).toBe(false);
     expect(
       transferOwnershipSchema.safeParse({ newOwnerId: "8e6f5f2e-6b8d-4e4b-8f4a-0b7a2f0c9b11" })
         .success

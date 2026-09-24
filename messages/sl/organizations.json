@@ -1,18 +1,6 @@
 {
-  "list": {
-    "title": "Vaše organizacije",
-    "create": "Ustvari organizacijo",
-    "empty": "Niste še član nobene organizacije.",
-    "organization": "Organizacija",
-    "role": "Vloga",
-    "status": "Status",
-    "actions": "Dejanja",
-    "active": "Aktivna",
-    "inactive": "Neaktivna",
-    "leave": "Zapusti"
-  },
   "new": {
-    "backToOrganizations": "Nazaj na organizacije",
+    "backToDashboard": "Nazaj na nadzorno ploščo",
     "title": "Ustvari organizacijo",
     "description": "Postali boste lastnik in boste lahko povabili sodelavce, ko bo ustvarjena.",
     "detailsTitle": "Podrobnosti organizacije",
@@ -49,6 +37,11 @@
     "newMemberNotificationTitle": "Nov član ekipe",
     "newMemberNotificationMessage": "{name} se je pridružil(a) organizaciji {organization}.",
     "yourOrganizationFallback": "vaši organizaciji",
-    "someoneFallback": "Nekdo"
+    "someoneFallback": "Nekdo",
+    "emailAlreadyInOrganization": "Ta oseba že pripada neki organizaciji.",
+    "invitationNoLongerValid": "To povabilo ni več veljavno.",
+    "memberBlocked": "Član je blokiran.",
+    "memberUnblocked": "Član je odblokiran.",
+    "chooseLogoImage": "Izberite sliko za nalaganje"
   }
 }

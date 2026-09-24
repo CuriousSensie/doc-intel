@@ -16,11 +16,11 @@ export const createOrganizationSchema = z.object({
 });
 
 export const updateOrganizationSchema = z.object({
-  name: z.string().trim().min(2, "Enter an organization name").max(120),
-  logoUrl: z.string().trim().url("Enter a valid URL").max(2048).optional().or(z.literal(""))
+  name: z.string().trim().min(2, "Enter an organization name").max(120)
 });
 
 export const inviteMemberSchema = z.object({
+  name: z.string().trim().min(2, "Enter the employee's name").max(120),
   email,
   role: assignableRole
 });
@@ -35,5 +35,13 @@ export const transferOwnershipSchema = z.object({
 });
 
 export const removeMemberSchema = z.object({
+  memberId: z.string().uuid()
+});
+
+export const blockMemberSchema = z.object({
+  memberId: z.string().uuid()
+});
+
+export const unblockMemberSchema = z.object({
   memberId: z.string().uuid()
 });

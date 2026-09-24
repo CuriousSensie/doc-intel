@@ -176,6 +176,7 @@ export type ListDocumentsOptions = {
   entityId?: string;
   documentIds?: string[];
   hasNoConnections?: boolean;
+  createdBy?: string;
   sort?: DocumentSort;
   sortDirection?: DocumentSortDirection;
   page?: number;
@@ -351,6 +352,7 @@ export async function listDocuments(
 
   if (options.documentTypeKey) query = query.eq("document_type_key", options.documentTypeKey);
   if (options.status) query = query.eq("status", options.status);
+  if (options.createdBy) query = query.eq("created_by", options.createdBy);
   if (options.dateFrom) query = query.gte("created_at", `${options.dateFrom}T00:00:00.000Z`);
   if (options.dateTo) query = query.lt("created_at", nextUtcDate(options.dateTo));
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
@@ -605,7 +607,8 @@ export async function getDocumentAccess(
   const membership = await getMembership(document.organization_id, userId);
   if (!membership) return { canManage: false, canEdit: false };
 
-  const canManage = membership.role === "owner" || document.created_by === userId;
+  const canManage =
+    membership.role === "owner" || membership.role === "admin" || document.created_by === userId;
   if (membership.role === "read-only") return { canManage, canEdit: false };
   if (canManage) return { canManage, canEdit: true };
 
@@ -1247,6 +1250,21 @@ export async function getAdjacentDocumentId(
   });
 
   return items[0]?.id ?? null;
+}
+
+// Members tab doc-count column (see plan: organizations/team revamp). Owner/admin only —
+// count_documents_by_creator() itself enforces that via has_organization_role().
+export async function countDocumentsByCreator(
+  organizationId: string
+): Promise<Map<string, number>> {
+  const db = await createClient();
+  const { data, error } = await db.rpc("count_documents_by_creator", {
+    p_organization_id: organizationId
+  });
+
+  if (error) throw error;
+
+  return new Map(data.map((row) => [row.created_by, row.document_count]));
 }
 
 // Surfaces the upload pipeline's in-flight/failed state (validating, submitting, processing,

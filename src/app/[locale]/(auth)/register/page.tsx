@@ -37,6 +37,12 @@ export default async function RegisterPage({
         <FormMessage error={params.error} />
         <input name="next" type="hidden" value={params.next ?? "/onboarding"} />
         <TextField autoComplete="name" label={t("register.nameLabel")} name="name" required />
+        <TextField
+          autoComplete="organization"
+          label={t("register.organizationNameLabel")}
+          name="organizationName"
+          required
+        />
         <TextField autoComplete="email" label={t("register.emailLabel")} name="email" required type="email" />
         <TextField
           autoComplete="new-password"

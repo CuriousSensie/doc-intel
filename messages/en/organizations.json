@@ -1,18 +1,6 @@
 {
-  "list": {
-    "title": "Your organizations",
-    "create": "Create organization",
-    "empty": "You are not a member of any organization yet.",
-    "organization": "Organization",
-    "role": "Role",
-    "status": "Status",
-    "actions": "Actions",
-    "active": "Active",
-    "inactive": "Inactive",
-    "leave": "Leave"
-  },
   "new": {
-    "backToOrganizations": "Back to organizations",
+    "backToDashboard": "Back to dashboard",
     "title": "Create organization",
     "description": "You will be the owner and can invite teammates once it is created.",
     "detailsTitle": "Organization details",
@@ -49,6 +37,11 @@
     "newMemberNotificationTitle": "New team member",
     "newMemberNotificationMessage": "{name} joined {organization}.",
     "yourOrganizationFallback": "your organization",
-    "someoneFallback": "Someone"
+    "someoneFallback": "Someone",
+    "emailAlreadyInOrganization": "This person already belongs to an organization.",
+    "invitationNoLongerValid": "This invitation is no longer valid.",
+    "memberBlocked": "Member blocked.",
+    "memberUnblocked": "Member unblocked.",
+    "chooseLogoImage": "Choose an image to upload"
   }
 }

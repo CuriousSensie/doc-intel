@@ -127,7 +127,7 @@ async function PendingInvitesCard({ organizationId }: { organizationId: string }
               key: "pendingInvites",
               label: t("pendingInvites"),
               value: count,
-              href: "/organizations/team"
+              href: "/organizations"
             }
           ]}
         />

@@ -11,6 +11,7 @@ describe("auth schemas", () => {
   it("requires registration terms and matching passwords", () => {
     const result = registerSchema.safeParse({
       name: "Ada Lovelace",
+      organizationName: "Analytical Engines Ltd",
       email: "Ada@Example.COM",
       password: "Strongpass1",
       confirmPassword: "Strongpass1",
@@ -19,6 +20,18 @@ describe("auth schemas", () => {
 
     expect(result.success).toBe(true);
     expect(result.success && result.data.email).toBe("ada@example.com");
+  });
+
+  it("requires an organization name at registration", () => {
+    expect(
+      registerSchema.safeParse({
+        name: "Ada Lovelace",
+        email: "ada@example.com",
+        password: "Strongpass1",
+        confirmPassword: "Strongpass1",
+        terms: "on"
+      }).success
+    ).toBe(false);
   });
 
   it("rejects missing login password", () => {

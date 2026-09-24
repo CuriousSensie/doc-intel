@@ -3,6 +3,7 @@ import { cache } from "react";
 
 import { ConflictError } from "@/lib/errors";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { Database } from "@/types/database";
@@ -157,7 +158,13 @@ export async function listMembers(organizationId: string): Promise<MemberWithPro
     return [];
   }
 
-  const { data: profiles, error: profilesError } = await supabase
+  // profiles' RLS ("own row or app admin") blocks a regular member from seeing teammates'
+  // profiles — every member showed up as "Unknown <uuid>" in the team table before this. The
+  // admin client is safe here: the ids being looked up were already confirmed to be members of
+  // this same organization by the query above, so this reveals nothing beyond "this teammate's
+  // name/email", not an open profile lookup.
+  const admin = createAdminClient();
+  const { data: profiles, error: profilesError } = await admin
     .from("profiles")
     .select("id, name, email, avatar_url")
     .in(
@@ -187,6 +194,28 @@ export async function updateMemberRole(memberId: string, role: AssignableRole) {
     p_member_id: memberId,
     p_role: role
   });
+
+  if (error) {
+    throw error;
+  }
+}
+
+// Same ADR-0008 transactional-audit shape as updateMemberRole()/removeMember(). Blocking
+// is org-scoped and reversible (unlike remove) — the member row and role are preserved,
+// only blocked_at is set. is_organization_member()/has_organization_role() both exclude
+// blocked rows, so this cuts the member's access everywhere those gates are used.
+export async function blockMember(memberId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("block_member", { p_member_id: memberId });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function unblockMember(memberId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("unblock_member", { p_member_id: memberId });
 
   if (error) {
     throw error;
@@ -234,11 +263,46 @@ export async function listInvitations(organizationId: string) {
   return data;
 }
 
+// The inviting admin can't see other users' profiles under normal RLS, and the one-org-
+// per-account rule (organization_members_user_id_key) needs to be checked before an
+// invitation is created, not just at accept time — otherwise the invite silently can never
+// be accepted. Scoped to admin client because this is the one place we intentionally look
+// up another user's account by email.
+export async function emailAlreadyHasOrganization(email: string): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("email", email)
+    .maybeSingle();
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  if (!profile) {
+    return false;
+  }
+
+  const { data: membership, error: membershipError } = await admin
+    .from("organization_members")
+    .select("id")
+    .eq("user_id", profile.id)
+    .maybeSingle();
+
+  if (membershipError) {
+    throw membershipError;
+  }
+
+  return membership !== null;
+}
+
 export async function createInvitation(
   organizationId: string,
   invitedBy: string,
   email: string,
-  role: AssignableRole
+  role: AssignableRole,
+  inviteeName: string
 ) {
   const supabase = await createClient();
 
@@ -267,6 +331,7 @@ export async function createInvitation(
       {
         organization_id: organizationId,
         email,
+        invitee_name: inviteeName,
         role,
         token_hash: tokenHash,
         invited_by: invitedBy,
@@ -285,6 +350,40 @@ export async function createInvitation(
   }
 
   return { invitation: data, token };
+}
+
+// Invited employees skip Supabase's email-verification step entirely — the invitation link
+// already proved they control the inbox — so the account is created pre-confirmed via the
+// admin API (auth.signUp() would otherwise always queue a confirmation email) and then
+// signed in immediately with the same client so the SSR cookie session is actually set.
+export async function createAccountForInvitation(input: {
+  email: string;
+  name: string;
+  password: string;
+}) {
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({
+    email: input.email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { name: input.name }
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const supabase = await createClient();
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: input.email,
+    password: input.password
+  });
+
+  if (signInError) {
+    throw signInError;
+  }
+
+  return data.user;
 }
 
 export async function revokeInvitation(invitationId: string) {

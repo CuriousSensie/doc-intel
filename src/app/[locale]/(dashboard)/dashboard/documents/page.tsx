@@ -47,7 +47,7 @@ function EmptyDocumentsState({ t }: { t: Awaited<ReturnType<typeof getTranslatio
       <section className="w-full rounded-lg border border-border bg-panel p-6 text-center shadow-sm">
         <h1 className="text-3xl font-black">{t("list.title")}</h1>
         <p className="mt-3 leading-7 text-muted">{t("list.notInOrganization")}</p>
-        <Button asChild className="mt-6">
+        <Button variant="outline" asChild className="mt-6">
           <Link href="/organizations/new">{t("list.createOrganization")}</Link>
         </Button>
       </section>
@@ -260,6 +260,7 @@ export default async function DocumentsPage({
     filter.correspondentId ||
     filter.entityId ||
     filter.hasNoConnections ||
+    filter.createdBy ||
     savedView
   );
 

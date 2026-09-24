@@ -154,20 +154,11 @@ export const dashboardNavigation: NavigationItem[] = [
     placement: "bottom"
   },
   {
-    kind: "group",
     labelKey: "nav.organization",
+    href: "/organizations",
     feature: "organizations",
     icon: "Building2",
-    placement: "bottom",
-    children: [
-      {
-        labelKey: "nav.organizations",
-        href: "/organizations",
-        feature: "organizations",
-        icon: "Building2"
-      },
-      { labelKey: "nav.team", href: "/organizations/team", feature: "organizations", icon: "Users" }
-    ]
+    placement: "bottom"
   },
   {
     kind: "group",

@@ -3,12 +3,11 @@ import type { ReactNode } from "react";
 import { getTranslations } from "next-intl/server";
 
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { OrganizationSwitcher } from "@/components/layout/organization-switcher";
+import { OrganizationBadge } from "@/components/layout/organization-badge";
 import { isFeatureEnabled } from "@/config/features";
 import { dashboardNavigation, type NavigationItem, type NavigationLinkItem } from "@/config/navigation";
 import { SIDEBAR_COOKIE_NAME } from "@/lib/sidebar-cookie";
 import { requireUser } from "@/modules/auth/session";
-import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 import { listUserOrganizations } from "@/modules/organizations/organizations.service";
 import { getUnreadCount } from "@/modules/notifications/notifications.service";
 
@@ -44,11 +43,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const t = await getTranslations("dashboard");
   const isAdmin = isFeatureEnabled("admin") && Boolean(profile?.is_app_admin);
 
-  const [cookieStore, unreadCount, memberships, activeOrganizationId] = await Promise.all([
+  const [cookieStore, unreadCount, memberships] = await Promise.all([
     cookies(),
     isFeatureEnabled("notifications") ? getUnreadCount(user.id) : Promise.resolve(0),
-    isFeatureEnabled("organizations") ? listUserOrganizations(user.id) : Promise.resolve([]),
-    isFeatureEnabled("organizations") ? getActiveOrganizationId(user.id) : Promise.resolve(null)
+    isFeatureEnabled("organizations") ? listUserOrganizations(user.id) : Promise.resolve([])
   ]);
 
   const navigation = filterNavigation(dashboardNavigation, isAdmin);
@@ -61,12 +59,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       navigation={navigation}
       notificationsHref={isFeatureEnabled("notifications") ? "/dashboard/notifications" : undefined}
       organizationSwitcher={
-        memberships.length > 0 ? (
-          <OrganizationSwitcher
-            activeOrganizationId={activeOrganizationId}
-            organizations={memberships.map((membership) => membership.organization)}
-          />
-        ) : undefined
+        memberships[0] ? <OrganizationBadge name={memberships[0].organization.name} /> : undefined
       }
       settingsHref="/settings/profile"
       unreadCount={unreadCount}

@@ -12,6 +12,7 @@ export const passwordSchema = z
 export const registerSchema = z
   .object({
     name: z.string().trim().min(2, "Enter your name").max(120),
+    organizationName: z.string().trim().min(2, "Enter your organization name").max(120),
     email,
     password: passwordSchema,
     confirmPassword: z.string(),

@@ -10,29 +10,32 @@ import { logEvent } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { absoluteUrl } from "@/lib/utils";
 import { requireFeature } from "@/modules/auth/authorization";
-import { firstZodError, formDataToObject } from "@/modules/auth/auth.schemas";
-import { getSafeRedirectPath, withStatus } from "@/modules/auth/redirects";
+import { firstZodError, formDataToObject, resetPasswordSchema } from "@/modules/auth/auth.schemas";
+import { withStatus } from "@/modules/auth/redirects";
 import { requireUser } from "@/modules/auth/session";
 import type { AuthContext } from "@/modules/auth/session";
 import { sendEmail } from "@/modules/email/email.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
+import { uploadOrganizationLogo } from "@/modules/organizations/org-logo.service";
 import {
-  clearActiveOrganization,
-  setActiveOrganization
-} from "@/modules/organizations/active-organization";
-import {
+  blockMemberSchema,
   createOrganizationSchema,
   inviteMemberSchema,
   removeMemberSchema,
   transferOwnershipSchema,
+  unblockMemberSchema,
   updateMemberRoleSchema,
   updateOrganizationSchema
 } from "@/modules/organizations/organizations.schemas";
 import {
   acceptInvitation,
+  blockMember,
+  createAccountForInvitation,
   createInvitation,
   createOrganization,
   deleteOrganization,
+  emailAlreadyHasOrganization,
+  getInvitationPreview,
   getMembership,
   getOrganization,
   leaveOrganization,
@@ -40,6 +43,7 @@ import {
   removeMember,
   revokeInvitation,
   transferOwnership,
+  unblockMember,
   updateMemberRole,
   updateOrganization,
   type AssignableRole
@@ -71,14 +75,15 @@ async function issueInvitation(
   organizationId: string,
   inviter: { id: string; name: string },
   email: string,
-  role: AssignableRole
+  role: AssignableRole,
+  inviteeName: string
 ) {
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
-  let target = withStatus("/organizations/team", "message", t("actions.invitationReady"));
+  let target = withStatus("/organizations", "message", t("actions.invitationReady"));
 
   try {
     const [{ token }, organization] = await Promise.all([
-      createInvitation(organizationId, inviter.id, email, role),
+      createInvitation(organizationId, inviter.id, email, role, inviteeName),
       getOrganization(organizationId)
     ]);
 
@@ -108,7 +113,7 @@ async function issueInvitation(
       emailResult ? t("actions.invitationSent") : t("actions.invitationCreatedEmailFailed")
     );
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
   return redirect({ href: target, locale });
@@ -132,7 +137,6 @@ export async function createOrganizationAction(formData: FormData) {
       parsed.data.name,
       parsed.data.slug || undefined
     );
-    await setActiveOrganization(organizationId);
     await logEvent({
       actorId: context.user.id,
       action: "organization.created",
@@ -145,19 +149,19 @@ export async function createOrganizationAction(formData: FormData) {
   }
 
   return redirect({
-    href: withStatus("/organizations/team", "message", t("actions.organizationCreated")),
+    href: withStatus("/organizations", "message", t("actions.organizationCreated")),
     locale
   });
 }
 
 export async function updateOrganizationAction(formData: FormData) {
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
 
   if (typeof organizationId !== "string") {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.missingOrganization")),
+      href: withStatus("/organizations", "error", t("actions.missingOrganization")),
       locale
     });
   }
@@ -167,35 +171,70 @@ export async function updateOrganizationAction(formData: FormData) {
 
   if (!parsed.success) {
     return redirect({
-      href: withStatus("/organizations/team", "error", firstZodError(parsed.error)),
+      href: withStatus("/organizations", "error", firstZodError(parsed.error)),
       locale
     });
   }
 
   try {
-    await updateOrganization(organizationId, {
-      name: parsed.data.name,
-      logo_url: parsed.data.logoUrl || null
-    });
+    await updateOrganization(organizationId, { name: parsed.data.name });
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
   return redirect({
-    href: withStatus("/organizations/team", "message", t("actions.organizationUpdated")),
+    href: withStatus("/organizations", "message", t("actions.organizationUpdated")),
+    locale
+  });
+}
+
+export async function uploadOrgLogoAction(formData: FormData) {
+  const context = await requireUser("/organizations");
+  const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
+  const organizationId = formData.get("organizationId");
+  const file = formData.get("file");
+
+  if (typeof organizationId !== "string") {
+    return redirect({
+      href: withStatus("/organizations", "error", t("actions.missingOrganization")),
+      locale
+    });
+  }
+
+  await requireOrgRole(organizationId, context.user.id, ["owner", "admin"]);
+
+  if (!(file instanceof File) || file.size === 0) {
+    return redirect({
+      href: withStatus("/organizations", "error", t("actions.chooseLogoImage")),
+      locale
+    });
+  }
+
+  try {
+    await uploadOrganizationLogo(context.user.id, organizationId, {
+      buffer: Buffer.from(await file.arrayBuffer()),
+      declaredMimeType: file.type || "application/octet-stream",
+      size: file.size
+    });
+  } catch (error) {
+    redirectWithError("/organizations", error, t, locale);
+  }
+
+  return redirect({
+    href: withStatus("/organizations", "message", t("actions.organizationUpdated")),
     locale
   });
 }
 
 export async function inviteMemberAction(formData: FormData) {
   requireFeature("organizations");
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
 
   if (typeof organizationId !== "string") {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.missingOrganization")),
+      href: withStatus("/organizations", "error", t("actions.missingOrganization")),
       locale
     });
   }
@@ -205,7 +244,14 @@ export async function inviteMemberAction(formData: FormData) {
 
   if (!parsed.success) {
     return redirect({
-      href: withStatus("/organizations/team", "error", firstZodError(parsed.error)),
+      href: withStatus("/organizations", "error", firstZodError(parsed.error)),
+      locale
+    });
+  }
+
+  if (await emailAlreadyHasOrganization(parsed.data.email)) {
+    return redirect({
+      href: withStatus("/organizations", "error", t("actions.emailAlreadyInOrganization")),
       locale
     });
   }
@@ -217,25 +263,28 @@ export async function inviteMemberAction(formData: FormData) {
       name: context.profile?.name ?? context.user.email ?? t("actions.teamMemberFallback")
     },
     parsed.data.email,
-    parsed.data.role
+    parsed.data.role,
+    parsed.data.name
   );
 }
 
 export async function resendInvitationAction(formData: FormData) {
   requireFeature("organizations");
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
   const email = formData.get("email");
   const role = formData.get("role");
+  const name = formData.get("name");
 
   if (
     typeof organizationId !== "string" ||
     typeof email !== "string" ||
-    (role !== "admin" && role !== "member")
+    typeof name !== "string" ||
+    (role !== "admin" && role !== "member" && role !== "read-only")
   ) {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.missingInvitationDetails")),
+      href: withStatus("/organizations", "error", t("actions.missingInvitationDetails")),
       locale
     });
   }
@@ -248,19 +297,20 @@ export async function resendInvitationAction(formData: FormData) {
       name: context.profile?.name ?? context.user.email ?? t("actions.teamMemberFallback")
     },
     email,
-    role
+    role,
+    name
   );
 }
 
 export async function revokeInvitationAction(formData: FormData) {
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
   const invitationId = formData.get("invitationId");
 
   if (typeof organizationId !== "string" || typeof invitationId !== "string") {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.missingInvitation")),
+      href: withStatus("/organizations", "error", t("actions.missingInvitation")),
       locale
     });
   }
@@ -270,24 +320,24 @@ export async function revokeInvitationAction(formData: FormData) {
   try {
     await revokeInvitation(invitationId);
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
   return redirect({
-    href: withStatus("/organizations/team", "message", t("actions.invitationRevoked")),
+    href: withStatus("/organizations", "message", t("actions.invitationRevoked")),
     locale
   });
 }
 
 export async function updateMemberRoleAction(formData: FormData) {
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
   const parsed = updateMemberRoleSchema.safeParse(formDataToObject(formData));
 
   if (typeof organizationId !== "string" || !parsed.success) {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.invalidRoleUpdate")),
+      href: withStatus("/organizations", "error", t("actions.invalidRoleUpdate")),
       locale
     });
   }
@@ -298,24 +348,24 @@ export async function updateMemberRoleAction(formData: FormData) {
     // ADR-0008: update_member_role() writes the audit row atomically — no separate logEvent().
     await updateMemberRole(parsed.data.memberId, parsed.data.role);
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
   return redirect({
-    href: withStatus("/organizations/team", "message", t("actions.memberRoleUpdated")),
+    href: withStatus("/organizations", "message", t("actions.memberRoleUpdated")),
     locale
   });
 }
 
 export async function removeMemberAction(formData: FormData) {
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
   const parsed = removeMemberSchema.safeParse(formDataToObject(formData));
 
   if (typeof organizationId !== "string" || !parsed.success) {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.missingMember")),
+      href: withStatus("/organizations", "error", t("actions.missingMember")),
       locale
     });
   }
@@ -326,11 +376,11 @@ export async function removeMemberAction(formData: FormData) {
     // ADR-0008: remove_member() writes the audit row atomically — no separate logEvent().
     await removeMember(parsed.data.memberId);
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
   return redirect({
-    href: withStatus("/organizations/team", "message", t("actions.memberRemoved")),
+    href: withStatus("/organizations", "message", t("actions.memberRemoved")),
     locale
   });
 }
@@ -351,25 +401,79 @@ export async function leaveOrganizationAction(formData: FormData) {
     // ADR-0008: leave_organization() writes the audit row atomically — no separate logEvent().
     await leaveOrganization(organizationId);
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
-  await clearActiveOrganization();
   return redirect({
     href: withStatus("/organizations", "message", t("actions.youLeftOrganization")),
     locale
   });
 }
 
+export async function blockMemberAction(formData: FormData) {
+  const context = await requireUser("/organizations");
+  const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
+  const organizationId = formData.get("organizationId");
+  const parsed = blockMemberSchema.safeParse(formDataToObject(formData));
+
+  if (typeof organizationId !== "string" || !parsed.success) {
+    return redirect({
+      href: withStatus("/organizations", "error", t("actions.missingMember")),
+      locale
+    });
+  }
+
+  await requireOrgRole(organizationId, context.user.id, ["owner", "admin"]);
+
+  try {
+    // block_member() writes the audit row atomically, same ADR-0008 shape as removeMember().
+    await blockMember(parsed.data.memberId);
+  } catch (error) {
+    redirectWithError("/organizations", error, t, locale);
+  }
+
+  return redirect({
+    href: withStatus("/organizations", "message", t("actions.memberBlocked")),
+    locale
+  });
+}
+
+export async function unblockMemberAction(formData: FormData) {
+  const context = await requireUser("/organizations");
+  const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
+  const organizationId = formData.get("organizationId");
+  const parsed = unblockMemberSchema.safeParse(formDataToObject(formData));
+
+  if (typeof organizationId !== "string" || !parsed.success) {
+    return redirect({
+      href: withStatus("/organizations", "error", t("actions.missingMember")),
+      locale
+    });
+  }
+
+  await requireOrgRole(organizationId, context.user.id, ["owner", "admin"]);
+
+  try {
+    await unblockMember(parsed.data.memberId);
+  } catch (error) {
+    redirectWithError("/organizations", error, t, locale);
+  }
+
+  return redirect({
+    href: withStatus("/organizations", "message", t("actions.memberUnblocked")),
+    locale
+  });
+}
+
 export async function transferOwnershipAction(formData: FormData) {
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
   const parsed = transferOwnershipSchema.safeParse(formDataToObject(formData));
 
   if (typeof organizationId !== "string" || !parsed.success) {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.invalidTransferRequest")),
+      href: withStatus("/organizations", "error", t("actions.invalidTransferRequest")),
       locale
     });
   }
@@ -381,23 +485,23 @@ export async function transferOwnershipAction(formData: FormData) {
     // separate logEvent().
     await transferOwnership(organizationId, parsed.data.newOwnerId);
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
   return redirect({
-    href: withStatus("/organizations/team", "message", t("actions.ownershipTransferred")),
+    href: withStatus("/organizations", "message", t("actions.ownershipTransferred")),
     locale
   });
 }
 
 export async function deleteOrganizationAction(formData: FormData) {
-  const context = await requireUser("/organizations/team");
+  const context = await requireUser("/organizations");
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const organizationId = formData.get("organizationId");
 
   if (typeof organizationId !== "string") {
     return redirect({
-      href: withStatus("/organizations/team", "error", t("actions.missingOrganization")),
+      href: withStatus("/organizations", "error", t("actions.missingOrganization")),
       locale
     });
   }
@@ -414,40 +518,13 @@ export async function deleteOrganizationAction(formData: FormData) {
     });
     await deleteOrganization(organizationId);
   } catch (error) {
-    redirectWithError("/organizations/team", error, t, locale);
+    redirectWithError("/organizations", error, t, locale);
   }
 
-  await clearActiveOrganization();
   return redirect({
     href: withStatus("/organizations", "message", t("actions.organizationDeleted")),
     locale
   });
-}
-
-export async function switchOrganizationAction(formData: FormData) {
-  const context = await requireUser("/organizations");
-  const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
-  const organizationId = formData.get("organizationId");
-  const next = getSafeRedirectPath(formData.get("next"));
-
-  if (typeof organizationId !== "string") {
-    return redirect({
-      href: withStatus("/organizations", "error", t("actions.missingOrganization")),
-      locale
-    });
-  }
-
-  const membership = await getMembership(organizationId, context.user.id);
-
-  if (!membership) {
-    return redirect({
-      href: withStatus("/organizations", "error", t("actions.notAMember")),
-      locale
-    });
-  }
-
-  await setActiveOrganization(organizationId);
-  return redirect({ href: next, locale });
 }
 
 async function notifyOrganizationAdminsOfNewMember(organizationId: string, newMember: AuthContext) {
@@ -485,6 +562,67 @@ async function notifyOrganizationAdminsOfNewMember(organizationId: string, newMe
   }
 }
 
+// Invited employees never touch /register or Supabase email verification (see plan:
+// organizations/team revamp) — name and email come from the invitation record itself, not
+// client input, so the signup form only actually collects a password.
+export async function acceptInvitationSignupAction(formData: FormData) {
+  const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
+  const token = formData.get("token");
+
+  if (typeof token !== "string") {
+    return redirect({
+      href: withStatus("/dashboard", "error", t("actions.missingInvitationToken")),
+      locale
+    });
+  }
+
+  const invitePath = `/invitations/${token}`;
+  const invitation = await getInvitationPreview(token);
+
+  if (
+    !invitation ||
+    invitation.revoked_at ||
+    invitation.accepted_at ||
+    new Date(invitation.expires_at) <= new Date()
+  ) {
+    return redirect({ href: withStatus(invitePath, "error", t("actions.invitationNoLongerValid")), locale });
+  }
+
+  const parsed = resetPasswordSchema.safeParse(formDataToObject(formData));
+
+  if (!parsed.success) {
+    return redirect({ href: withStatus(invitePath, "error", firstZodError(parsed.error)), locale });
+  }
+
+  let organizationId: string;
+
+  try {
+    await createAccountForInvitation({
+      email: invitation.email,
+      name: invitation.invitee_name ?? invitation.email,
+      password: parsed.data.password
+    });
+    organizationId = await acceptInvitation(token);
+  } catch (error) {
+    redirectWithError(invitePath, error, t, locale);
+  }
+
+  const context = await requireUser(invitePath);
+  await logEvent({
+    actorId: context.user.id,
+    action: "organization.invitation.accepted",
+    entityType: "organization",
+    entityId: organizationId,
+    organizationId
+  });
+  await notifyOrganizationAdminsOfNewMember(organizationId, context);
+
+  return redirect({
+    href: withStatus("/dashboard", "message", t("actions.invitationAccepted")),
+    locale
+  });
+}
+
 export async function acceptInvitationAction(formData: FormData) {
   const [t, locale] = await Promise.all([getTranslations("organizations"), getLocale()]);
   const token = formData.get("token");
@@ -501,7 +639,6 @@ export async function acceptInvitationAction(formData: FormData) {
 
   try {
     organizationId = await acceptInvitation(token);
-    await setActiveOrganization(organizationId);
     await logEvent({
       actorId: context.user.id,
       action: "organization.invitation.accepted",

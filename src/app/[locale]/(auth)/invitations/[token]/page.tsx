@@ -4,10 +4,14 @@ import { Link } from "@/i18n/navigation";
 
 import { AuthCard } from "@/components/layout/auth-card";
 import { FormMessage } from "@/components/forms/form-message";
+import { TextField } from "@/components/forms/text-field";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/modules/auth/auth.actions";
 import { getCurrentUser } from "@/modules/auth/session";
-import { acceptInvitationAction } from "@/modules/organizations/organizations.actions";
+import {
+  acceptInvitationAction,
+  acceptInvitationSignupAction
+} from "@/modules/organizations/organizations.actions";
 import { getInvitationPreview } from "@/modules/organizations/organizations.service";
 
 export const dynamic = "force-dynamic";
@@ -88,14 +92,36 @@ export default async function InvitationPage({
         eyebrow={t("invitations.eyebrow")}
         title={t("invitations.join.title", { organizationName: invitation.organization_name })}
       >
-        <div className="grid gap-3">
-          <Button asChild>
-            <Link href={`/register?next=${encodeURIComponent(next)}`}>{t("invitations.join.createAccount")}</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href={`/login?next=${encodeURIComponent(next)}`}>{t("invitations.join.signIn")}</Link>
-          </Button>
-        </div>
+        <FormMessage error={search.error} />
+        {/* Name and email come from the invitation itself (set by the org admin) — no email
+            verification step, since the invite link already proved the inbox. Only a
+            password is collected here. */}
+        <form action={acceptInvitationSignupAction} className="mt-4 grid gap-4">
+          <input name="token" type="hidden" value={token} />
+          <TextField disabled label={t("invitations.join.nameLabel")} name="name" value={invitation.invitee_name ?? ""} />
+          <TextField disabled label={t("invitations.join.emailLabel")} name="email" value={invitation.email} />
+          <TextField
+            autoComplete="new-password"
+            label={t("invitations.join.passwordLabel")}
+            name="password"
+            required
+            type="password"
+          />
+          <TextField
+            autoComplete="new-password"
+            label={t("invitations.join.confirmPasswordLabel")}
+            name="confirmPassword"
+            required
+            type="password"
+          />
+          <Button type="submit">{t("invitations.join.createAccountAndJoin")}</Button>
+        </form>
+        <p className="mt-4 text-sm text-muted">
+          {t("invitations.join.alreadyHaveAccount")}{" "}
+          <Link className="font-semibold text-foreground" href={`/login?next=${encodeURIComponent(next)}`}>
+            {t("invitations.join.signIn")}
+          </Link>
+        </p>
       </AuthCard>
     );
   }
