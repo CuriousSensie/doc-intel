@@ -28,8 +28,7 @@ import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
-import { FolderBrowserRail } from "@/components/folders/folder-browser-rail";
-import { listFolderTreeAction } from "@/modules/folders/folders.actions";
+import { FolderExplorer } from "@/components/folders/folder-explorer";
 import {
   documentsViewSearchParamSchema,
   type DocumentListField,
@@ -130,7 +129,11 @@ export default async function DocumentsPage({
       ? savedSort.view
       : firstSearchValue(rawSearch.view);
   const viewParse = documentsViewSearchParamSchema.safeParse({ view: rawView });
-  const view = (viewParse.success ? viewParse.data.view : undefined) ?? "list";
+  const foldersEnabled = isFeatureEnabled("folders");
+  // "folders" is a peer view mode gated by the same flag as the rest of the feature — an
+  // unparseable/disabled value falls back to the default list view, same as before.
+  const requestedView = viewParse.success ? viewParse.data.view : undefined;
+  const view = requestedView === "folders" && !foldersEnabled ? "list" : (requestedView ?? "list");
   const savedFieldsParse = documentsViewSearchParamSchema.safeParse({ fields: savedColumns });
   const parsedVisibleFields =
     savedView?.view_kind === "dynamic" &&
@@ -140,6 +143,41 @@ export default async function DocumentsPage({
       : parseDocumentListFields(rawSearch);
 
   const client = await paperlessFor(organizationId);
+
+  // The explorer (view === "folders") owns its own navigation/fetching client-side (folder-
+  // explorer.tsx: listFolderTreeAction() + lazy per-folder listFolderDocumentsAction() calls) —
+  // it doesn't need this page's per-request document fetch at all, so that whole pipeline below
+  // is skipped for this view. The filter bar's own metadata (tags/correspondents/types/custom
+  // fields) is still needed since the view switcher — the only way back to the flat views — lives
+  // in it.
+  if (view === "folders") {
+    const [tags, correspondents, documentTypes, customFieldDefs] = await Promise.all([
+      getCachedTags(client, organizationId),
+      getCachedCorrespondents(client, organizationId),
+      getCachedDocumentTypes(client, organizationId),
+      listCustomFieldDefs(defsCtx)
+    ]);
+    return (
+      <div className="grid min-w-0 flex-1 gap-5">
+        <DocumentsFilterBar
+          current={{ fields: parsedVisibleFields, view }}
+          filterOptions={{
+            tags,
+            correspondents,
+            documentTypes: documentTypes.map((dt) => ({
+              key: toDocumentTypeKey(dt.name),
+              name: dt.name
+            })),
+            customFields: customFieldDefs.filter((def) => def.data_type !== "documentlink")
+          }}
+          foldersEnabled={foldersEnabled}
+          key={JSON.stringify(rawSearch)}
+          selectedEntity={null}
+        />
+        <FolderExplorer />
+      </div>
+    );
+  }
 
   const [
     { items: documents, totalCount, page, pageSize, totalPages },
@@ -253,6 +291,10 @@ export default async function DocumentsPage({
     ])
   );
 
+  // folderId isn't in the flat views' own filter UI (it arrives via a shared link or a document
+  // dragged/moved into a folder from the explorer view) — folded into isFiltered so a stray
+  // folderId still surfaces the "clear filters" escape hatch now that the rail (and its
+  // breadcrumb, which used to cover this) is gone.
   const isFiltered = Boolean(
     filter.documentTypeKey ||
     filter.status ||
@@ -264,53 +306,12 @@ export default async function DocumentsPage({
     filter.entityId ||
     filter.hasNoConnections ||
     filter.createdBy ||
+    filter.folderId !== undefined ||
     savedView
   );
 
-  const foldersEnabled = isFeatureEnabled("folders");
-  const rawFolderIdParam = firstSearchValue(rawSearch.folderId);
-  const tFolders = foldersEnabled ? await getTranslations("folders") : null;
-  // Breadcrumb chain for the current folder, built by walking parentFolderId on the flat tree
-  // list (ADR-0019 — path is a materialized name string, not ids, so the chain of {id, name}
-  // pairs needed for clickable breadcrumb links has to be reconstructed here).
-  const folderBreadcrumb: Array<{ folderId: string | null; label: string }> =
-    foldersEnabled && rawFolderIdParam
-      ? rawFolderIdParam === "unfiled"
-        ? [{ folderId: null, label: tFolders!("unfiled") }]
-        : await listFolderTreeAction()
-            .then((allFolders) => {
-              const byId = new Map(allFolders.map((f) => [f.id, f]));
-              const chain: Array<{ folderId: string; label: string }> = [];
-              let current = byId.get(rawFolderIdParam) ?? null;
-              while (current) {
-                chain.unshift({ folderId: current.id, label: current.name });
-                current = current.parentFolderId ? (byId.get(current.parentFolderId) ?? null) : null;
-              }
-              return chain;
-            })
-            .catch(() => [])
-      : [];
-
   const documentsMain = (
     <div className="grid min-w-0 flex-1 gap-5">
-      {folderBreadcrumb.length > 0 ? (
-        <nav aria-label={tFolders!("title")} className="flex flex-wrap items-center gap-1 text-sm text-muted">
-          <Link className="hover:underline" href="/dashboard/documents">
-            {tFolders!("allDocuments")}
-          </Link>
-          {folderBreadcrumb.map((segment) => (
-            <span className="flex items-center gap-1" key={segment.folderId ?? "unfiled"}>
-              <span aria-hidden>/</span>
-              <Link
-                className="hover:underline"
-                href={`/dashboard/documents?folderId=${segment.folderId ?? "unfiled"}`}
-              >
-                {segment.label}
-              </Link>
-            </span>
-          ))}
-        </nav>
-      ) : null}
       <DocumentsFilterBar
         current={{ ...filter, fields: visibleFields, view }}
         foldersEnabled={foldersEnabled}
@@ -375,14 +376,5 @@ export default async function DocumentsPage({
     </div>
   );
 
-  if (!foldersEnabled) {
-    return documentsMain;
-  }
-
-  return (
-    <div className="flex min-w-0 flex-col gap-5 md:flex-row">
-      <FolderBrowserRail />
-      {documentsMain}
-    </div>
-  );
+  return documentsMain;
 }
