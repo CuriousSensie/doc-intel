@@ -15,7 +15,9 @@ export const documentStatusSchema = z.enum([
 export const documentSortSchema = z.enum(["created", "title", "mimeType", "size", "pages"]);
 export const documentSortDirectionSchema = z.enum(["asc", "desc"]);
 export const documentPageSizeSchema = z.union([z.literal(10), z.literal(25), z.literal(50)]);
-export const documentViewModeSchema = z.enum(["list", "smallCards", "largeCards"]);
+// "folders" (ADR-0019 explorer redesign) is a peer view mode, not a rail alongside the others —
+// see documents-filter-bar.tsx's view switcher and dashboard/documents/page.tsx's branch on it.
+export const documentViewModeSchema = z.enum(["list", "smallCards", "largeCards", "folders"]);
 export const documentListFieldSchema = z.enum([
   "title",
   "tags",
