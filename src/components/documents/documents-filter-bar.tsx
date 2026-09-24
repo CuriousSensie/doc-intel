@@ -5,6 +5,7 @@ import {
   ArrowUpAZ,
   CalendarDays,
   Columns3,
+  FolderTree,
   LayoutGrid,
   Rows3,
   Search,
@@ -41,7 +42,7 @@ import type {
 import type { DocumentSort, DocumentSortDirection } from "@/modules/documents/documents.service";
 import { DocumentUploadDialogButton } from "@/components/documents/document-upload-dialog-button";
 
-export type DocumentsViewMode = "list" | "smallCards" | "largeCards";
+export type DocumentsViewMode = "list" | "smallCards" | "largeCards" | "folders";
 
 type FilterOptions = {
   tags: PaperlessTag[];
@@ -83,6 +84,25 @@ const FIELD_VALUES: StaticDocumentListField[] = [
   "connections",
   "pages",
   "createdAt"
+];
+
+// Folders is a peer view mode (ADR-0019 explorer redesign), filtered out below when the folders
+// feature flag is off — same gate as the "Upload folder" tab (foldersEnabled prop).
+const VIEW_MODE_LABEL_KEYS = {
+  list: "viewTable",
+  smallCards: "viewSmallCards",
+  largeCards: "viewLargeCards",
+  folders: "viewFolders"
+} as const;
+const viewModeOptions: Array<{
+  mode: DocumentsViewMode;
+  icon: typeof Table2;
+  labelKey: (typeof VIEW_MODE_LABEL_KEYS)[DocumentsViewMode];
+}> = [
+  { mode: "list", icon: Table2, labelKey: VIEW_MODE_LABEL_KEYS.list },
+  { mode: "smallCards", icon: LayoutGrid, labelKey: VIEW_MODE_LABEL_KEYS.smallCards },
+  { mode: "largeCards", icon: Rows3, labelKey: VIEW_MODE_LABEL_KEYS.largeCards },
+  { mode: "folders", icon: FolderTree, labelKey: VIEW_MODE_LABEL_KEYS.folders }
 ];
 
 export function DocumentsFilterBar({ filterOptions, selectedEntity, current, foldersEnabled }: Props) {
@@ -233,30 +253,26 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
       </Button>
 
       <div className="flex items-center overflow-hidden rounded-md border border-border">
-        {(
-          [
-            { mode: "list", icon: Table2, label: t("viewTable") },
-            { mode: "smallCards", icon: LayoutGrid, label: t("viewSmallCards") },
-            { mode: "largeCards", icon: Rows3, label: t("viewLargeCards") }
-          ] as const
-        ).map(({ mode, icon: Icon, label }) => (
-          <button
-            aria-label={label}
-            aria-pressed={(current.view ?? "list") === mode}
-            className="flex size-10 items-center justify-center border-r border-border text-muted last:border-r-0 hover:bg-panel-strong data-[active=true]:bg-panel-strong data-[active=true]:text-foreground"
-            data-active={(current.view ?? "list") === mode}
-            key={mode}
-            onClick={() =>
-              navigate(
-                (params) => setOrDelete(params, "view", mode === "list" ? null : mode),
-                false
-              )
-            }
-            type="button"
-          >
-            <Icon className="size-4" />
-          </button>
-        ))}
+        {viewModeOptions
+          .filter(({ mode }) => mode !== "folders" || foldersEnabled)
+          .map(({ mode, icon: Icon, labelKey }) => (
+            <button
+              aria-label={t(labelKey)}
+              aria-pressed={(current.view ?? "list") === mode}
+              className="flex size-10 items-center justify-center border-r border-border text-muted last:border-r-0 hover:bg-panel-strong data-[active=true]:bg-panel-strong data-[active=true]:text-foreground"
+              data-active={(current.view ?? "list") === mode}
+              key={mode}
+              onClick={() =>
+                navigate(
+                  (params) => setOrDelete(params, "view", mode === "list" ? null : mode),
+                  false
+                )
+              }
+              type="button"
+            >
+              <Icon className="size-4" />
+            </button>
+          ))}
       </div>
 
       <DropdownMenu>
