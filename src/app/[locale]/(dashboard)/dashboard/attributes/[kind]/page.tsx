@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AttributesTable } from "@/components/attributes/attributes-table";
-import { CustomFieldFormControls } from "@/components/attributes/custom-field-form-controls";
+import { CustomFieldForm } from "@/components/attributes/custom-field-form";
 import { FormMessage } from "@/components/forms/form-message";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,8 +74,12 @@ function AttributeForm({
     optionPlaceholder: string;
     addOption: string;
     removeOption: string;
-    appliesTo: string;
-    appliesToHint: string;
+    scope: string;
+    scopeGlobal: string;
+    scopeGlobalHint: string;
+    scopeDocumentTypes: string;
+    documentTypesSearchPlaceholder: string;
+    documentTypesEmpty: string;
   };
   matchingLabels: Record<MatchingAlgorithm, string>;
   dataTypeLabels: Record<CustomFieldDataType, string>;
@@ -83,7 +87,19 @@ function AttributeForm({
   cancelControl: React.ReactNode;
 }) {
   const isTag = kind === "tags";
-  const isCustomField = kind === "custom-fields";
+
+  if (kind === "custom-fields") {
+    return (
+      <CustomFieldForm
+        action={saveAttributeFormAction}
+        cancelControl={cancelControl}
+        dataTypeLabels={dataTypeLabels}
+        documentTypeOptions={documentTypeOptions}
+        editing={editing}
+        labels={labels}
+      />
+    );
+  }
 
   return (
     <form action={saveAttributeFormAction} className="grid gap-4">
@@ -108,72 +124,26 @@ function AttributeForm({
         ) : null}
       </div>
 
-      {isCustomField ? (
-        <>
-          <CustomFieldFormControls
-            dataTypeLabels={dataTypeLabels}
-            editing={Boolean(editing)}
-            initialDataType={editing?.dataType ?? "string"}
-            initialOptions={(editing?.options ?? []).map((option) => option.label)}
-            labels={{
-              dataType: labels.dataType,
-              dataTypeImmutableHint: labels.dataTypeImmutableHint,
-              options: labels.options,
-              optionsHint: labels.optionsHint,
-              optionPlaceholder: labels.optionPlaceholder,
-              addOption: labels.addOption,
-              removeOption: labels.removeOption
-            }}
-          />
-
-          {documentTypeOptions.length > 0 ? (
-            <fieldset className="grid gap-1.5 text-sm font-medium">
-              <span>{labels.appliesTo}</span>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {documentTypeOptions.map((dt) => (
-                  <label className="flex items-center gap-2 text-sm font-normal" key={dt.key}>
-                    <input
-                      defaultChecked={editing?.appliesTo?.includes(dt.key)}
-                      name="appliesTo"
-                      type="checkbox"
-                      value={dt.key}
-                    />
-                    {dt.name}
-                  </label>
-                ))}
-              </div>
-              <span className="text-xs text-muted">{labels.appliesToHint}</span>
-            </fieldset>
-          ) : null}
-
-        </>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-[minmax(13rem,18rem)_minmax(0,1fr)]">
-          <label className="grid gap-1.5 text-sm font-medium">
-            <span>{labels.matchingAlgorithm}</span>
-            <select
-              className={controlClass}
-              defaultValue={editing?.matchingAlgorithm ?? "none"}
-              name="matchingAlgorithm"
-            >
-              {matchingAlgorithms.map((algorithm) => (
-                <option key={algorithm} value={algorithm}>
-                  {matchingLabels[algorithm]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium">
-            <span>{labels.match}</span>
-            <Input
-              autoComplete="off"
-              defaultValue={editing?.match}
-              maxLength={256}
-              name="match"
-            />
-          </label>
-        </div>
-      )}
+      <div className="grid gap-4 md:grid-cols-[minmax(13rem,18rem)_minmax(0,1fr)]">
+        <label className="grid gap-1.5 text-sm font-medium">
+          <span>{labels.matchingAlgorithm}</span>
+          <select
+            className={controlClass}
+            defaultValue={editing?.matchingAlgorithm ?? "none"}
+            name="matchingAlgorithm"
+          >
+            {matchingAlgorithms.map((algorithm) => (
+              <option key={algorithm} value={algorithm}>
+                {matchingLabels[algorithm]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium">
+          <span>{labels.match}</span>
+          <Input autoComplete="off" defaultValue={editing?.match} maxLength={256} name="match" />
+        </label>
+      </div>
 
       <DialogFooter>
         {cancelControl}
@@ -230,8 +200,12 @@ export default async function AttributePage({
     optionPlaceholder: t("form.optionPlaceholder"),
     addOption: t("form.addOption"),
     removeOption: t("form.removeOption"),
-    appliesTo: t("form.appliesTo"),
-    appliesToHint: t("form.appliesToHint")
+    scope: t("form.scope"),
+    scopeGlobal: t("form.scopeGlobal"),
+    scopeGlobalHint: t("form.scopeGlobalHint"),
+    scopeDocumentTypes: t("form.scopeDocumentTypes"),
+    documentTypesSearchPlaceholder: t("form.documentTypesSearchPlaceholder"),
+    documentTypesEmpty: t("form.documentTypesEmpty")
   };
   const matchingLabels = {
     none: t("matching.none.option"),

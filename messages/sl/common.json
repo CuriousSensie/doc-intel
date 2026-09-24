@@ -97,8 +97,12 @@
       "optionPlaceholder": "Oznaka možnosti",
       "addOption": "Dodaj možnost",
       "removeOption": "Odstrani možnost",
-      "appliesTo": "Velja za",
-      "appliesToHint": "Če ničesar ne izberete, je polje na voljo za vse vrste dokumentov."
+      "scope": "Obseg",
+      "scopeGlobal": "Splošno",
+      "scopeGlobalHint": "Velja za vsak dokument.",
+      "scopeDocumentTypes": "Omejeno na vrsto dokumenta",
+      "documentTypesSearchPlaceholder": "Iščite vrste dokumentov …",
+      "documentTypesEmpty": "Ni ujemajočih se vrst dokumentov"
     },
     "dataTypes": {
       "string": "Besedilo",

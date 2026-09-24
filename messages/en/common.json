@@ -97,8 +97,12 @@
       "optionPlaceholder": "Option label",
       "addOption": "Add option",
       "removeOption": "Remove option",
-      "appliesTo": "Applies to",
-      "appliesToHint": "Leave all unchecked to allow this field on every document type."
+      "scope": "Scope",
+      "scopeGlobal": "Global",
+      "scopeGlobalHint": "Applies to every document.",
+      "scopeDocumentTypes": "Document-scoped",
+      "documentTypesSearchPlaceholder": "Search document types…",
+      "documentTypesEmpty": "No matching document types"
     },
     "dataTypes": {
       "string": "Text",
