@@ -18,7 +18,8 @@ const namespaces = [
   "connections",
   "savedViews",
   "imports",
-  "rules"
+  "rules",
+  "folders"
 ] as const;
 
 export async function loadMessages(locale: Locale) {
