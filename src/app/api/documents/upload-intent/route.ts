@@ -13,7 +13,10 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({
   filename: z.string().trim().min(1).max(255),
   size: z.number().int().positive(),
-  mimeType: z.string().trim().min(1)
+  mimeType: z.string().trim().min(1),
+  // ADR-0019 Phase D — set by folder-upload-form.tsx after resolveOrCreateFolderPathsAction()
+  // resolves the file's directory to a folder id; omitted/null for the flat upload flow.
+  folderId: z.string().uuid().nullable().optional()
 });
 
 export async function POST(request: Request) {

@@ -68,6 +68,10 @@ export async function syncPaperlessDocument(
 
     let byteSize: number | null = null;
     let createdBy: string | null = null;
+    // ADR-0019 Phase D — resolved client-side before the upload intent was created (see
+    // resolveOrCreateFolderPathsAction/createUploadIntent); null for the flat upload flow, a
+    // webhook/reconciliation resync (no uploadId), or an import row.
+    let folderId: string | null = null;
     // Import-sourced uploads (document_uploads.import_row_id set) don't get a per-document
     // notification — a 10,000-document import would otherwise spam 10,000 of them. The import
     // job's own completion notification summarizes instead.
@@ -79,7 +83,7 @@ export async function syncPaperlessDocument(
     if (uploadId) {
       const { data: upload, error: uploadError } = await db
         .from("document_uploads")
-        .select("size_bytes, created_by, import_row_id")
+        .select("size_bytes, created_by, import_row_id, folder_id")
         .eq("id", uploadId)
         .eq("organization_id", orgId)
         .single();
@@ -87,6 +91,7 @@ export async function syncPaperlessDocument(
       byteSize = upload.size_bytes;
       createdBy = upload.created_by;
       isFromImport = upload.import_row_id !== null;
+      folderId = upload.folder_id;
 
       // A "documents" kind row (worker/modules/imports/run-import-chunk.ts's create_document
       // action) can't apply its entity links/field writes at chunk-processing time — the
@@ -135,7 +140,11 @@ export async function syncPaperlessDocument(
                 byte_size: byteSize,
                 created_by: createdBy,
                 source: isFromImport ? ("import" as const) : ("upload" as const),
-                import_job_id: importJobId
+                import_job_id: importJobId,
+                // ADR-0019 Phase D — only ever set on first insert of a bulk-folder-uploaded
+                // document; a later resync (webhook/reconciliation, uploadId null) never
+                // overwrites a folder placement the user or a folder-match rule made since.
+                folder_id: folderId
               }
             : {})
         },

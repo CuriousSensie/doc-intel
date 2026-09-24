@@ -147,6 +147,55 @@ describe("createUploadIntent", () => {
     expect(deleteFn).toHaveBeenCalled();
     expect(deleteEq).toHaveBeenCalledWith("id", "upload-2");
   });
+
+  it("rejects a folderId the caller does not have edit access to, before inserting", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const insert = vi.fn();
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => ({ rpc, from: () => ({ insert }) })
+    }));
+
+    const { createUploadIntent } = await import("@/modules/documents/documents.service");
+    await expect(
+      createUploadIntent("user-1", "org-1", {
+        filename: "invoice.pdf",
+        size: 1000,
+        mimeType: "application/pdf",
+        folderId: "folder-1"
+      })
+    ).rejects.toMatchObject({ code: "authorization_error" });
+
+    expect(rpc).toHaveBeenCalledWith("can_access_folder", { p_folder_id: "folder-1", p_require: "edit" });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("stores folder_id on the upload row when the caller has edit access", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const single = vi.fn().mockResolvedValue({ data: { id: "upload-3" }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+
+    vi.doMock("@/lib/supabase/server", () => ({
+      createClient: async () => ({ rpc, from: () => ({ insert }) })
+    }));
+
+    const createSignedUploadUrl = vi
+      .fn()
+      .mockResolvedValue({ data: { signedUrl: "https://x/signed", token: "tok" }, error: null });
+    vi.doMock("@/lib/supabase/admin", () => ({
+      createAdminClient: () => ({ storage: { from: () => ({ createSignedUploadUrl }) } })
+    }));
+
+    const { createUploadIntent } = await import("@/modules/documents/documents.service");
+    await createUploadIntent("user-1", "org-1", {
+      filename: "invoice.pdf",
+      size: 1000,
+      mimeType: "application/pdf",
+      folderId: "folder-1"
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ folder_id: "folder-1" }));
+  });
 });
 
 describe("completeUpload", () => {

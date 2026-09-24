@@ -50,13 +50,17 @@ function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9.\-_]/g, "_").slice(-150);
 }
 
-type UploadIntentInput = { filename: string; size: number; mimeType: string };
+type UploadIntentInput = { filename: string; size: number; mimeType: string; folderId?: string | null };
 type UploadIntentResult = { uploadId: string; signedUrl: string; token: string; path: string };
 
 // specs/01-architecture.md §Upload step 1. The user's own RLS-scoped client does the
 // document_uploads insert (so has_organization_write_access() rejects a read-only member for
 // free); the admin client generates the signed URL, since storage.objects has no RLS grant for
 // authenticated users at all (this migration's own comment — the token is the auth mechanism).
+//
+// ADR-0019 Phase D — `folderId`, when set, is resolved client-side beforehand (see
+// resolveOrCreateFolderPathsAction) and is only a plain column write here; sync-paperless-
+// document.ts reads it back off this row the same way it already reads import_row_id.
 export async function createUploadIntent(
   userId: string,
   organizationId: string,
@@ -77,6 +81,19 @@ export async function createUploadIntent(
   ).toISOString();
 
   const db = await createClient();
+
+  // A client could otherwise pass an arbitrary folderId this route never checks — the folder
+  // access check normally lives in folders.service.ts's own callers (moveDocumentToFolder's
+  // assertCanAccessFolderForEdit), which this upload path bypasses entirely.
+  if (input.folderId) {
+    const { data: canAccess, error: accessError } = await db.rpc("can_access_folder", {
+      p_folder_id: input.folderId,
+      p_require: "edit"
+    });
+    if (accessError) throw accessError;
+    if (!canAccess) throw new AuthorizationError("You do not have edit access to this folder");
+  }
+
   const { data: upload, error: insertError } = await db
     .from("document_uploads")
     .insert({
@@ -86,7 +103,8 @@ export async function createUploadIntent(
       declared_mime_type: input.mimeType,
       size_bytes: input.size,
       created_by: userId,
-      expires_at: expiresAt
+      expires_at: expiresAt,
+      folder_id: input.folderId ?? null
     })
     .select("id")
     .single();
