@@ -1,6 +1,8 @@
 import { logEvent } from "@/lib/events";
 import { AuthorizationError, NotFoundError, ValidationError } from "@/lib/errors";
 import type { ServiceContext } from "@/lib/service-context";
+import { buildDocumentSubjectContext, type DocumentSubjectContext } from "@/modules/rules/rules.context";
+import { evaluateConditions } from "@/modules/rules/rules.evaluator";
 import type { ConditionNode } from "@/modules/rules/rules.schemas";
 import type { Database } from "@/types/database";
 
@@ -268,4 +270,75 @@ export async function moveDocumentsToFolder(
   });
 
   return { movedCount: allowed.length, skippedCount: documentIds.length - allowed.length };
+}
+
+// ADR-0019's "folders have a matching pattern, like tags/document types" — evaluated on every
+// document.ingested fire (worker/jobs/run-rule.ts), independent of the tenant's authored rules:
+// a folder's own match_conditions is checked directly, not through the rules table. Deepest
+// folder first, first match wins — a document matching both "Documents" and
+// "Documents/Invoices/2025" lands in the more specific one. Respects "user edits win over rules
+// always" (specs/07) via field_provenance, exactly like a rule-dispatched field write would.
+export async function evaluateFolderMatchesForDocument(
+  ctx: ServiceContext,
+  documentId: string,
+  subject?: DocumentSubjectContext
+): Promise<void> {
+  const { data: folders, error } = await ctx.db
+    .from("folders")
+    .select("id, match_conditions")
+    .eq("organization_id", ctx.orgId)
+    .is("deleted_at", null)
+    .not("match_conditions", "is", null)
+    .order("depth", { ascending: false });
+  if (error) throw error;
+  if (!folders || folders.length === 0) return;
+
+  const { data: userOwned, error: provenanceError } = await ctx.db
+    .from("field_provenance")
+    .select("field_key")
+    .eq("document_id", documentId)
+    .eq("field_key", "document.folder_id")
+    .eq("updated_by", "user")
+    .maybeSingle();
+  if (provenanceError) throw provenanceError;
+  if (userOwned) return;
+
+  const doc = subject ?? (await buildDocumentSubjectContext(ctx, documentId));
+
+  for (const folder of folders) {
+    const conditions = folder.match_conditions as unknown as ConditionNode;
+    const { matched } = evaluateConditions(conditions, doc);
+    if (!matched) continue;
+
+    const { error: updateError } = await ctx.db
+      .from("documents")
+      .update({ folder_id: folder.id })
+      .eq("id", documentId)
+      .eq("organization_id", ctx.orgId);
+    if (updateError) throw updateError;
+
+    const { error: provenanceWriteError } = await ctx.db.from("field_provenance").upsert(
+      {
+        organization_id: ctx.orgId,
+        document_id: documentId,
+        field_key: "document.folder_id",
+        updated_by: "system",
+        source_id: folder.id,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "document_id,field_key" }
+    );
+    if (provenanceWriteError) throw provenanceWriteError;
+
+    await logEvent({
+      actorId: null,
+      actorType: "system",
+      action: "document.moved_to_folder",
+      entityType: "document",
+      entityId: documentId,
+      organizationId: ctx.orgId,
+      metadata: { folderId: folder.id, via: "folder_match" }
+    });
+    return;
+  }
 }

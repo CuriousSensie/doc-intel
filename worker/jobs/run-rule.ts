@@ -3,6 +3,7 @@ import type { Job } from "bullmq";
 import { rulesConfig } from "@/config/rules";
 import { logger } from "@/lib/logger";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
+import { evaluateFolderMatchesForDocument } from "@/modules/folders/folders.service";
 import { buildDocumentSubjectContext, buildEntitySubjectContext, type SubjectContext } from "@/modules/rules/rules.context";
 import { dispatchRuleActions } from "@/modules/rules/rules.dispatcher";
 import { evaluateConditions } from "@/modules/rules/rules.evaluator";
@@ -32,7 +33,12 @@ export async function runRuleJob(job: Job<JobPayload>): Promise<void> {
 
   const ctx = contextForJob(job);
   const rules = await listRulesForTrigger(ctx, trigger);
-  if (rules.length === 0) return;
+  // ADR-0019: a folder's own match_conditions isn't a rules-table row, so folder auto-filing must
+  // still run on document.ingested even for an org with zero authored rules for this trigger —
+  // the `rules.length === 0` short-circuit below existed purely to skip the (real) cost of
+  // building a subject when nothing would use it, which no longer holds for this one trigger.
+  const needsFolderMatch = Boolean(documentId) && trigger === "document.ingested";
+  if (rules.length === 0 && !needsFolderMatch) return;
 
   let subject: SubjectContext;
   try {
@@ -49,6 +55,20 @@ export async function runRuleJob(job: Job<JobPayload>): Promise<void> {
     });
     return;
   }
+
+  if (needsFolderMatch && subject.kind === "document") {
+    try {
+      await evaluateFolderMatchesForDocument(ctx, documentId!, subject);
+    } catch (err) {
+      logger.error("rules.run_rule.folder_match_failed", {
+        orgId,
+        documentId,
+        errorMessage: err instanceof Error ? err.message : String(err)
+      });
+    }
+  }
+
+  if (rules.length === 0) return;
 
   const fieldClaims = new Map<string, string>();
   const startedAt = Date.now();
