@@ -290,7 +290,7 @@ export default async function AttributePage({
       {attributes.length === 0 ? (
         <EmptyState description={t("emptyDescription")} title={t("emptyTitle")} />
       ) : (
-        <AttributesTable attributes={attributes} kind={kind} />
+        <AttributesTable attributes={attributes} documentTypeOptions={documentTypeOptions} kind={kind} />
       )}
     </div>
   );

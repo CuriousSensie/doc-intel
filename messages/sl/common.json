@@ -79,8 +79,14 @@
       "documents": "Dokumenti",
       "viewDocuments": "Prikaži dokumente",
       "actions": "Dejanja",
+      "scope": "Obseg",
       "dataType": "Vrsta",
-      "appliesTo": "Velja za"
+      "appliesTo": "Velja za",
+      "appliesToAll": "Vse"
+    },
+    "scope": {
+      "global": "Splošno",
+      "documentScoped": "Omejeno na vrsto dokumenta"
     },
     "form": {
       "name": "Ime",

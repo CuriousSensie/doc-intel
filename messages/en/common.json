@@ -79,8 +79,14 @@
       "documents": "Documents",
       "viewDocuments": "View documents",
       "actions": "Actions",
+      "scope": "Scope",
       "dataType": "Type",
-      "appliesTo": "Applies to"
+      "appliesTo": "Applies to",
+      "appliesToAll": "All"
+    },
+    "scope": {
+      "global": "Global",
+      "documentScoped": "Document-scoped"
     },
     "form": {
       "name": "Name",

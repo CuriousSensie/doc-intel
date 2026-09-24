@@ -25,11 +25,20 @@ import { deleteAttributeFormAction } from "@/modules/attributes/attributes.actio
 import type { AttributeRow } from "@/modules/attributes/attributes.service";
 import type { AttributeKind } from "@/modules/attributes/attributes.schemas";
 
-export function AttributesTable({ attributes, kind }: { attributes: AttributeRow[]; kind: AttributeKind }) {
+export function AttributesTable({
+  attributes,
+  kind,
+  documentTypeOptions = []
+}: {
+  attributes: AttributeRow[];
+  kind: AttributeKind;
+  documentTypeOptions?: Array<{ key: string; name: string }>;
+}) {
   const t = useTranslations("common.attributes");
   // Matching/Documents/View-documents are Paperless-tag-shaped columns that are meaningless for
-  // custom fields — a dedicated column set (Type/Applies to) is shown instead.
+  // custom fields — a dedicated column set (Scope/Type/Applies to) is shown instead.
   const isCustomFields = kind === "custom-fields";
+  const documentTypeNameByKey = new Map(documentTypeOptions.map((dt) => [dt.key, dt.name]));
 
   return (
     <div className="min-w-0 overflow-x-auto">
@@ -39,6 +48,7 @@ export function AttributesTable({ attributes, kind }: { attributes: AttributeRow
             <TableHead className="w-[30%]">{t("columns.name")}</TableHead>
             {isCustomFields ? (
               <>
+                <TableHead className="w-36">{t("columns.scope")}</TableHead>
                 <TableHead className="w-44">{t("columns.dataType")}</TableHead>
                 <TableHead className="w-56">{t("columns.appliesTo")}</TableHead>
               </>
@@ -73,13 +83,22 @@ export function AttributesTable({ attributes, kind }: { attributes: AttributeRow
               </TableCell>
               {isCustomFields ? (
                 <>
+                  <TableCell>
+                    <Badge variant={attribute.appliesTo && attribute.appliesTo.length > 0 ? "outline" : "muted"}>
+                      {attribute.appliesTo && attribute.appliesTo.length > 0
+                        ? t("scope.documentScoped")
+                        : t("scope.global")}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-muted">
                     {attribute.dataType ? t(`dataTypes.${attribute.dataType}`) : ""}
                   </TableCell>
                   <TableCell className="text-muted">
                     {attribute.appliesTo && attribute.appliesTo.length > 0
-                      ? attribute.appliesTo.join(", ")
-                      : "—"}
+                      ? attribute.appliesTo
+                          .map((key) => documentTypeNameByKey.get(key) ?? key)
+                          .join(", ")
+                      : t("columns.appliesToAll")}
                   </TableCell>
                 </>
               ) : (
