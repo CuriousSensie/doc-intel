@@ -43,3 +43,4 @@ ADR that says so and links back; the old one stays as a record of what was true 
 | [0015](0015-decline-xls-support.md) | Decline legacy `.xls` import support | Accepted |
 | [0016](0016-defer-custom-field-document-matching.md) | Defer the `custom_field` document-matching strategy | Deferred |
 | [0017](0017-per-document-visibility-and-sharing.md) | Per-document visibility and sharing inside an organization | Accepted |
+| [0019](0019-folders.md) | App-owned folder hierarchy for documents | Accepted |
