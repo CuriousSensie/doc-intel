@@ -1637,6 +1637,10 @@ export type Database = {
         Args: { p_folder_id: string };
         Returns: boolean;
       };
+      get_folder_document_counts: {
+        Args: { p_organization_id: string };
+        Returns: { folder_id: string; document_count: number }[];
+      };
       filter_folder_ids: {
         Args: { p_organization_id: string; p_ids: string[]; p_required: "view" | "edit" | "manage" };
         Returns: string[];
