@@ -22,11 +22,14 @@ import {
   getCachedTags
 } from "@/lib/paperless/metadata-cache";
 import { createClient } from "@/lib/supabase/server";
+import { isFeatureEnabled } from "@/config/features";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
+import { FolderBrowserRail } from "@/components/folders/folder-browser-rail";
+import { listFolderTreeAction } from "@/modules/folders/folders.actions";
 import {
   documentsViewSearchParamSchema,
   type DocumentListField,
@@ -264,8 +267,50 @@ export default async function DocumentsPage({
     savedView
   );
 
-  return (
-    <div className="grid min-w-0 gap-5">
+  const foldersEnabled = isFeatureEnabled("folders");
+  const rawFolderIdParam = firstSearchValue(rawSearch.folderId);
+  const tFolders = foldersEnabled ? await getTranslations("folders") : null;
+  // Breadcrumb chain for the current folder, built by walking parentFolderId on the flat tree
+  // list (ADR-0019 — path is a materialized name string, not ids, so the chain of {id, name}
+  // pairs needed for clickable breadcrumb links has to be reconstructed here).
+  const folderBreadcrumb: Array<{ folderId: string | null; label: string }> =
+    foldersEnabled && rawFolderIdParam
+      ? rawFolderIdParam === "unfiled"
+        ? [{ folderId: null, label: tFolders!("unfiled") }]
+        : await listFolderTreeAction()
+            .then((allFolders) => {
+              const byId = new Map(allFolders.map((f) => [f.id, f]));
+              const chain: Array<{ folderId: string; label: string }> = [];
+              let current = byId.get(rawFolderIdParam) ?? null;
+              while (current) {
+                chain.unshift({ folderId: current.id, label: current.name });
+                current = current.parentFolderId ? (byId.get(current.parentFolderId) ?? null) : null;
+              }
+              return chain;
+            })
+            .catch(() => [])
+      : [];
+
+  const documentsMain = (
+    <div className="grid min-w-0 flex-1 gap-5">
+      {folderBreadcrumb.length > 0 ? (
+        <nav aria-label={tFolders!("title")} className="flex flex-wrap items-center gap-1 text-sm text-muted">
+          <Link className="hover:underline" href="/dashboard/documents">
+            {tFolders!("allDocuments")}
+          </Link>
+          {folderBreadcrumb.map((segment) => (
+            <span className="flex items-center gap-1" key={segment.folderId ?? "unfiled"}>
+              <span aria-hidden>/</span>
+              <Link
+                className="hover:underline"
+                href={`/dashboard/documents?folderId=${segment.folderId ?? "unfiled"}`}
+              >
+                {segment.label}
+              </Link>
+            </span>
+          ))}
+        </nav>
+      ) : null}
       <DocumentsFilterBar
         current={{ ...filter, fields: visibleFields, view }}
         filterOptions={{
@@ -326,6 +371,17 @@ export default async function DocumentsPage({
           />
         </>
       )}
+    </div>
+  );
+
+  if (!foldersEnabled) {
+    return documentsMain;
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-5 md:flex-row">
+      <FolderBrowserRail />
+      {documentsMain}
     </div>
   );
 }
