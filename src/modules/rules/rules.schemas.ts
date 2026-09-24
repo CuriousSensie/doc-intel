@@ -172,6 +172,13 @@ const notifyActionSchema = z.object({
   message: z.string().trim().min(1).max(500)
 });
 
+// ADR-0019 — files a document into an app-owned folder. No Paperless equivalent (unlike
+// set_storage_path), so never added to PAPERLESS_NATIVE_ACTION_TYPES below.
+const moveToFolderActionSchema = z.object({
+  type: z.literal("move_to_folder"),
+  folderId: z.string().uuid()
+});
+
 // specs/07: no run_script/http_request — the discriminated union itself is the enforcement that
 // tenant-authored code execution can never be expressed, not a runtime check.
 export const ruleActionSchema = z.discriminatedUnion("type", [
@@ -184,7 +191,8 @@ export const ruleActionSchema = z.discriminatedUnion("type", [
   setStoragePathActionSchema,
   assignResponsibleActionSchema,
   createReminderActionSchema,
-  notifyActionSchema
+  notifyActionSchema,
+  moveToFolderActionSchema
 ]);
 export type RuleAction = z.infer<typeof ruleActionSchema>;
 

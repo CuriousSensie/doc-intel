@@ -42,6 +42,8 @@ function fieldKeyForAction(action: RuleAction): string | null {
       return "document.correspondent";
     case "set_storage_path":
       return "document.storage_path";
+    case "move_to_folder":
+      return "document.folder_id";
     default:
       return null; // add_tag/remove_tag are additive, not a single-value field — no conflict slot
   }
@@ -255,6 +257,51 @@ async function dispatchOne(
       p_target_id: targetId,
       p_relation: relation,
       p_rule_backfill_id: options.ruleBackfillId ?? null
+    });
+    if (error) throw error;
+    return { action, status: status as string };
+  }
+
+  // ADR-0019: a plain documents.folder_id column write, never routed through paperlessFor() —
+  // folders are app-owned, Paperless stays unaware of them. Kept separate from the combined
+  // Paperless-actions block below rather than added to it, since every action there ends in a
+  // paperlessFor(ctx.orgId) call this one must never make.
+  if (action.type === "move_to_folder") {
+    if (subject.kind !== "document") return { action, status: "skipped_not_a_document" };
+
+    const fieldKey = fieldKeyForAction(action);
+    if (fieldKey) {
+      const claimedBy = fieldClaims.get(fieldKey);
+      if (claimedBy && claimedBy !== rule.id) return { action, status: `skipped_conflict:${claimedBy}` };
+      if (userOwnedFieldKeys.has(fieldKey)) return { action, status: "skipped_conflict:user" };
+      fieldClaims.set(fieldKey, rule.id);
+    }
+
+    const { data: folder, error: folderError } = await ctx.db
+      .from("folders")
+      .select("id")
+      .eq("id", action.folderId)
+      .eq("organization_id", ctx.orgId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (folderError) throw folderError;
+    if (!folder) return { action, status: "skipped_folder_not_found" };
+
+    const { error: updateError } = await ctx.db
+      .from("documents")
+      .update({ folder_id: action.folderId })
+      .eq("id", subject.documentId)
+      .eq("organization_id", ctx.orgId);
+    if (updateError) throw updateError;
+
+    const { data: status, error } = await ctx.db.rpc("apply_rule_action", {
+      p_organization_id: ctx.orgId,
+      p_rule_id: rule.id,
+      p_rule_run_id: ruleRunId,
+      p_action_type: action.type,
+      p_action: action as never,
+      p_document_id: subject.documentId,
+      p_field_key: fieldKey
     });
     if (error) throw error;
     return { action, status: status as string };
