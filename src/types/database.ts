@@ -593,6 +593,9 @@ export type Database = {
           created_at: string;
           updated_at: string;
           expires_at: string;
+          // ADR-0019 Phase D — resolved before the upload intent is created, read by
+          // sync-paperless-document.ts the same way it reads import_row_id.
+          folder_id: string | null;
         };
         Insert: {
           id?: string;
@@ -620,6 +623,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           expires_at: string;
+          folder_id?: string | null;
         };
         Update: {
           status?:
@@ -638,6 +642,7 @@ export type Database = {
           source_archive_key?: string | null;
           document_id?: string | null;
           updated_at?: string;
+          folder_id?: string | null;
         };
         Relationships: [];
       };
