@@ -70,6 +70,9 @@ type Props = {
     view?: DocumentsViewMode;
     fields?: DocumentListField[];
   };
+  // ADR-0019 Phase D — gates the "Upload folder" tab in DocumentUploadDialogButton; undefined/
+  // false leaves the upload dialog exactly as it was before folders existed.
+  foldersEnabled?: boolean;
 };
 
 const FIELD_VALUES: StaticDocumentListField[] = [
@@ -82,7 +85,7 @@ const FIELD_VALUES: StaticDocumentListField[] = [
   "createdAt"
 ];
 
-export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: Props) {
+export function DocumentsFilterBar({ filterOptions, selectedEntity, current, foldersEnabled }: Props) {
   const t = useTranslations("documents.filters");
   const tList = useTranslations("documents.list");
   const router = useRouter();
@@ -469,7 +472,7 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current }: P
               viewKind="dynamic"
             />
           ) : null}
-          <DocumentUploadDialogButton />
+          <DocumentUploadDialogButton foldersEnabled={foldersEnabled} />
         </div>
         <div className="hidden flex-wrap items-center gap-2 xl:flex">{listControls}</div>
       </div>

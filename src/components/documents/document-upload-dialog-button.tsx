@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { DocumentUploadForm } from "@/components/documents/document-upload-form";
+import { FolderUploadForm } from "@/components/documents/folder-upload-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { documentsConfig } from "@/config/documents";
 
 function formatSize(bytes: number) {
@@ -24,7 +26,11 @@ function formatSize(bytes: number) {
 // all; DocumentUploadForm only existed on the dashboard home widget. Reuses that same form
 // rather than a second implementation, matching PaperlessMetaPicker's "create new" dialog
 // pattern already used elsewhere in this app.
-export function DocumentUploadDialogButton() {
+//
+// ADR-0019 Phase D — `foldersEnabled` adds a "Upload folder" tab alongside the original flat
+// upload; without it (feature flag off, or a caller that doesn't pass it) this renders exactly
+// as before folders existed.
+export function DocumentUploadDialogButton({ foldersEnabled = false }: { foldersEnabled?: boolean }) {
   const t = useTranslations("documents.upload");
   const [open, setOpen] = useState(false);
 
@@ -41,7 +47,22 @@ export function DocumentUploadDialogButton() {
           <DialogTitle>{t("dropTitle")}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted">{t("maxSize", { size: formatSize(documentsConfig.maxSizeBytes) })}</p>
-        <DocumentUploadForm />
+        {foldersEnabled ? (
+          <Tabs defaultValue="files">
+            <TabsList>
+              <TabsTrigger value="files">{t("filesTab")}</TabsTrigger>
+              <TabsTrigger value="folder">{t("folderTab")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="files">
+              <DocumentUploadForm />
+            </TabsContent>
+            <TabsContent value="folder">
+              <FolderUploadForm />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <DocumentUploadForm />
+        )}
       </DialogContent>
     </Dialog>
   );

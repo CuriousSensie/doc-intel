@@ -80,6 +80,17 @@
       "uploading": "Nalaganje",
       "processing": "Obdelava",
       "failed": "Neuspešno"
+    },
+    "filesTab": "Naloži datoteke",
+    "folderTab": "Naloži mapo",
+    "folder": {
+      "dropTitle": "Izberite mapo za nalaganje",
+      "dropHint": "Naložene bodo vse datoteke znotraj, vključno s podmapami — struktura map bo obnovljena tukaj.",
+      "fileCount": "{count, plural, one {# datoteka} other {# datotek}} v {folders, plural, one {# mapi} other {# mapah}}",
+      "changeSelection": "Izberi drugo mapo",
+      "previewTitle": "Mape, ki bodo ustvarjene",
+      "uploadButton": "{count, plural, one {Naloži # datoteko} other {Naloži # datotek}}",
+      "couldNotResolve": "Strukture map ni bilo mogoče ustvariti"
     }
   },
   "bulk": {

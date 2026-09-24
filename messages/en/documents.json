@@ -80,6 +80,17 @@
       "uploading": "Uploading",
       "processing": "Processing",
       "failed": "Failed"
+    },
+    "filesTab": "Upload files",
+    "folderTab": "Upload folder",
+    "folder": {
+      "dropTitle": "Choose a folder to upload",
+      "dropHint": "Every file inside, including subfolders, is uploaded — the folder structure is recreated here.",
+      "fileCount": "{count, plural, one {# file} other {# files}} in {folders, plural, one {# folder} other {# folders}}",
+      "changeSelection": "Choose a different folder",
+      "previewTitle": "Folders that will be created",
+      "uploadButton": "{count, plural, one {Upload # file} other {Upload # files}}",
+      "couldNotResolve": "Could not create the folder structure"
     }
   },
   "bulk": {

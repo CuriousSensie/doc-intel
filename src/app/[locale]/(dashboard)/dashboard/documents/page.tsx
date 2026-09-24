@@ -313,6 +313,7 @@ export default async function DocumentsPage({
       ) : null}
       <DocumentsFilterBar
         current={{ ...filter, fields: visibleFields, view }}
+        foldersEnabled={foldersEnabled}
         filterOptions={{
           tags,
           correspondents,
