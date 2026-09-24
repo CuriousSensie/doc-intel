@@ -176,6 +176,11 @@ export type ListDocumentsOptions = {
   entityId?: string;
   documentIds?: string[];
   hasNoConnections?: boolean;
+  // ADR-0019 — `null` explicitly means "unfiled only" (query.is("folder_id", null)), distinct
+  // from unset (no folder filter at all). includeSubfolders defaults true: a folder grant/filter
+  // cascades to its descendants, matching can_access_folder's own semantics.
+  folderId?: string | null;
+  includeSubfolders?: boolean;
   createdBy?: string;
   sort?: DocumentSort;
   sortDirection?: DocumentSortDirection;
@@ -195,7 +200,7 @@ export type ListDocumentsResult = {
 };
 
 const LIST_DOCUMENT_COLUMNS =
-  "id, organization_id, paperless_document_id, title, document_type_key, document_date, correspondent_name, page_count, byte_size, mime_type, checksum, status, source, import_job_id, synced_at, created_by, created_at, updated_at, deleted_at" as const;
+  "id, organization_id, paperless_document_id, title, document_type_key, document_date, correspondent_name, page_count, byte_size, mime_type, checksum, status, source, import_job_id, synced_at, created_by, created_at, updated_at, deleted_at, folder_id" as const;
 
 const SORT_COLUMNS: Record<DocumentSort, string> = {
   created: "created_at",
@@ -329,6 +334,25 @@ export async function listDocuments(
     return listDocumentsWithoutConnections(organizationId, options, pageSize, limit, paperlessIds);
   }
 
+  // Resolves the folder + all its descendant ids up front (same shape as entityConnectedDocIds
+  // below) — "access/filter cascades to subfolders" is a business filter served entirely from
+  // our own DB, applied alongside (not instead of) the Paperless-id-set filter above.
+  let folderIds: string[] | null = null;
+  if (options.folderId) {
+    if (options.includeSubfolders === false) {
+      folderIds = [options.folderId];
+    } else {
+      const { data: descendants, error: folderError } = await db
+        .from("folders")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .contains("path_ids", [options.folderId]);
+      if (folderError) throw folderError;
+      folderIds = (descendants ?? []).map((f) => f.id);
+      if (folderIds.length === 0) return emptyDocumentsResult(options.page, pageSize);
+    }
+  }
+
   let entityConnectedDocIds: Set<string> | null = null;
   if (options.entityId) {
     const ctx: ServiceContext = {
@@ -358,6 +382,8 @@ export async function listDocuments(
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
   if (entityConnectedDocIds) query = query.in("id", [...entityConnectedDocIds]);
   if (options.documentIds) query = query.in("id", options.documentIds);
+  if (options.folderId === null) query = query.is("folder_id", null);
+  else if (folderIds) query = query.in("folder_id", folderIds);
 
   const cursor = decodeDocumentCursor(options.cursor);
   if (cursor) {

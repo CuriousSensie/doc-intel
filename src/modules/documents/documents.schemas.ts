@@ -62,6 +62,10 @@ export const listDocumentsFilterSchema = z.object({
   entityId: z.string().uuid().optional(),
   documentIds: z.array(z.string().uuid()).optional(),
   hasNoConnections: z.boolean().optional(),
+  // ADR-0019 — "unfiled" (the literal string, not a UUID) is the querystring spelling of the
+  // null-folder filter; parseDocumentsSearchParams() maps it to folderId: null below.
+  folderId: z.string().uuid().nullable().optional(),
+  includeSubfolders: z.boolean().optional(),
   createdBy: z.string().uuid().optional(),
   sort: documentSortSchema.optional(),
   sortDirection: documentSortDirectionSchema.optional(),
@@ -107,6 +111,8 @@ export function parseDocumentsSearchParams(
     correspondentId: first(raw.correspondentId),
     entityId: first(raw.entityId),
     hasNoConnections: first(raw.hasNoConnections) === "true",
+    folderId: first(raw.folderId) === "unfiled" ? null : first(raw.folderId),
+    includeSubfolders: first(raw.includeSubfolders) === undefined ? undefined : first(raw.includeSubfolders) !== "false",
     createdBy: first(raw.createdBy),
     sort: first(raw.sort),
     sortDirection: first(raw.sortDirection),
