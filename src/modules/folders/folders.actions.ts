@@ -14,6 +14,8 @@ import {
   revokeFolderAccessSchema,
   updateFolderMatchConditionsSchema
 } from "./folders.schemas";
+import type { DocumentPageSize, ListDocumentsResult } from "@/modules/documents/documents.service";
+
 import {
   createFolder,
   deleteFolder,
@@ -22,6 +24,7 @@ import {
   getFolder,
   grantFolderAccess,
   listFolderAccess,
+  listFolderDocuments,
   listFolderTree,
   moveDocumentsToFolder,
   moveFolder,
@@ -114,4 +117,15 @@ export async function resolveOrCreateFolderPathsAction(paths: string[]): Promise
   const parsed = resolveOrCreateFolderPathsSchema.parse({ paths });
   const ctx = await buildRequestContext();
   return resolveOrCreateFolderPaths(ctx, parsed.paths);
+}
+
+// Folders explorer view — a folder node's direct documents, fetched lazily on first expand and
+// cached client-side by the caller (folder-tree.tsx) so re-expanding never re-fetches.
+export async function listFolderDocumentsAction(
+  folderId: string | null,
+  pagination: { page?: number; pageSize?: DocumentPageSize } = {}
+): Promise<ListDocumentsResult> {
+  requireFeature("folders");
+  const ctx = await buildRequestContext();
+  return listFolderDocuments(ctx, folderId, pagination);
 }

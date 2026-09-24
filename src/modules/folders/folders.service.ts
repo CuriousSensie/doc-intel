@@ -1,6 +1,11 @@
 import { logEvent } from "@/lib/events";
 import { AuthorizationError, NotFoundError, ValidationError } from "@/lib/errors";
 import type { ServiceContext } from "@/lib/service-context";
+import {
+  listDocuments,
+  type DocumentPageSize,
+  type ListDocumentsResult
+} from "@/modules/documents/documents.service";
 import { buildDocumentSubjectContext, type DocumentSubjectContext } from "@/modules/rules/rules.context";
 import { evaluateConditions } from "@/modules/rules/rules.evaluator";
 import type { ConditionNode } from "@/modules/rules/rules.schemas";
@@ -25,6 +30,14 @@ function toValidationOrThrow(error: { code?: string; message: string }): never {
   throw error;
 }
 
+// "full": the caller can manage this folder or has a grant on it or an ancestor (can_access_folder
+// would return true). "ancestor": visible only via can_view_folder_as_ancestor — a name/path
+// breadcrumb stop on the way down to a folder the caller actually has access to, never a folder
+// the caller can browse, manage, or grant access to. Populated by listFolderTree() only; a plain
+// getFolder() call (used by dialogs already scoped to a folder the caller can manage) leaves it
+// undefined.
+export type FolderAccessLevel = "full" | "ancestor";
+
 export type Folder = {
   id: string;
   parentFolderId: string | null;
@@ -34,6 +47,9 @@ export type Folder = {
   matchConditions: ConditionNode | null;
   createdBy: string | null;
   createdAt: string;
+  accessLevel?: FolderAccessLevel;
+  documentCount?: number;
+  childFolderCount?: number;
 };
 
 function toFolder(row: FolderRow): Folder {
@@ -49,9 +65,14 @@ function toFolder(row: FolderRow): Folder {
   };
 }
 
-// Every folder the caller can see (creator/owner-admin/cascading access), shaped for the tree
-// component: flat list, client builds the parent→children map itself rather than N recursive
-// server round trips.
+// Every folder the caller can see — either real access (creator/owner-admin/cascading grant) or,
+// since the ancestor-visibility RLS fix, a name/path-only breadcrumb stop above a folder the
+// caller has real access to. Flat list; the client builds the parent→children map itself rather
+// than N recursive server round trips.
+//
+// accessLevel/documentCount/childFolderCount are computed here (not per-row RPC calls) so the
+// explorer view can render counts and dim ancestor-only nodes without an extra round trip per
+// folder — "expanding must be instant" only holds if the initial tree fetch is already cheap.
 export async function listFolderTree(ctx: ServiceContext): Promise<Folder[]> {
   const { data, error } = await ctx.db
     .from("folders")
@@ -61,7 +82,59 @@ export async function listFolderTree(ctx: ServiceContext): Promise<Folder[]> {
     .order("depth", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(toFolder);
+  const folders = (data ?? []).map(toFolder);
+  if (folders.length === 0) return folders;
+
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  function ancestorChainIds(folder: Folder): string[] {
+    const ids = [folder.id];
+    let current = folder.parentFolderId ? byId.get(folder.parentFolderId) : undefined;
+    while (current) {
+      ids.push(current.id);
+      current = current.parentFolderId ? byId.get(current.parentFolderId) : undefined;
+    }
+    return ids;
+  }
+
+  const [directGrants, callerIsOwnerAdmin, counts] = await Promise.all([
+    ctx.actorId
+      ? ctx.db.from("folder_access").select("folder_id").eq("granted_to", ctx.actorId)
+      : Promise.resolve({ data: [], error: null }),
+    isOwnerOrAdmin(ctx),
+    ctx.db.rpc("get_folder_document_counts", { p_organization_id: ctx.orgId })
+  ]);
+  if (directGrants.error) throw directGrants.error;
+  if (counts.error) throw counts.error;
+
+  const directGrantIds = new Set((directGrants.data ?? []).map((g) => g.folder_id));
+  const documentCountByFolder = new Map((counts.data ?? []).map((c) => [c.folder_id, Number(c.document_count)]));
+  const childCountByParent = new Map<string, number>();
+  for (const folder of folders) {
+    if (!folder.parentFolderId) continue;
+    childCountByParent.set(folder.parentFolderId, (childCountByParent.get(folder.parentFolderId) ?? 0) + 1);
+  }
+
+  for (const folder of folders) {
+    const hasCascadingAccess = ancestorChainIds(folder).some((id) => directGrantIds.has(id));
+    folder.accessLevel =
+      folder.createdBy === ctx.actorId || callerIsOwnerAdmin || hasCascadingAccess ? "full" : "ancestor";
+    folder.documentCount = documentCountByFolder.get(folder.id) ?? 0;
+    folder.childFolderCount = childCountByParent.get(folder.id) ?? 0;
+  }
+
+  return folders;
+}
+
+async function isOwnerOrAdmin(ctx: ServiceContext): Promise<boolean> {
+  if (!ctx.actorId) return false;
+  const { data, error } = await ctx.db
+    .from("organization_members")
+    .select("role")
+    .eq("organization_id", ctx.orgId)
+    .eq("user_id", ctx.actorId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.role === "owner" || data?.role === "admin";
 }
 
 export async function getFolder(ctx: ServiceContext, folderId: string): Promise<Folder> {
@@ -401,4 +474,24 @@ export async function evaluateFolderMatchesForDocument(
     });
     return;
   }
+}
+
+// Folders explorer view (documents-filter-bar.tsx's "folders" view mode) — a folder node's
+// *direct* documents only, never its descendants' (those render under their own subfolder node
+// when it's expanded, same shape a real file-explorer uses). `folderId: null` is the root-level
+// "Unfiled" pseudo-node. Reuses listDocuments()'s existing RLS-scoped query/pagination rather than
+// a second document-listing code path.
+export async function listFolderDocuments(
+  ctx: ServiceContext,
+  folderId: string | null,
+  pagination: { page?: number; pageSize?: DocumentPageSize } = {}
+): Promise<ListDocumentsResult> {
+  return listDocuments(ctx.orgId, {
+    folderId,
+    includeSubfolders: false,
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    sort: "title",
+    sortDirection: "asc"
+  });
 }

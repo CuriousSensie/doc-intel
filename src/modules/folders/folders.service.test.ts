@@ -148,6 +148,35 @@ function makeFoldersTable(getRows: () => unknown[]) {
   return chain;
 }
 
+// listFolderTree() also reads the caller's own folder_access grants and org role once a
+// non-empty folder list makes it past the early-return — these two are always empty/non-admin
+// for these tests, which only care about the create/reuse/race behavior, not accessLevel.
+function makeSideTablesFrom(getRows: () => unknown[]) {
+  return vi.fn((table: string) => {
+    if (table === "folders") return makeFoldersTable(getRows);
+    if (table === "folder_access") {
+      return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ data: [], error: null }) };
+    }
+    if (table === "organization_members") {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+      };
+    }
+    return undefined;
+  });
+}
+
+// get_folder_document_counts is the other new listFolderTree() dependency — routed separately so
+// a test's own create_folder mock doesn't have to also know about it.
+function withFolderCountsRpc(rpc: ReturnType<typeof vi.fn>) {
+  return vi.fn((fn: string, args: unknown) => {
+    if (fn === "get_folder_document_counts") return Promise.resolve({ data: [], error: null });
+    return rpc(fn, args);
+  });
+}
+
 describe("resolveOrCreateFolderPaths", () => {
   it("returns an empty map without touching the database for an empty input", async () => {
     const from = vi.fn();
@@ -199,9 +228,9 @@ describe("resolveOrCreateFolderPaths", () => {
         created_at: ""
       }
     ];
-    const from = vi.fn((table: string) => (table === "folders" ? makeFoldersTable(() => rows) : undefined));
+    const from = makeSideTablesFrom(() => rows);
     const rpc = vi.fn().mockResolvedValue({ data: "new-2025", error: null });
-    const ctx = makeCtx({ from, rpc } as never);
+    const ctx = makeCtx({ from, rpc: withFolderCountsRpc(rpc) } as never);
     const { resolveOrCreateFolderPaths } = await import("./folders.service");
 
     const result = await resolveOrCreateFolderPaths(ctx, ["Invoices/2025"]);
@@ -216,11 +245,11 @@ describe("resolveOrCreateFolderPaths", () => {
 
   it("resolves a lost create race by re-reading instead of failing the batch", async () => {
     let rows: unknown[] = [];
-    const from = vi.fn((table: string) => (table === "folders" ? makeFoldersTable(() => rows) : undefined));
+    const from = makeSideTablesFrom(() => rows);
     const rpc = vi.fn().mockResolvedValueOnce({
       error: { code: "P0001", message: "duplicate folder name" }
     });
-    const ctx = makeCtx({ from, rpc } as never);
+    const ctx = makeCtx({ from, rpc: withFolderCountsRpc(rpc) } as never);
     const { resolveOrCreateFolderPaths } = await import("./folders.service");
 
     // Simulate a concurrent caller's create landing between the initial listFolderTree() read
@@ -241,5 +270,87 @@ describe("resolveOrCreateFolderPaths", () => {
     const result = await resolveOrCreateFolderPaths(ctx, ["Invoices"]);
 
     expect(result.Invoices).toBe("winner-id");
+  });
+});
+
+describe("listFolderTree — accessLevel/counts", () => {
+  const invoices = {
+    id: "invoices",
+    parent_folder_id: null,
+    name: "Invoices",
+    path: "/Invoices",
+    depth: 0,
+    match_conditions: null,
+    created_by: "someone-else",
+    created_at: ""
+  };
+  const sept = {
+    id: "sept",
+    parent_folder_id: "invoices",
+    name: "Sept",
+    path: "/Invoices/Sept",
+    depth: 1,
+    match_conditions: null,
+    created_by: "someone-else",
+    created_at: ""
+  };
+
+  it("marks a folder 'full' only via a direct grant on it or an ancestor, 'ancestor' otherwise", async () => {
+    const from = vi.fn((table: string) => {
+      if (table === "folders") return makeFoldersTable(() => [invoices, sept]);
+      if (table === "folder_access") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockResolvedValue({ data: [{ folder_id: "sept" }], error: null })
+        };
+      }
+      if (table === "organization_members") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { role: "member" }, error: null })
+        };
+      }
+      return undefined;
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ folder_id: "sept", document_count: 3 }],
+      error: null
+    });
+    const ctx = makeCtx({ from, rpc } as never);
+    const { listFolderTree } = await import("./folders.service");
+
+    const result = await listFolderTree(ctx);
+    const byId = new Map(result.map((f) => [f.id, f]));
+
+    // "Sept" has a direct grant — full access, its own document count surfaced.
+    expect(byId.get("sept")).toMatchObject({ accessLevel: "full", documentCount: 3, childFolderCount: 0 });
+    // "Invoices" has no grant of its own and isn't owner/admin/creator — visible only as an
+    // ancestor of the granted "Sept", never full access.
+    expect(byId.get("invoices")).toMatchObject({ accessLevel: "ancestor", documentCount: 0, childFolderCount: 1 });
+  });
+
+  it("treats the org owner/admin as full access to every folder", async () => {
+    const from = vi.fn((table: string) => {
+      if (table === "folders") return makeFoldersTable(() => [invoices]);
+      if (table === "folder_access") {
+        return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ data: [], error: null }) };
+      }
+      if (table === "organization_members") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { role: "owner" }, error: null })
+        };
+      }
+      return undefined;
+    });
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const ctx = makeCtx({ from, rpc } as never);
+    const { listFolderTree } = await import("./folders.service");
+
+    const result = await listFolderTree(ctx);
+
+    expect(result[0]).toMatchObject({ accessLevel: "full" });
   });
 });
