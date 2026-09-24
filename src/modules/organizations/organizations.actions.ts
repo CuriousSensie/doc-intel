@@ -14,6 +14,7 @@ import { firstZodError, formDataToObject, resetPasswordSchema } from "@/modules/
 import { withStatus } from "@/modules/auth/redirects";
 import { requireUser } from "@/modules/auth/session";
 import type { AuthContext } from "@/modules/auth/session";
+import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 import { sendEmail } from "@/modules/email/email.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
 import { uploadOrganizationLogo } from "@/modules/organizations/org-logo.service";
@@ -655,4 +656,20 @@ export async function acceptInvitationAction(formData: FormData) {
     href: withStatus("/dashboard", "message", t("actions.invitationAccepted")),
     locale
   });
+}
+
+// Thin member listing for pickers outside the team-management page (e.g. folder-access-manager,
+// ADR-0019) — every member is a valid grant target, no role/isReadOnly filtering needed here.
+export async function listOrganizationMembersAction(): Promise<
+  Array<{ userId: string; name: string | null; email: string }>
+> {
+  const context = await requireUser("/dashboard");
+  const organizationId = await getActiveOrganizationId(context.user.id);
+  if (!organizationId) return [];
+  const members = await listMembers(organizationId);
+  return members.map((member) => ({
+    userId: member.user_id,
+    name: member.profile?.name ?? null,
+    email: member.profile?.email ?? ""
+  }));
 }
