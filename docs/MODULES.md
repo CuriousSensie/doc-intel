@@ -34,8 +34,10 @@ settings, and optional TOTP MFA.
 
 ## Organizations
 
-**Purpose**: optional multi-tenancy — a user can belong to multiple organizations, each with its
-own members, roles, and pending invitations.
+**Purpose**: one organization per account (ADR-0018 — changed from the original optional
+multi-tenancy model after 1.0.0 feedback: a user used to be able to belong to, and switch
+between, several organizations). The org is created at registration; an owner/admin manages
+members, roles, invitations, and org-scoped blocking from a single `/organizations` page.
 
 **Dependency**: Auth. Uses the `organizations`, `organization_members`, and
 `organization_invitations` tables defined in the initial schema migration, plus the
@@ -46,7 +48,9 @@ own members, roles, and pending invitations.
 `leave_organization` — these three used to be plain RLS-scoped mutations from
 `organizations.actions.ts`; they became SECURITY DEFINER functions specifically so their audit
 row writes transactionally with the mutation (ADR-0008), not because RLS was ever the blocker.
-See `docs/SECURITY.md` for why each category needs what it needs.
+ADR-0018 added `block_member`/`unblock_member` the same way, plus the unique `(user_id)`
+constraint that makes one-org-per-account a database invariant, not just an application one. See
+`docs/SECURITY.md` for why each category needs what it needs.
 
 **Configuration**: gated by `features.organizations` in `src/config/features.ts`. Roles are
 `owner`, `admin`, `member`, `read-only` (the `organization_role` enum — the 4th role added for
@@ -54,25 +58,32 @@ Documenti, `supabase/migrations/20260824000000_documenti_orgs_extension.sql`); r
 are defined in `src/modules/auth/authorization.ts`'s `can()` helper. `read-only` has the same
 read access as `member` but no write access anywhere — enforced at the RLS layer by
 `has_organization_write_access()`, not just by `can()`, since RLS is the real boundary
-(`docs/SECURITY.md`).
+(`docs/SECURITY.md`). Since ADR-0017's amendment, `admin` also has the same document
+visibility/manage/share reach as `owner` (everything except transfer ownership, delete org, and
+blocking/removing members).
 
-**How to enable**: set `FEATURE_ORGANIZATIONS=true` (default). The "Organizations" and "Team" nav
-entries in `src/config/navigation.ts` and the `/settings/team` tab appear automatically once
+**How to enable**: set `FEATURE_ORGANIZATIONS=true` (default). The single "Organizations" nav
+entry in `src/config/navigation.ts` (a plain link, not a dropdown) appears automatically once
 enabled.
 
-**How to disable**: set the feature flag to `false`. Pages under
-`src/app/(dashboard)/organizations/` and `src/app/(dashboard)/settings/team/` call
-`requireFeature("organizations")`, which throws if the flag is off, and the nav entries disappear.
+**How to disable**: set the feature flag to `false`. `src/app/[locale]/(dashboard)/organizations/`
+calls `requireFeature("organizations")`, which throws if the flag is off, and the nav entry
+disappears.
 
 **How to extend**: `src/modules/organizations/organizations.service.ts` holds all data access;
-`organizations.actions.ts` holds the server actions. The active organization for a session is
-tracked via an `active_org` cookie (`src/modules/organizations/active-organization.ts`), not a URL
-param, so other modules (billing, files) can read `getActiveOrganizationId()` without threading an
-org id through every route.
+`organizations.actions.ts` holds the server actions. `getActiveOrganizationId()`
+(`src/modules/organizations/active-organization.ts`) is now just "the org this user's single
+membership row points to" — no cookie, no switcher — kept under its original name so callers
+across api routes, `service-context.ts`, and billing didn't need to change.
 
-**Note**: inviting a member creates the invitation record, sends the invitation email (see the
-Email module below), and still surfaces the one-time invite link in the UI so an admin has a
-fallback if delivery fails or SMTP isn't configured yet.
+**Note**: inviting a member (name + email + role) creates the invitation record, blocks the
+invite outright if the email already belongs to any organization (ADR-0018), sends the
+invitation email (see the Email module below), and still surfaces the one-time invite link in
+the UI so an admin has a fallback if delivery fails or SMTP isn't configured yet. Accepting an
+invitation as a new user skips Supabase email verification entirely — the account is created
+pre-confirmed via the admin API (`createAccountForInvitation()`), since the invitation link
+itself is the proof of email ownership; only the owner's own registration goes through real
+email verification.
 
 ## Email
 
