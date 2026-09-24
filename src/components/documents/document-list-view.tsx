@@ -115,9 +115,20 @@ export function DocumentListView({
               className="cursor-pointer"
               data-document-row={document.id}
               data-state={selectedIds.has(document.id) ? "selected" : undefined}
+              draggable
               key={document.id}
               onClick={() => handleClick(document.id)}
               onDoubleClick={() => handleDoubleClick(document.id)}
+              onDragStart={(e) => {
+                // Drag the current multi-selection if this row is part of it, otherwise just this
+                // row — read by folder-tree.tsx's drop handlers (DOCUMENT_DRAG_MIME).
+                const ids = selectedIds.has(document.id) ? [...selectedIds] : [document.id];
+                e.dataTransfer.setData(
+                  "application/x-doc-intel-document-ids",
+                  JSON.stringify(ids)
+                );
+                e.dataTransfer.effectAllowed = "move";
+              }}
             >
               <TableCell>
                 {selectedIds.has(document.id) ? (
