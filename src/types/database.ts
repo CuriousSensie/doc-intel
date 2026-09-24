@@ -1633,6 +1633,10 @@ export type Database = {
         Args: { p_document_id: string };
         Returns: boolean;
       };
+      can_view_folder_as_ancestor: {
+        Args: { p_folder_id: string };
+        Returns: boolean;
+      };
       filter_folder_ids: {
         Args: { p_organization_id: string; p_ids: string[]; p_required: "view" | "edit" | "manage" };
         Returns: string[];
