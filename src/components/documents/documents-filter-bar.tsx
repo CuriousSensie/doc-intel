@@ -48,6 +48,10 @@ type FilterOptions = {
   // documents.document_type_key exactly — never the raw Paperless name.
   documentTypes: Array<{ key: string; name: string }>;
   customFields: CustomFieldDef[];
+  // Org-scoped member picker for the "Team" filter — resolves to documents.created_by, which is
+  // already indexed (documents_org_created_by_idx). Name/email come from listMembers(), never a
+  // raw profiles lookup.
+  members: Array<{ id: string; name: string | null; email: string }>;
 };
 
 type Props = {
@@ -60,6 +64,7 @@ type Props = {
     status?: string;
     dateFrom?: string;
     dateTo?: string;
+    createdBy?: string;
     sort?: DocumentSort;
     sortDirection?: DocumentSortDirection;
     view?: DocumentsViewMode;
@@ -102,6 +107,7 @@ export function DocumentsFilterBar({ filterOptions, current, foldersEnabled }: P
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [searchValue, setSearchValue] = useState(current.q ?? "");
+  const [teamQuery, setTeamQuery] = useState("");
 
   function navigate(mutate: (params: URLSearchParams) => void, resetPage = true) {
     const params = new URLSearchParams(searchParams.toString());
@@ -153,12 +159,14 @@ export function DocumentsFilterBar({ filterOptions, current, foldersEnabled }: P
   const selectedDocumentType = filterOptions.documentTypes.find(
     (dt) => dt.key === current.documentTypeKey
   );
+  const selectedMember = filterOptions.members.find((member) => member.id === current.createdBy);
   const hasAnyFilter = Boolean(
     current.q ||
     activeTagCount ||
     current.documentTypeKey ||
     current.dateFrom ||
-    current.dateTo
+    current.dateTo ||
+    current.createdBy
   );
   const fields = current.fields ?? FIELD_VALUES;
   const fieldsChanged =
@@ -178,7 +186,8 @@ export function DocumentsFilterBar({ filterOptions, current, foldersEnabled }: P
     ...(current.documentTypeKey ? { documentTypeKey: current.documentTypeKey } : {}),
     ...(current.status ? { status: current.status } : {}),
     ...(current.dateFrom ? { dateFrom: current.dateFrom } : {}),
-    ...(current.dateTo ? { dateTo: current.dateTo } : {})
+    ...(current.dateTo ? { dateTo: current.dateTo } : {}),
+    ...(current.createdBy ? { createdBy: current.createdBy } : {})
   };
   const savedViewSort: Record<string, unknown> = {
     sort: current.sort ?? "created",
@@ -352,6 +361,49 @@ export function DocumentsFilterBar({ filterOptions, current, foldersEnabled }: P
                 {dt.name}
               </DropdownMenuRadioItem>
             ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu onOpenChange={(open) => { if (!open) setTeamQuery(""); }}>
+        <DropdownMenuTrigger asChild>
+          <Button className="justify-between" variant="outline">
+            {selectedMember ? (selectedMember.name ?? selectedMember.email) : t("allTeam")}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="max-h-72 w-64 overflow-auto">
+          <DropdownMenuLabel>{t("team")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="px-2 py-1.5">
+            <Input
+              autoFocus
+              onChange={(e) => setTeamQuery(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder={t("teamSearchPlaceholder")}
+              value={teamQuery}
+            />
+          </div>
+          <DropdownMenuRadioGroup
+            onValueChange={(value) =>
+              navigate((params) => setOrDelete(params, "createdBy", value === "all" ? null : value))
+            }
+            value={current.createdBy ?? "all"}
+          >
+            <DropdownMenuRadioItem value="all">{t("allTeam")}</DropdownMenuRadioItem>
+            {filterOptions.members
+              .filter((member) => {
+                const q = teamQuery.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  (member.name ?? "").toLowerCase().includes(q) ||
+                  member.email.toLowerCase().includes(q)
+                );
+              })
+              .map((member) => (
+                <DropdownMenuRadioItem key={member.id} value={member.id}>
+                  {member.name ?? member.email}
+                </DropdownMenuRadioItem>
+              ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>

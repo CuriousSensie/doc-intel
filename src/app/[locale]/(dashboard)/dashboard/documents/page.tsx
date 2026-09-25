@@ -21,7 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isFeatureEnabled } from "@/config/features";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
-import { getMembership } from "@/modules/organizations/organizations.service";
+import { getMembership, listMembers } from "@/modules/organizations/organizations.service";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
 import {
@@ -140,13 +140,15 @@ export default async function DocumentsPage({
     tags,
     documentTypes,
     customFieldDefs,
-    membership
+    membership,
+    members
   ] = await Promise.all([
     listDocuments(organizationId, filter),
     getCachedTags(client, organizationId),
     getCachedDocumentTypes(client, organizationId),
     listCustomFieldDefs(defsCtx),
-    getMembership(organizationId, context.user.id)
+    getMembership(organizationId, context.user.id),
+    listMembers(organizationId)
   ]);
   // Owners see every document, so "shared with you" only means something for other roles.
   const sharedDocumentIds =
@@ -252,7 +254,12 @@ export default async function DocumentsPage({
             key: toDocumentTypeKey(dt.name),
             name: dt.name
           })),
-          customFields: customFieldDefs
+          customFields: customFieldDefs,
+          members: members.map((member) => ({
+            id: member.user_id,
+            name: member.profile?.name ?? null,
+            email: member.profile?.email ?? ""
+          }))
         }}
         key={JSON.stringify(rawSearch)}
       />
