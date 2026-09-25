@@ -12,18 +12,12 @@ const CURRENT_YEAR = new Date().getFullYear();
 
 function starterViews(): Array<{
   name: string;
-  scope: "documents" | "entities";
+  scope: "documents";
   filters: Record<string, unknown>;
   isShared: boolean;
 }> {
   return [
     { name: "All documents", scope: "documents", filters: {}, isShared: true },
-    {
-      name: "Documents with no connections",
-      scope: "documents",
-      filters: { hasNoConnections: true },
-      isShared: true
-    },
     {
       name: "Invoices this year",
       scope: "documents",
@@ -32,12 +26,6 @@ function starterViews(): Array<{
         dateFrom: `${CURRENT_YEAR}-01-01`,
         dateTo: `${CURRENT_YEAR}-12-31`
       },
-      isShared: true
-    },
-    {
-      name: "Open contracts",
-      scope: "entities",
-      filters: { entityTypeKey: "contract" },
       isShared: true
     },
     { name: "Recently added", scope: "documents", filters: {}, isShared: true }
@@ -86,9 +74,8 @@ export async function createSavedView(
   ctx: ServiceContext,
   input: {
     name: string;
-    scope: "documents" | "entities";
+    scope: "documents";
     viewKind?: "dynamic" | "static";
-    entityTypeId?: string;
     filters?: Record<string, unknown>;
     columns?: string[];
     sort?: Record<string, unknown>;
@@ -104,7 +91,6 @@ export async function createSavedView(
       name: input.name,
       scope: input.scope,
       view_kind: viewKind,
-      entity_type_id: input.entityTypeId ?? null,
       filters: (input.filters ?? {}) as Json,
       columns: (input.columns ?? []) as Json,
       sort: (input.sort ?? null) as Json | null,

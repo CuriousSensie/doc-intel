@@ -44,21 +44,7 @@ async function OrgStatsGroup({ organizationId }: { organizationId: string }) {
       value: stats.documents,
       href: "/dashboard/documents"
     },
-    {
-      key: "noConnections",
-      label: t("stats.noConnections"),
-      value: stats.noConnections,
-      href: "/dashboard/documents?hasNoConnections=true"
-    },
-    {
-      key: "entities",
-      label: t("stats.entities"),
-      value: stats.entities,
-      href: "/dashboard/entities"
-    },
-    { key: "connections", label: t("stats.connections"), value: stats.connections },
     { key: "tags", label: t("stats.tags"), value: stats.tags },
-    { key: "correspondents", label: t("stats.correspondents"), value: stats.correspondents },
     { key: "documentTypes", label: t("stats.documentTypes"), value: stats.documentTypes }
   ];
 
@@ -94,14 +80,7 @@ async function MemberStatsRows({
       label: t("stats.documents"),
       value: stats.documents,
       href: "/dashboard/documents"
-    },
-    {
-      key: "entities",
-      label: t("stats.entities"),
-      value: stats.entities,
-      href: "/dashboard/entities"
-    },
-    { key: "connections", label: t("stats.connections"), value: stats.connections }
+    }
   ];
 
   return <StatsList rows={rows} />;
@@ -169,7 +148,7 @@ export async function OwnerDashboard({
           </CardHeader>
           <CardContent className="grid gap-4">
             {isFeatureEnabled("documents") ? (
-              <Suspense fallback={<StatGroup rows={skeletonRows(7)} title={t("stats.orgStats")} />}>
+              <Suspense fallback={<StatGroup rows={skeletonRows(3)} title={t("stats.orgStats")} />}>
                 <OrgStatsGroup organizationId={organizationId} />
               </Suspense>
             ) : null}
@@ -183,7 +162,7 @@ export async function OwnerDashboard({
                   <MemberPicker members={members} selectedMemberId={memberId} />
                 ) : null}
               </div>
-              <Suspense fallback={<StatsList rows={skeletonRows(3)} />} key={memberId}>
+              <Suspense fallback={<StatsList rows={skeletonRows(1)} />} key={memberId}>
                 <MemberStatsRows memberId={memberId} organizationId={organizationId} />
               </Suspense>
             </div>

@@ -34,7 +34,7 @@ import {
 
 // docs/adr/0009-route-handlers-vs-server-actions.md: rule CRUD is a Server Action, same as every
 // other module's mutations. GET /api/rule-backfills/[id]/route.ts (progress polling) is the one
-// Route Handler this module needs, mirroring imports' own split.
+// Route Handler this module needs.
 
 export async function createRuleAction(input: unknown) {
   requireFeature("rules");
@@ -138,8 +138,7 @@ export async function startRuleBackfillAction(input: unknown) {
 
     await setRuleBackfillControl(data.id, "running");
     // Exactly one initial job, not one per rulesConfig.defaultBackfillConcurrencyPerOrganization
-    // (that constant bounds run-import-chunk.ts's N-chain fan-out, which is safe there because
-    // claim_import_chunk() is a row-claim table — N chains can't claim the same row twice. This
+    // (that constant is a per-org concurrency bound, not a fan-out target for this job — this
     // job's own claim, claim_rule_backfill_documents(), is cursor pagination by design (see the
     // migration's comment): N concurrently-enqueued copies would all read the same
     // cursor_document_id before any of them advances it, so a real N-way duplicate-processing
@@ -179,22 +178,6 @@ export async function cancelRuleBackfillAction(ruleBackfillId: string) {
   requireFeature("rules");
   await buildRequestContext();
   return actionResult(() => setRuleBackfillControl(ruleBackfillId, "cancelled"));
-}
-
-// specs/07-rules-engine.md: "reversible for connections created in the run" — scoped strictly
-// to this backfill's own connections via undo_rule_backfill() (docs/adr/0010), never a bare
-// rule_id match. The RPC itself checks auth.uid()/ownership, so this is a thin pass-through.
-export async function undoRuleBackfillAction(ruleBackfillId: string) {
-  requireFeature("rules");
-  const ctx = await buildRequestContext();
-  return actionResult(async () => {
-    const { data, error } = await ctx.db.rpc("undo_rule_backfill", {
-      p_rule_backfill_id: ruleBackfillId,
-      p_organization_id: ctx.orgId
-    });
-    if (error) throw error;
-    return { connectionsRemoved: data as number };
-  });
 }
 
 type Translator = Awaited<ReturnType<typeof getTranslations>>;
@@ -334,7 +317,7 @@ export async function startRuleBackfillFormAction(formData: FormData) {
 
     await setRuleBackfillControl(data.id, "running");
     // See startRuleBackfillAction()'s comment: exactly one initial job — cursor-paginated
-    // claiming isn't safe for N concurrent chains the way run-import-chunk.ts's row-claim table is.
+    // claiming isn't safe for N concurrent chains the way a row-claim table is.
     await enqueue(
       QUEUE_NAMES.backfillRule,
       { orgId: ctx.orgId, ruleBackfillId: data.id },
@@ -378,26 +361,6 @@ export async function cancelRuleBackfillFormAction(formData: FormData) {
   const ruleId = String(formData.get("ruleId"));
   await setRuleBackfillControl(String(formData.get("ruleBackfillId")), "cancelled");
   return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillCancelled")), locale });
-}
-
-export async function undoRuleBackfillFormAction(formData: FormData) {
-  requireFeature("rules");
-  const ctx = await buildRequestContext();
-  const [t, locale] = await Promise.all([getTranslations("rules"), getLocale()]);
-  const ruleId = String(formData.get("ruleId"));
-  const ruleBackfillId = String(formData.get("ruleBackfillId"));
-
-  try {
-    const { error } = await ctx.db.rpc("undo_rule_backfill", {
-      p_rule_backfill_id: ruleBackfillId,
-      p_organization_id: ctx.orgId
-    });
-    if (error) throw error;
-  } catch (error) {
-    redirectWithError(`/dashboard/rules/${ruleId}`, error, t, locale);
-  }
-
-  return redirect({ href: withStatus(`/dashboard/rules/${ruleId}`, "message", t("actions.backfillUndone")), locale });
 }
 
 export async function listRuleBackfillsForRuleAction(ruleId: string) {

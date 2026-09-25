@@ -3,16 +3,11 @@
 import { logEvent } from "@/lib/events";
 import {
   bulkEditPaperlessDocuments,
-  createPaperlessCorrespondent,
   createPaperlessDocumentType,
   createPaperlessTag
 } from "@/lib/paperless/documents";
 import { paperlessFor } from "@/lib/paperless/client";
-import {
-  addCachedCorrespondent,
-  addCachedDocumentType,
-  addCachedTag
-} from "@/lib/paperless/metadata-cache";
+import { addCachedDocumentType, addCachedTag } from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
 import { AuthorizationError, ValidationError } from "@/lib/errors";
 import { requireFeature } from "@/modules/auth/authorization";
@@ -106,7 +101,7 @@ export async function deleteDocumentAction(documentId: string) {
   await deleteDocument(ctx.actorId, ctx.orgId, documentId);
 }
 
-// The Details tab's inline "create tag/correspondent/document type" pickers — creates the
+// The Details tab's inline "create tag/document type" pickers — creates the
 // Paperless object with proper tenant owner/group permissions (specs/12-agent-rules.md rule 4)
 // and returns it so the caller can immediately select it without a second round trip.
 export async function createPaperlessMetaAction(input: unknown) {
@@ -122,11 +117,6 @@ export async function createPaperlessMetaAction(input: unknown) {
     const tag = await createPaperlessTag(client, parsed.name, ownership, parsed.color);
     await addCachedTag(ctx.orgId, tag);
     return tag;
-  }
-  if (parsed.kind === "correspondent") {
-    const correspondent = await createPaperlessCorrespondent(client, parsed.name, ownership);
-    await addCachedCorrespondent(ctx.orgId, correspondent);
-    return correspondent;
   }
   const documentType = await createPaperlessDocumentType(client, parsed.name, ownership);
   await addCachedDocumentType(ctx.orgId, documentType);
@@ -148,7 +138,7 @@ export async function getAdjacentDocumentAction(
 }
 
 // specs/05-level-1-structure.md §Bulk business actions: Paperless's own bulk actions (type,
-// tags, correspondent, custom fields, reprocess, delete) — proxied, never reimplemented.
+// tags, custom fields, reprocess, delete) — proxied, never reimplemented.
 // Paperless applies these atomically server-side, so this is one synchronous round trip; the
 // background_operations row exists only so this shows up in the same history/audit surface
 // as our own bulk-connect operations, not to track async progress.

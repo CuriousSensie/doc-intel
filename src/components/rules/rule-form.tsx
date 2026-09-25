@@ -5,12 +5,10 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 
-import { EntityPickerField } from "@/components/rules/entity-picker-field";
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { controlClass } from "@/components/imports/import-controls";
 import { TextField } from "@/components/forms/text-field";
 import { DeleteRuleButton } from "@/components/rules/delete-rule-button";
 import {
@@ -20,27 +18,28 @@ import {
   updateRuleAction
 } from "@/modules/rules/rules.actions";
 import {
-  RELATIONS,
   RULE_TRIGGERS,
   triggerMessageKey,
   type RuleTrigger
 } from "@/modules/rules/rules.schemas";
 
+// Shared form-control styling, inlined here so the rules form stays self-contained.
+const controlClass =
+  "min-h-11 w-full min-w-0 rounded-md border border-border bg-panel px-3 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50";
+
 type MetaOption = { id: number; name: string; color?: string; text_color?: string };
 
 // The five DSL fields specs/07-rules-engine.md's condition table exposes that map onto a plain
-// document (not entity.*/connection.count/custom fields — a deliberate v1 scope cut, see
-// docs/IMPLEMENTATION_PLAN.md). Each has its own small operator set and value control, not the
-// DSL's full 17-operator vocabulary — the raw JSON/full DSL still exists server-side, this is a
-// guided subset over it.
-type ConditionFieldKind = "filename" | "content" | "tags" | "correspondent" | "documentType";
+// document (not custom fields — a deliberate v1 scope cut, see docs/IMPLEMENTATION_PLAN.md). Each
+// has its own small operator set and value control, not the DSL's full 17-operator vocabulary —
+// the raw JSON/full DSL still exists server-side, this is a guided subset over it.
+type ConditionFieldKind = "filename" | "content" | "tags" | "documentType";
 type ConditionOp = "contains" | "not_contains" | "eq" | "neq";
 
 const CONDITION_FIELD_TO_DSL: Record<ConditionFieldKind, string> = {
   filename: "document.filename",
   content: "document.content",
   tags: "document.tags",
-  correspondent: "document.correspondent",
   documentType: "document.type"
 };
 
@@ -48,7 +47,6 @@ const CONDITION_OPS_BY_FIELD: Record<ConditionFieldKind, ConditionOp[]> = {
   filename: ["contains", "not_contains", "eq", "neq"],
   content: ["contains", "not_contains", "eq", "neq"],
   tags: ["contains", "not_contains"],
-  correspondent: ["eq", "neq"],
   documentType: ["eq", "neq"]
 };
 
@@ -57,23 +55,18 @@ type ConditionRow = {
   field: ConditionFieldKind;
   op: ConditionOp;
   text: string; // filename/content
-  metaId: number | null; // tags/correspondent/documentType
+  metaId: number | null; // tags/documentType
 };
 
-type AttributeKind = "tag" | "correspondent" | "documentType";
+type AttributeKind = "tag" | "documentType";
 type AttributeOperation = "assign" | "remove";
-type EntityOperation = "connect" | "disconnect";
 
 type ActionRow = {
   key: string;
-  mode: "attribute" | "entity";
   attributeKind: AttributeKind;
   attributeOperation: AttributeOperation;
-  metaId: number | null; // correspondent/documentType — a document can only have one of each
+  metaId: number | null; // documentType — a document can only have one
   metaIds: number[]; // tag — a document can carry any number of tags, so this row can assign/remove several at once
-  entityOperation: EntityOperation;
-  entity: { id: string; label: string } | null; // connect_entity/disconnect_entity
-  relation: (typeof RELATIONS)[number];
 };
 
 type RuleSection = "basics" | "conditions" | "actions";
@@ -136,21 +129,16 @@ function newConditionRow(): ConditionRow {
 function newActionRow(): ActionRow {
   return {
     key: nextKey(),
-    mode: "attribute",
     attributeKind: "tag",
     attributeOperation: "assign",
     metaId: null,
-    metaIds: [],
-    entityOperation: "connect",
-    entity: null,
-    relation: "related"
+    metaIds: []
   };
 }
 
-function pickerKindFor(field: ConditionFieldKind | "tag" | "documentType" | "correspondent") {
+function pickerKindFor(field: ConditionFieldKind | "tag" | "documentType") {
   if (field === "tags" || field === "tag") return "tag" as const;
-  if (field === "documentType") return "documentType" as const;
-  return "correspondent" as const;
+  return "documentType" as const;
 }
 
 export type RuleFormValue = {
@@ -174,7 +162,7 @@ function findMetaIdByName(options: MetaOption[], name: unknown): number | null {
 // canSubmit's validation then surfaces as an incomplete row needing attention.
 function conditionRowsFromDslWithMeta(
   conditions: unknown,
-  metaOptions: { tags: MetaOption[]; correspondents: MetaOption[]; documentTypes: MetaOption[] }
+  metaOptions: { tags: MetaOption[]; documentTypes: MetaOption[] }
 ): ConditionRow[] {
   const node = conditions as { all?: Array<{ field: string; op: string; value?: unknown }> } | null;
   if (!node || !Array.isArray(node.all)) return [newConditionRow()];
@@ -202,15 +190,6 @@ function conditionRowsFromDslWithMeta(
           metaId: findMetaIdByName(metaOptions.tags, leaf.value)
         };
       }
-      if (field === "correspondent") {
-        return {
-          key: nextKey(),
-          field,
-          op,
-          text: "",
-          metaId: findMetaIdByName(metaOptions.correspondents, leaf.value)
-        };
-      }
       if (field === "documentType") {
         return {
           key: nextKey(),
@@ -227,12 +206,6 @@ function conditionRowsFromDslWithMeta(
   return rows.length > 0 ? rows : [newConditionRow()];
 }
 
-// entity_ref for connect_entity/disconnect_entity is {by:"id", entityId} when authored through
-// this builder — the caller (rules/[id]/page.tsx) enriches it server-side with the entity's
-// current display name (`label`) before passing it here, since the builder has no other way to
-// show a human-readable chip for a bare id. A `by:"identifier"`/`by:"name"` ref (possible if the
-// rule predates this UI, or was hand-authored) has no single resolvable id to preselect — that
-// row comes back with entity: null, a reasonable degradation rather than a crash.
 // add_tag/remove_tag stay one-DSL-action-per-tag server-side (specs/07's own action shape) —
 // this UI groups them into one row per contiguous same-operation run so "assign tags A, B, C"
 // edits as a single multi-select row instead of three separate ones. A rule authored outside
@@ -241,7 +214,7 @@ function conditionRowsFromDslWithMeta(
 // for a guided subset over the full DSL, not a data-loss risk (every action still round-trips).
 function actionRowsFromDslWithMeta(
   actions: unknown,
-  metaOptions: { tags: MetaOption[]; correspondents: MetaOption[]; documentTypes: MetaOption[] }
+  metaOptions: { tags: MetaOption[]; documentTypes: MetaOption[] }
 ): ActionRow[] {
   const list = Array.isArray(actions) ? (actions as Array<Record<string, unknown>>) : [];
   const rows: ActionRow[] = [];
@@ -278,33 +251,6 @@ function actionRowsFromDslWithMeta(
       });
       continue;
     }
-    if (type === "set_correspondent") {
-      rows.push({
-        ...newActionRow(),
-        key: nextKey(),
-        attributeKind: "correspondent",
-        metaId: findMetaIdByName(metaOptions.correspondents, action.value),
-        attributeOperation: "assign"
-      });
-      continue;
-    }
-    if (type === "connect_entity" || type === "disconnect_entity") {
-      const ref = action.entity_ref as
-        { by?: string; entityId?: string; label?: string } | undefined;
-      const relation = (action.relation as (typeof RELATIONS)[number]) ?? "related";
-      const entity =
-        ref?.by === "id" && ref.entityId && ref.label
-          ? { id: ref.entityId, label: ref.label }
-          : null;
-      rows.push({
-        ...newActionRow(),
-        key: nextKey(),
-        mode: "entity",
-        entityOperation: type === "disconnect_entity" ? "disconnect" : "connect",
-        entity,
-        relation
-      });
-    }
   }
   return rows;
 }
@@ -320,14 +266,10 @@ function serializeConditionRows(rows: ConditionRow[]) {
 
 function serializeActionRows(rows: ActionRow[]) {
   return rows.map((row) => ({
-    mode: row.mode,
     attributeKind: row.attributeKind,
     attributeOperation: row.attributeOperation,
     metaId: row.metaId,
-    metaIds: row.metaIds,
-    entityOperation: row.entityOperation,
-    entityId: row.entity?.id ?? null,
-    relation: row.relation
+    metaIds: row.metaIds
   }));
 }
 
@@ -339,7 +281,7 @@ export function RuleForm({
 }: {
   enabled?: boolean;
   initial?: RuleFormValue;
-  metaOptions: { tags: MetaOption[]; correspondents: MetaOption[]; documentTypes: MetaOption[] };
+  metaOptions: { tags: MetaOption[]; documentTypes: MetaOption[] };
   showHeader?: boolean;
 }) {
   const t = useTranslations("rules.form");
@@ -353,15 +295,14 @@ export function RuleForm({
   // Local state, not just the server-fetched prop — PaperlessMetaPicker's "create new" flow
   // (kind="tag" etc.) creates a real Paperless object and hands it back via onChange's second
   // argument, but never re-fetches the server-rendered options list. Without mirroring that
-  // creation into this state too, a tag/type/correspondent created *during this session* would
+  // creation into this state too, a tag/type created *during this session* would
   // resolve to an empty name at submit time (nameForMetaId() couldn't find it in the stale
   // list) — a real bug caught by an actual browser walkthrough, not by typecheck/lint/tests.
   const [metaOptions, setMetaOptions] = useState(initialMetaOptions);
 
-  function addMetaOption(kind: "tag" | "correspondent" | "documentType", option: MetaOption) {
+  function addMetaOption(kind: "tag" | "documentType", option: MetaOption) {
     setMetaOptions((prev) => {
-      const key =
-        kind === "tag" ? "tags" : kind === "correspondent" ? "correspondents" : "documentTypes";
+      const key = kind === "tag" ? "tags" : "documentTypes";
       if (prev[key].some((o) => o.id === option.id)) return prev;
       return { ...prev, [key]: [...prev[key], option] };
     });
@@ -402,14 +343,13 @@ export function RuleForm({
   );
   const hasChanges = !initial || currentSignature !== initialSignature;
 
-  function optionsFor(kind: "tag" | "correspondent" | "documentType"): MetaOption[] {
+  function optionsFor(kind: "tag" | "documentType"): MetaOption[] {
     if (kind === "tag") return metaOptions.tags;
-    if (kind === "correspondent") return metaOptions.correspondents;
     return metaOptions.documentTypes;
   }
 
   function nameForMetaId(
-    kind: "tag" | "correspondent" | "documentType",
+    kind: "tag" | "documentType",
     id: number | null
   ): string {
     if (id === null) return "";
@@ -417,14 +357,13 @@ export function RuleForm({
   }
 
   const conditionsValid = conditionRows.every((row) =>
-    row.field === "tags" || row.field === "correspondent" || row.field === "documentType"
+    row.field === "tags" || row.field === "documentType"
       ? row.metaId !== null
       : row.text.trim().length > 0
   );
   const actionsValid = actionRows.every((row) => {
-    if (row.mode === "entity") return row.entity !== null;
     if (row.attributeKind === "tag") return row.metaIds.length > 0;
-    // Removing a document type/correspondent clears it — there's no value to pick, so the row
+    // Removing a document type clears it — there's no value to pick, so the row
     // is already complete as soon as that combination is chosen.
     if (row.attributeOperation === "remove") return true;
     return row.metaId !== null;
@@ -442,8 +381,7 @@ export function RuleForm({
 
     const conditions = {
       all: conditionRows.map((row) => {
-        const isMeta =
-          row.field === "tags" || row.field === "correspondent" || row.field === "documentType";
+        const isMeta = row.field === "tags" || row.field === "documentType";
         return {
           field: CONDITION_FIELD_TO_DSL[row.field],
           op: row.op,
@@ -453,26 +391,15 @@ export function RuleForm({
     };
 
     const actions = actionRows.flatMap((row): Record<string, unknown>[] => {
-      if (row.mode === "attribute") {
-        if (row.attributeKind === "tag") {
-          // One DSL action per selected tag — the multi-select row expands to N add_tag/
-          // remove_tag actions, since specs/07's action shape has no "list of tags" variant.
-          const type = row.attributeOperation === "remove" ? "remove_tag" : "add_tag";
-          return row.metaIds.map((id) => ({ type, value: nameForMetaId("tag", id) }));
-        }
-        const kind = row.attributeKind === "documentType" ? "documentType" : "correspondent";
-        const actionType = kind === "documentType" ? "set_document_type" : "set_correspondent";
-        const value = row.attributeOperation === "remove" ? null : nameForMetaId(kind, row.metaId);
-        return [{ type: actionType, value }];
+      if (row.attributeKind === "tag") {
+        // One DSL action per selected tag — the multi-select row expands to N add_tag/
+        // remove_tag actions, since specs/07's action shape has no "list of tags" variant.
+        const type = row.attributeOperation === "remove" ? "remove_tag" : "add_tag";
+        return row.metaIds.map((id) => ({ type, value: nameForMetaId("tag", id) }));
       }
-
-      return [
-        {
-          type: row.entityOperation === "disconnect" ? "disconnect_entity" : "connect_entity",
-          entity_ref: { by: "id" as const, entityId: row.entity!.id },
-          relation: row.relation
-        }
-      ];
+      const actionType = "set_document_type";
+      const value = row.attributeOperation === "remove" ? null : nameForMetaId("documentType", row.metaId);
+      return [{ type: actionType, value }];
     });
 
     startTransition(async () => {
@@ -639,7 +566,6 @@ export function RuleForm({
                   </select>
                 </div>
                 {row.field === "tags" ||
-                row.field === "correspondent" ||
                 row.field === "documentType" ? (
                   <PaperlessMetaPicker
                     kind={pickerKindFor(row.field)}
@@ -708,83 +634,7 @@ export function RuleForm({
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
-                <select
-                  aria-label={t("actionKindLabel")}
-                  className={controlClass}
-                  onChange={(e) => {
-                    const mode = e.target.value as ActionRow["mode"];
-                    setActionRows((rows) =>
-                      rows.map((r) =>
-                        r.key === row.key
-                          ? {
-                              ...r,
-                              mode,
-                              metaId: null,
-                              entity: null,
-                              attributeKind: "tag",
-                              attributeOperation: "assign",
-                              entityOperation: "connect"
-                            }
-                          : r
-                      )
-                    );
-                  }}
-                  value={row.mode}
-                >
-                  <option value="attribute">{t("actionModes.attribute")}</option>
-                  <option value="entity">{t("actionModes.entity")}</option>
-                </select>
-
-                {row.mode === "entity" ? (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <select
-                      aria-label={t("entityOperationLabel")}
-                      className={controlClass}
-                      onChange={(e) =>
-                        setActionRows((rows) =>
-                          rows.map((r) =>
-                            r.key === row.key
-                              ? { ...r, entityOperation: e.target.value as EntityOperation }
-                              : r
-                          )
-                        )
-                      }
-                      value={row.entityOperation}
-                    >
-                      <option value="connect">{t("entityOperations.connect")}</option>
-                      <option value="disconnect">{t("entityOperations.disconnect")}</option>
-                    </select>
-                    <EntityPickerField
-                      onSelect={(entity) =>
-                        setActionRows((rows) =>
-                          rows.map((r) => (r.key === row.key ? { ...r, entity } : r))
-                        )
-                      }
-                      value={row.entity}
-                    />
-                    <select
-                      aria-label={t("relationLabel")}
-                      className={controlClass}
-                      onChange={(e) =>
-                        setActionRows((rows) =>
-                          rows.map((r) =>
-                            r.key === row.key
-                              ? { ...r, relation: e.target.value as (typeof RELATIONS)[number] }
-                              : r
-                          )
-                        )
-                      }
-                      value={row.relation}
-                    >
-                      {RELATIONS.map((relation) => (
-                        <option key={relation} value={relation}>
-                          {t(`relations.${relation}`)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="grid gap-2 sm:grid-cols-[220px_220px_1fr]">
+                <div className="grid gap-2 sm:grid-cols-[220px_220px_1fr]">
                     <select
                       aria-label={t("attributeOperationLabel")}
                       className={controlClass}
@@ -823,7 +673,6 @@ export function RuleForm({
                       value={row.attributeKind}
                     >
                       <option value="tag">{t("attributeKinds.tag")}</option>
-                      <option value="correspondent">{t("attributeKinds.correspondent")}</option>
                       <option value="documentType">{t("attributeKinds.documentType")}</option>
                     </select>
                     {row.attributeKind === "tag" ? (
@@ -840,7 +689,7 @@ export function RuleForm({
                         value={row.metaIds}
                       />
                     ) : row.attributeOperation === "remove" ? (
-                      // A document type/correspondent is a single nullable field — "remove" always
+                      // A document type is a single nullable field — "remove" always
                       // means "clear it," so there's nothing to pick.
                       <p className="flex items-center text-sm text-muted">
                         {t("attributeRemoveClearsValue")}
@@ -862,7 +711,6 @@ export function RuleForm({
                       />
                     )}
                   </div>
-                )}
               </div>
             ))}
             <Button

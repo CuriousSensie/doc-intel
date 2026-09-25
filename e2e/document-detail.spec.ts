@@ -75,14 +75,11 @@ test.describe("document detail page (needs a live Paperless instance)", () => {
     await deleteTestUser(user.userId);
   });
 
-  test("renders the document detail page with metadata and an empty connections state", async ({
-    page
-  }) => {
+  test("renders the document detail page with metadata", async ({ page }) => {
     await loginAsTestUser(page, user);
     await page.goto(`/dashboard/documents/${documentId}`);
 
     await expect(page.getByRole("heading", { name: uniqueName })).toBeVisible();
-    await expect(page.getByText("No connections yet.")).toBeVisible();
 
     // The PDF viewer <object> points at our own proxy route, never a raw Paperless URL.
     const objectEl = page.locator("object");

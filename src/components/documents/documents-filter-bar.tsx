@@ -10,8 +10,7 @@ import {
   Search,
   Settings2,
   SlidersHorizontal,
-  Table2,
-  X
+  Table2
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter } from "@/i18n/navigation";
@@ -53,17 +52,14 @@ type FilterOptions = {
 
 type Props = {
   filterOptions: FilterOptions;
-  selectedEntity: { id: string; label: string } | null;
   current: {
     q?: string;
     titleOnly?: boolean;
     tagIds?: number[];
-    correspondentId?: number;
     documentTypeKey?: string;
     status?: string;
     dateFrom?: string;
     dateTo?: string;
-    hasNoConnections?: boolean;
     sort?: DocumentSort;
     sortDirection?: DocumentSortDirection;
     view?: DocumentsViewMode;
@@ -79,7 +75,6 @@ const FIELD_VALUES: StaticDocumentListField[] = [
   "tags",
   "folder",
   "documentType",
-  "connections",
   "pages",
   "createdAt"
 ];
@@ -99,7 +94,7 @@ const viewModeOptions: Array<{
   { mode: "largeCards", icon: Rows3, labelKey: VIEW_MODE_LABEL_KEYS.largeCards }
 ];
 
-export function DocumentsFilterBar({ filterOptions, selectedEntity, current, foldersEnabled }: Props) {
+export function DocumentsFilterBar({ filterOptions, current, foldersEnabled }: Props) {
   const t = useTranslations("documents.filters");
   const tList = useTranslations("documents.list");
   const router = useRouter();
@@ -161,12 +156,9 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
   const hasAnyFilter = Boolean(
     current.q ||
     activeTagCount ||
-    current.correspondentId ||
     current.documentTypeKey ||
     current.dateFrom ||
-    current.dateTo ||
-    current.hasNoConnections ||
-    selectedEntity
+    current.dateTo
   );
   const fields = current.fields ?? FIELD_VALUES;
   const fieldsChanged =
@@ -186,8 +178,7 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
     ...(current.documentTypeKey ? { documentTypeKey: current.documentTypeKey } : {}),
     ...(current.status ? { status: current.status } : {}),
     ...(current.dateFrom ? { dateFrom: current.dateFrom } : {}),
-    ...(current.dateTo ? { dateTo: current.dateTo } : {}),
-    ...(current.hasNoConnections ? { hasNoConnections: true } : {})
+    ...(current.dateTo ? { dateTo: current.dateTo } : {})
   };
   const savedViewSort: Record<string, unknown> = {
     sort: current.sort ?? "created",
@@ -397,31 +388,6 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <Button
-        onClick={() =>
-          navigate((params) =>
-            setOrDelete(params, "hasNoConnections", current.hasNoConnections ? null : "true")
-          )
-        }
-        variant={current.hasNoConnections ? "default" : "outline"}
-      >
-        {t("hasNoConnections")}
-      </Button>
-
-      {selectedEntity ? (
-        <Button
-          onClick={() =>
-            navigate((params) => {
-              params.delete("entityId");
-            })
-          }
-          variant="default"
-        >
-          {selectedEntity.label}
-          <X className="size-3.5" />
-        </Button>
-      ) : null}
 
       {hasAnyFilter ? (
         <Button onClick={() => startTransition(() => router.push(pathname))} variant="ghost">

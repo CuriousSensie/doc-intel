@@ -36,7 +36,6 @@ export const dynamic = "force-dynamic";
 
 const titleKeys = {
   tags: "tagsTitle",
-  correspondents: "correspondentsTitle",
   "document-types": "documentTypesTitle",
   "custom-fields": "customFieldsTitle"
 } as const;
@@ -169,7 +168,7 @@ export default async function AttributePage({
   if (!parsedKind.success) notFound();
 
   const kind = parsedKind.data;
-  requireFeature(kind === "custom-fields" ? "entities" : "documents");
+  requireFeature("documents");
   await requireUser(`/dashboard/attributes/${kind}`);
 
   const ctx = await buildRequestContext();
@@ -223,7 +222,6 @@ export default async function AttributePage({
     date: t("dataTypes.date"),
     boolean: t("dataTypes.boolean"),
     select: t("dataTypes.select"),
-    documentlink: t("dataTypes.documentlink"),
     url: t("dataTypes.url")
   };
 

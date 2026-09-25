@@ -12,8 +12,7 @@ import {
   pauseRuleBackfillFormAction,
   previewRuleBackfillAction,
   resumeRuleBackfillFormAction,
-  startRuleBackfillFormAction,
-  undoRuleBackfillFormAction
+  startRuleBackfillFormAction
 } from "@/modules/rules/rules.actions";
 
 type Backfill = {
@@ -39,7 +38,7 @@ function BackfillRow({ ruleId, backfill: initial }: { ruleId: string; backfill: 
         const body = await res.json();
         if (active && body.data) setBackfill((prev) => ({ ...prev, ...body.data }));
       } catch {
-        // transient polling failure — next tick retries, matching import-workspace.tsx's tolerance
+        // transient polling failure — next tick retries
       }
     }, 2000);
     return () => {
@@ -83,20 +82,6 @@ function BackfillRow({ ruleId, backfill: initial }: { ruleId: string; backfill: 
             <input name="ruleBackfillId" type="hidden" value={backfill.id} />
             <Button size="sm" type="submit" variant="outline">
               {t("cancel")}
-            </Button>
-          </form>
-        ) : null}
-        {backfill.applied_count > 0 ? (
-          <form
-            action={undoRuleBackfillFormAction}
-            onSubmit={(event) => {
-              if (!window.confirm(t("confirmUndo"))) event.preventDefault();
-            }}
-          >
-            <input name="ruleId" type="hidden" value={ruleId} />
-            <input name="ruleBackfillId" type="hidden" value={backfill.id} />
-            <Button size="sm" type="submit" variant="outline">
-              {t("undo")}
             </Button>
           </form>
         ) : null}

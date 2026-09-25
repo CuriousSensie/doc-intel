@@ -21,7 +21,7 @@ import { createSavedViewAction } from "@/modules/saved-views/saved-views.actions
 type SaveViewDialogProps = {
   buttonLabel: string;
   description: string;
-  scope?: "documents" | "entities";
+  scope?: "documents";
   viewKind: "dynamic" | "static";
   filters?: Record<string, unknown>;
   columns?: string[];
@@ -72,11 +72,7 @@ export function SaveViewDialog({
         });
         setName("");
         setOpen(false);
-        if (view.scope === "documents") {
-          router.push(`/dashboard/documents?savedViewId=${view.id}`);
-        } else {
-          router.refresh();
-        }
+        router.push(`/dashboard/documents?savedViewId=${view.id}`);
       } catch (err) {
         setError(err instanceof Error ? err.message : t("saveFailed"));
       }

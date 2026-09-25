@@ -3,11 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { RuleForm } from "@/components/rules/rule-form";
 import { AuthorizationError } from "@/lib/errors";
 import { paperlessFor } from "@/lib/paperless/client";
-import {
-  getCachedCorrespondents,
-  getCachedDocumentTypes,
-  getCachedTags
-} from "@/lib/paperless/metadata-cache";
+import { getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
@@ -29,9 +25,8 @@ export default async function NewRulePage() {
   }
 
   const client = await paperlessFor(ctx.orgId);
-  const [tags, correspondents, documentTypes] = await Promise.all([
+  const [tags, documentTypes] = await Promise.all([
     getCachedTags(client, ctx.orgId),
-    getCachedCorrespondents(client, ctx.orgId),
     getCachedDocumentTypes(client, ctx.orgId)
   ]);
 
@@ -41,7 +36,7 @@ export default async function NewRulePage() {
         <h1 className="text-3xl font-black">{t("form.create")}</h1>
       </div>
 
-      <RuleForm metaOptions={{ tags, correspondents, documentTypes }} />
+      <RuleForm metaOptions={{ tags, documentTypes }} />
     </div>
   );
 }

@@ -27,9 +27,7 @@ async function MyStatsGroup({ organizationId, userId }: { organizationId: string
   ]);
 
   const rows: StatRow[] = [
-    { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" },
-    { key: "entities", label: t("stats.entities"), value: stats.entities, href: "/dashboard/entities" },
-    { key: "connections", label: t("stats.connections"), value: stats.connections }
+    { key: "documents", label: t("stats.documents"), value: stats.documents, href: "/dashboard/documents" }
   ];
 
   return <StatGroup rows={rows} title={t("stats.myStats")} />;
@@ -44,10 +42,7 @@ async function ReducedOrgStatsGroup({ organizationId }: { organizationId: string
 
   const rows: StatRow[] = [
     { key: "tags", label: t("stats.tags"), value: stats.tags },
-    { key: "correspondents", label: t("stats.correspondents"), value: stats.correspondents },
-    { key: "documentTypes", label: t("stats.documentTypes"), value: stats.documentTypes },
-    { key: "entities", label: t("stats.entities"), value: stats.entities, href: "/dashboard/entities" },
-    { key: "connections", label: t("stats.connections"), value: stats.connections }
+    { key: "documentTypes", label: t("stats.documentTypes"), value: stats.documentTypes }
   ];
 
   return <StatGroup rows={rows} title={t("stats.orgStats")} />;
@@ -136,11 +131,11 @@ export async function MemberDashboard({
             <CardTitle>{t("stats.title")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <Suspense fallback={<StatGroup rows={skeletonRows(3)} title={t("stats.myStats")} />}>
+            <Suspense fallback={<StatGroup rows={skeletonRows(1)} title={t("stats.myStats")} />}>
               <MyStatsGroup organizationId={organizationId} userId={userId} />
             </Suspense>
 
-            <Suspense fallback={<StatGroup rows={skeletonRows(5)} title={t("stats.orgStats")} />}>
+            <Suspense fallback={<StatGroup rows={skeletonRows(2)} title={t("stats.orgStats")} />}>
               <ReducedOrgStatsGroup organizationId={organizationId} />
             </Suspense>
           </CardContent>

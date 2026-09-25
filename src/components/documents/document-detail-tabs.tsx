@@ -11,13 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export function DocumentDetailTabs({
   details,
   content,
-  connections,
   history,
   permissions
 }: {
   details: ReactNode;
   content: ReactNode;
-  connections: ReactNode;
   history: ReactNode;
   permissions: ReactNode;
 }) {
@@ -40,9 +38,6 @@ export function DocumentDetailTabs({
         <TabsTrigger className={triggerClassName} value="content">
           {t("content")}
         </TabsTrigger>
-        <TabsTrigger className={triggerClassName} value="connections">
-          {t("connections")}
-        </TabsTrigger>
         <TabsTrigger className={triggerClassName} value="history">
           {t("history")}
         </TabsTrigger>
@@ -58,9 +53,6 @@ export function DocumentDetailTabs({
       </TabsContent>
       <TabsContent className="min-h-0 flex-1 overflow-y-auto" value="content">
         {content}
-      </TabsContent>
-      <TabsContent className="min-h-0 flex-1 overflow-y-auto" value="connections">
-        {connections}
       </TabsContent>
       <TabsContent className="min-h-0 flex-1 overflow-y-auto" value="history">
         {history}

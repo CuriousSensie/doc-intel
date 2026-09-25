@@ -23,7 +23,6 @@ export const documentListFieldSchema = z.enum([
   "tags",
   "folder",
   "documentType",
-  "connections",
   "pages",
   "createdAt"
 ]);
@@ -39,7 +38,6 @@ export const DEFAULT_DOCUMENT_LIST_FIELDS: DocumentListField[] = [
   "tags",
   "folder",
   "documentType",
-  "connections",
   "pages",
   "createdAt"
 ];
@@ -60,10 +58,7 @@ export const listDocumentsFilterSchema = z.object({
   // title-only (`title__icontains=`). Meaningless without `q`, harmlessly ignored if set alone.
   titleOnly: z.boolean().optional(),
   tagIds: z.array(z.coerce.number().int().positive()).optional(),
-  correspondentId: z.coerce.number().int().positive().optional(),
-  entityId: z.string().uuid().optional(),
   documentIds: z.array(z.string().uuid()).optional(),
-  hasNoConnections: z.boolean().optional(),
   // ADR-0019 — "unfiled" (the literal string, not a UUID) is the querystring spelling of the
   // null-folder filter; parseDocumentsSearchParams() maps it to folderId: null below.
   folderId: z.string().uuid().nullable().optional(),
@@ -110,9 +105,6 @@ export function parseDocumentsSearchParams(
           .map((v) => Number(v))
           .filter((n) => Number.isFinite(n))
       : undefined,
-    correspondentId: first(raw.correspondentId),
-    entityId: first(raw.entityId),
-    hasNoConnections: first(raw.hasNoConnections) === "true",
     folderId: first(raw.folderId) === "unfiled" ? null : first(raw.folderId),
     includeSubfolders: first(raw.includeSubfolders) === undefined ? undefined : first(raw.includeSubfolders) !== "false",
     createdBy: first(raw.createdBy),
@@ -150,20 +142,19 @@ export const updateDocumentSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
   documentTypeId: z.number().int().positive().nullable().optional(),
-  correspondentId: z.number().int().positive().nullable().optional(),
   tagIds: z.array(z.number().int().positive()).optional(),
   customFieldValues: z
     .array(z.object({ key: z.string().trim().min(1), value: z.unknown() }))
     .optional()
 });
 
-export const paperlessMetaKindSchema = z.enum(["tag", "correspondent", "documentType"]);
+export const paperlessMetaKindSchema = z.enum(["tag", "documentType"]);
 
 export const createPaperlessMetaSchema = z.object({
   kind: paperlessMetaKindSchema,
   name: z.string().trim().min(1).max(200),
-  // Tags only — ignored server-side for correspondent/documentType (Paperless doesn't color
-  // those). Hex string, e.g. "#a6cee3".
+  // Tags only — ignored server-side for documentType (Paperless doesn't color those). Hex
+  // string, e.g. "#a6cee3".
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)

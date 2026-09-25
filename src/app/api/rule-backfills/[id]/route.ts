@@ -6,8 +6,7 @@ import { getAuthContext } from "@/modules/auth/session";
 
 export const dynamic = "force-dynamic";
 
-// docs/adr/0009-route-handlers-vs-server-actions.md: job-status polling is a Route Handler,
-// mirroring src/app/api/imports/[id]/route.ts exactly.
+// docs/adr/0009-route-handlers-vs-server-actions.md: job-status polling is a Route Handler.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const context = await getAuthContext();

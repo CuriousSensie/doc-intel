@@ -27,10 +27,6 @@ function actionText(action: unknown): string {
   if (type === "remove_tag") return `Remove tag ${valueText(item.value)}`;
   if (type === "set_document_type")
     return item.value ? `Set document type to ${valueText(item.value)}` : "Clear document type";
-  if (type === "set_correspondent")
-    return item.value ? `Set correspondent to ${valueText(item.value)}` : "Clear correspondent";
-  if (type === "connect_entity") return `Connect entity (${valueText(item.relation)})`;
-  if (type === "disconnect_entity") return `Disconnect entity (${valueText(item.relation)})`;
   return type.replaceAll("_", " ");
 }
 

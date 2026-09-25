@@ -8,7 +8,6 @@ const dataType = z.enum([
   "date",
   "boolean",
   "select",
-  "documentlink",
   "url"
 ]);
 

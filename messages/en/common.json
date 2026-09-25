@@ -37,12 +37,9 @@
     "folders": "Folders",
     "attributes": "Attributes",
     "tags": "Tags",
-    "correspondents": "Correspondents",
     "documentTypes": "Document types",
     "customFields": "Custom fields",
-    "entities": "Entities",
     "views": "Views",
-    "imports": "Imports",
     "rules": "Rules",
     "billing": "Billing",
     "organization": "Organization",
@@ -59,7 +56,6 @@
   "attributes": {
     "description": "Manage the metadata Paperless uses to organize and match documents.",
     "tagsTitle": "Tags",
-    "correspondentsTitle": "Correspondents",
     "documentTypesTitle": "Document types",
     "customFieldsTitle": "Custom fields",
     "createTitle": "Create {kind}",
@@ -119,7 +115,6 @@
       "date": "Date",
       "boolean": "Yes / No",
       "select": "Select (one of a list)",
-      "documentlink": "Connection to an entity",
       "url": "URL"
     },
     "matching": {

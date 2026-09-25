@@ -9,15 +9,13 @@ function formatDate(value: string | null): string {
   return `${day}.${month}.${year}`;
 }
 
-function columns(entityTypeColumns: ResolvedExportData["entityTypeColumns"]) {
+function columns() {
   return [
     { key: "title", label: "Title" },
     { key: "documentTypeKey", label: "Type" },
     { key: "documentDate", label: "Date" },
-    { key: "correspondentName", label: "Correspondent" },
-    { key: "status", label: "Status" },
-    ...entityTypeColumns
-  ];
+    { key: "status", label: "Status" }
+  ] as const;
 }
 
 function rowValues(row: ResolvedExportData["rows"][number], cols: ReturnType<typeof columns>) {
@@ -29,12 +27,8 @@ function rowValues(row: ResolvedExportData["rows"][number], cols: ReturnType<typ
         return row.documentTypeKey ?? "";
       case "documentDate":
         return formatDate(row.documentDate);
-      case "correspondentName":
-        return row.correspondentName ?? "";
       case "status":
         return row.status;
-      default:
-        return row.entityColumns[col.key] ?? "";
     }
   });
 }
@@ -49,7 +43,7 @@ function csvEscape(value: string): string {
 }
 
 export function buildCsv(data: ResolvedExportData): string {
-  const cols = columns(data.entityTypeColumns);
+  const cols = columns();
   const lines = [cols.map((c) => csvEscape(c.label)).join(";")];
   for (const row of data.rows) {
     lines.push(rowValues(row, cols).map(csvEscape).join(";"));
@@ -59,7 +53,7 @@ export function buildCsv(data: ResolvedExportData): string {
 }
 
 export async function buildXlsx(data: ResolvedExportData): Promise<Buffer> {
-  const cols = columns(data.entityTypeColumns);
+  const cols = columns();
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Documents");
 

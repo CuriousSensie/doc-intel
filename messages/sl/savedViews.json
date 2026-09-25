@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Pogledi",
-    "description": "Shranjeni filtri za dokumente in entitete — kliknite enega za neposreden skok nanj.",
+    "description": "Shranjeni filtri za dokumente — kliknite enega za neposreden skok nanj.",
     "columns": {
       "name": "Ime",
       "kind": "Vrsta",

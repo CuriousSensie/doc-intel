@@ -3,8 +3,6 @@ import { expect, test } from "@playwright/test";
 import { paperlessFor } from "@/lib/paperless/client";
 import { parsePostDocumentTaskId, pollPaperlessTask } from "@/lib/paperless/tasks";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createEntity } from "@/modules/entities/entities.service";
-import { getEntityTypeByKey } from "@/modules/entity-types/entity-types.service";
 import { upsertDocumentObjectMap } from "@/modules/documents/sync-paperless-document";
 
 import {
@@ -28,7 +26,6 @@ test.describe("bulk actions and export (needs a live Paperless instance)", () =>
   let user: TestUser;
   let organizationId: string;
   const documentIds: string[] = [];
-  let customerEntityId: string;
   const runId = Date.now();
 
   test.beforeAll(async ({}, testInfo) => {
@@ -71,14 +68,6 @@ test.describe("bulk actions and export (needs a live Paperless instance)", () =>
       documentIds.push(mirrorRow.id);
       await upsertDocumentObjectMap(admin, organizationId, paperlessDocumentId, mirrorRow.id);
     }
-
-    const ctx = { db: admin, orgId: organizationId, actorId: null, correlationId: "e2e-setup" };
-    const customerType = await getEntityTypeByKey(ctx, "customer");
-    const customer = await createEntity(ctx, {
-      entityTypeId: customerType.id,
-      displayName: `Bulk E2E Customer ${runId}`
-    });
-    customerEntityId = customer.id;
   });
 
   test.afterAll(async () => {
@@ -88,44 +77,6 @@ test.describe("bulk actions and export (needs a live Paperless instance)", () =>
     }
     await deleteTestOrganization(organizationId);
     await deleteTestUser(user.userId);
-  });
-
-  test("bulk-connects selected documents to an entity, then undoes it", async ({ page }) => {
-    // A cold Turbopack compile of /dashboard/documents on the first hit of a freshly started
-    // dev server can eat into the default 30s test budget on its own — measured live, this
-    // fails at ~30s with a warm server taking under half that. Same reasoning as ADR-0013.
-    test.setTimeout(60_000);
-    await loginAsTestUser(page, user);
-    await page.goto("/dashboard/documents");
-    await expect(page.getByRole("heading", { name: "Documents" })).toBeVisible();
-
-    for (const id of documentIds) {
-      await page.locator(`[data-document-row="${id}"] input[type="checkbox"]`).click();
-    }
-
-    await expect(page.getByText("3 selected")).toBeVisible();
-    await page.getByRole("button", { name: "Connect to entity" }).click();
-    await page.getByPlaceholder("Search customers, projects, contracts...").fill(`Bulk E2E Customer ${runId}`);
-    await expect(page.getByText(`Bulk E2E Customer ${runId}`)).toBeVisible({ timeout: FORM_SUBMIT_TIMEOUT });
-    await page.getByText(`Bulk E2E Customer ${runId}`).click();
-
-    await expect(page.getByText(/Connected 3 document/)).toBeVisible({ timeout: FORM_SUBMIT_TIMEOUT });
-
-    await page.goto(`/dashboard/entities/customer/${customerEntityId}`);
-    await page.getByRole("tab", { name: "Connections" }).click();
-    for (const id of documentIds) {
-      await expect(page.locator(`a[href="/dashboard/documents/${id}"]`)).toBeVisible();
-    }
-
-    // Undo — back on the documents page, the toast from the connect action is gone after
-    // navigation, so re-trigger a small bulk connect to get a fresh undoable operation.
-    await page.goto("/dashboard/documents");
-    await page.locator(`[data-document-row="${documentIds[0]}"] input[type="checkbox"]`).click();
-    await page.getByRole("button", { name: "Connect to entity" }).click();
-    await page.getByPlaceholder("Search customers, projects, contracts...").fill(`Bulk E2E Customer ${runId}`);
-    await expect(page.getByText(`Bulk E2E Customer ${runId}`)).toBeVisible({ timeout: FORM_SUBMIT_TIMEOUT });
-    await page.getByText(`Bulk E2E Customer ${runId}`).click();
-    await expect(page.getByText(/already connected|Connected 1 document/)).toBeVisible({ timeout: FORM_SUBMIT_TIMEOUT });
   });
 
   // Asserts against the operation id + the download route directly (page.request shares the
@@ -166,12 +117,8 @@ test.describe("bulk actions and export (needs a live Paperless instance)", () =>
     expect(fileRes.ok()).toBe(true);
     const body = await fileRes.text();
     const lines = body.replace(/^﻿/, "").trim().split("\r\n");
-    // Runs after the bulk-connect test above, so the connected-entity column ("Stranka" —
-    // specs/00 D7 Slovenian seed labels) should already be present, resolving through the
-    // connections made there — the actual point of the export (specs/05-level-1-structure.md).
-    expect(lines[0]).toBe("Title;Type;Date;Correspondent;Status;Stranka");
+    expect(lines[0]).toBe("Title;Type;Date;Status");
     expect(lines.length).toBeGreaterThanOrEqual(4); // header + at least the 3 bulk_e2e_* docs
-    expect(lines.some((line) => line.includes(`Bulk E2E Customer ${runId}`))).toBe(true);
   });
 
   // Level 1 definition-of-done item 8 explicitly names XLSX, not just CSV — file-builders.test.ts

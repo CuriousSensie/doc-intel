@@ -29,14 +29,11 @@ export type NavigationLabelKey =
   | "nav.auditLog"
   | "nav.backToDashboard"
   | "nav.billing"
-  | "nav.correspondents"
   | "nav.customFields"
   | "nav.dashboard"
   | "nav.documents"
   | "nav.documentTypes"
-  | "nav.entities"
   | "nav.folders"
-  | "nav.imports"
   | "nav.login"
   | "nav.notifications"
   | "nav.organization"
@@ -106,7 +103,7 @@ export const dashboardNavigation: NavigationItem[] = [
   {
     labelKey: "nav.views",
     href: "/dashboard/views",
-    feature: "entities",
+    feature: "documents",
     icon: "ListFilter"
   },
   { kind: "separator", id: "attributes" },
@@ -117,12 +114,6 @@ export const dashboardNavigation: NavigationItem[] = [
     children: [
       { labelKey: "nav.tags", href: "/dashboard/attributes/tags", feature: "documents", icon: "Tags" },
       {
-        labelKey: "nav.correspondents",
-        href: "/dashboard/attributes/correspondents",
-        feature: "documents",
-        icon: "ContactRound"
-      },
-      {
         labelKey: "nav.documentTypes",
         href: "/dashboard/attributes/document-types",
         feature: "documents",
@@ -131,7 +122,7 @@ export const dashboardNavigation: NavigationItem[] = [
       {
         labelKey: "nav.customFields",
         href: "/dashboard/attributes/custom-fields",
-        feature: "entities",
+        feature: "documents",
         icon: "Columns3"
       }
     ]
@@ -141,18 +132,6 @@ export const dashboardNavigation: NavigationItem[] = [
     href: "/dashboard/rules",
     feature: "rules",
     icon: "Sparkles"
-  },
-  {
-    labelKey: "nav.entities",
-    href: "/dashboard/entities",
-    feature: "entities",
-    icon: "FolderKanban"
-  },
-  {
-    labelKey: "nav.imports",
-    href: "/dashboard/imports",
-    feature: "imports",
-    icon: "Upload"
   },
   {
     labelKey: "nav.notifications",

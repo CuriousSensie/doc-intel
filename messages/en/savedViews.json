@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Views",
-    "description": "Saved filters over documents and entities — click one to jump straight to it.",
+    "description": "Saved filters over documents — click one to jump straight to it.",
     "columns": {
       "name": "Name",
       "kind": "Kind",

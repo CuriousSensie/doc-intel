@@ -16,11 +16,7 @@ import {
   type PaperlessTag
 } from "@/lib/paperless/documents";
 import { paperlessFor } from "@/lib/paperless/client";
-import {
-  getCachedCorrespondents,
-  getCachedDocumentTypes,
-  getCachedTags
-} from "@/lib/paperless/metadata-cache";
+import { getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { createClient } from "@/lib/supabase/server";
 import { isFeatureEnabled } from "@/config/features";
 import { requireFeature } from "@/modules/auth/authorization";
@@ -35,8 +31,7 @@ import {
   parseDocumentListFields,
   parseDocumentsSearchParams
 } from "@/modules/documents/documents.schemas";
-import { countConnectionsForDocuments, listDocuments } from "@/modules/documents/documents.service";
-import { getEntity } from "@/modules/entities/entities.service";
+import { listDocuments } from "@/modules/documents/documents.service";
 import { getActiveOrganizationId } from "@/modules/organizations/active-organization";
 import { getSavedView } from "@/modules/saved-views/saved-views.service";
 
@@ -143,28 +138,14 @@ export default async function DocumentsPage({
   const [
     { items: documents, totalCount, page, pageSize, totalPages },
     tags,
-    correspondents,
     documentTypes,
     customFieldDefs,
-    selectedEntity,
     membership
   ] = await Promise.all([
     listDocuments(organizationId, filter),
     getCachedTags(client, organizationId),
-    getCachedCorrespondents(client, organizationId),
     getCachedDocumentTypes(client, organizationId),
     listCustomFieldDefs(defsCtx),
-    filter.entityId
-      ? getEntity(
-          {
-            db: await createClient(),
-            orgId: organizationId,
-            actorId: context.user.id,
-            correlationId: randomUUID()
-          },
-          filter.entityId
-        ).catch(() => null)
-      : Promise.resolve(null),
     getMembership(organizationId, context.user.id)
   ]);
   // Owners see every document, so "shared with you" only means something for other roles.
@@ -176,7 +157,7 @@ export default async function DocumentsPage({
   const visibleFields = parsedVisibleFields.filter((field) => {
     if (!field.startsWith("custom:")) return true;
     const def = customFieldDefByKey.get(field.slice("custom:".length));
-    return Boolean(def && def.data_type !== "documentlink");
+    return Boolean(def);
   });
 
   if (documents.length === 0 && page > 1 && totalPages > 0) {
@@ -193,7 +174,6 @@ export default async function DocumentsPage({
   }
 
   const needsTags = visibleFields.includes("tags") && documents.length > 0;
-  const needsConnections = visibleFields.includes("connections") && documents.length > 0;
   const needsContent = view === "largeCards" && documents.length > 0;
   const visibleCustomFieldDefs = visibleFields
     .filter((field) => field.startsWith("custom:"))
@@ -205,7 +185,6 @@ export default async function DocumentsPage({
   const [
     contentByPaperlessId,
     tagsByPaperlessId,
-    connectionCountsByDocumentId,
     customFieldsByPaperlessId
   ] = await Promise.all([
     needsContent
@@ -220,12 +199,6 @@ export default async function DocumentsPage({
           documents.map((d) => d.paperless_document_id)
         )
       : Promise.resolve(new Map<number, number[]>()),
-    needsConnections
-      ? countConnectionsForDocuments(
-          organizationId,
-          documents.map((d) => d.id)
-        )
-      : Promise.resolve({} as Record<string, number>),
     needsCustomFields
       ? getPaperlessDocumentCustomFields(
           client,
@@ -263,9 +236,6 @@ export default async function DocumentsPage({
     filter.dateTo ||
     filter.q ||
     filter.tagIds?.length ||
-    filter.correspondentId ||
-    filter.entityId ||
-    filter.hasNoConnections ||
     filter.createdBy ||
     filter.folderId !== undefined ||
     savedView
@@ -282,12 +252,9 @@ export default async function DocumentsPage({
             key: toDocumentTypeKey(dt.name),
             name: dt.name
           })),
-          customFields: customFieldDefs.filter((def) => def.data_type !== "documentlink")
+          customFields: customFieldDefs
         }}
         key={JSON.stringify(rawSearch)}
-        selectedEntity={
-          selectedEntity ? { id: selectedEntity.id, label: selectedEntity.display_name } : null
-        }
       />
 
       {isFiltered ? (
@@ -308,13 +275,11 @@ export default async function DocumentsPage({
           <DocumentsBulkList
             attributeOptions={{
               tags,
-              correspondents,
               documentTypes,
               customFields: customFieldDefs.filter(
-                (def) => def.data_type !== "documentlink" && def.paperless_custom_field_id !== null
+                (def) => def.paperless_custom_field_id !== null
               )
             }}
-            connectionCountsByDocumentId={connectionCountsByDocumentId}
             contentByPaperlessId={contentByPaperlessId}
             customFieldDefs={visibleCustomFieldDefs}
             customFieldValuesByDocumentId={customFieldValuesByDocumentId}

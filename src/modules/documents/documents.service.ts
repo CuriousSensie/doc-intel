@@ -5,7 +5,6 @@ import { AuthorizationError, NotFoundError, ValidationError } from "@/lib/errors
 import { logEvent } from "@/lib/events";
 import {
   deletePaperlessDocument,
-  getPaperlessCorrespondentName,
   getPaperlessDocument,
   getPaperlessDocumentHistory,
   getPaperlessDocumentTypeName,
@@ -19,11 +18,6 @@ import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ServiceContext } from "@/lib/service-context";
-import {
-  getConnections,
-  listConnectedIds,
-  type ConnectionWithOther
-} from "@/modules/connections/connections.service";
 import { getMembership } from "@/modules/organizations/organizations.service";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import type { Database } from "@/types/database";
@@ -65,7 +59,7 @@ type UploadIntentResult = { uploadId: string; signedUrl: string; token: string; 
 //
 // ADR-0019 Phase D — `folderId`, when set, is resolved client-side beforehand (see
 // resolveOrCreateFolderPathsAction) and is only a plain column write here; sync-paperless-
-// document.ts reads it back off this row the same way it already reads import_row_id.
+// document.ts reads it back off this row.
 export async function createUploadIntent(
   userId: string,
   organizationId: string,
@@ -187,18 +181,14 @@ export type ListDocumentsOptions = {
   dateTo?: string;
   status?: Document["status"];
   // Not mirrored locally (no second search engine, per specs/00's non-goals) — always
-  // Paperless-delegated. Tags/correspondent aren't mirrored either (only correspondent_name/
-  // document_type_key text are, for display only), so they're delegated too.
+  // Paperless-delegated. Tags aren't mirrored either, so they're delegated too.
   q?: string;
   // Search mode for `q`: full text (title + content, Paperless's default `query=`) or
   // title-only (`title__icontains=`). Ignored when `q` is unset.
   titleOnly?: boolean;
   tagIds?: number[];
-  correspondentId?: number;
   // Business filters — served entirely from our own DB, never sent to Paperless.
-  entityId?: string;
   documentIds?: string[];
-  hasNoConnections?: boolean;
   // ADR-0019 — `null` explicitly means "unfiled only" (query.is("folder_id", null)), distinct
   // from unset (no folder filter at all). includeSubfolders defaults true: a folder grant/filter
   // cascades to its descendants, matching can_access_folder's own semantics.
@@ -223,7 +213,7 @@ export type ListDocumentsResult = {
 };
 
 const LIST_DOCUMENT_COLUMNS =
-  "id, organization_id, paperless_document_id, title, document_type_key, document_date, correspondent_name, page_count, byte_size, mime_type, checksum, status, source, import_job_id, synced_at, created_by, created_at, updated_at, deleted_at, folder_id" as const;
+  "id, organization_id, paperless_document_id, title, document_type_key, document_date, page_count, byte_size, mime_type, checksum, status, source, synced_at, created_by, created_at, updated_at, deleted_at, folder_id" as const;
 
 const SORT_COLUMNS: Record<DocumentSort, string> = {
   created: "created_at",
@@ -239,7 +229,7 @@ function nextUtcDate(date: string): string {
   return new Date(Date.UTC(year, month - 1, day + 1)).toISOString();
 }
 
-// Resolves the `q`/`tagIds`/`correspondentId` Paperless-first id set as a single combined
+// Resolves the `q`/`tagIds` Paperless-first id set as a single combined
 // request — factored out so listDocumentIds() can call it once and reuse the result across
 // every page instead of re-issuing the same Paperless search on every 200-row page it loops
 // (found reading this code before any importer existed to make the cost visible: a filtered
@@ -247,15 +237,14 @@ function nextUtcDate(date: string): string {
 // exact same query string).
 async function resolvePaperlessIdFilter(
   organizationId: string,
-  options: Pick<ListDocumentsOptions, "q" | "titleOnly" | "tagIds" | "correspondentId">
+  options: Pick<ListDocumentsOptions, "q" | "titleOnly" | "tagIds">
 ): Promise<Set<number> | null> {
-  if (!options.q && !options.tagIds?.length && !options.correspondentId) return null;
+  if (!options.q && !options.tagIds?.length) return null;
 
   const normalized = {
     q: options.q?.trim() || null,
     titleOnly: Boolean(options.titleOnly),
-    tagIds: [...(options.tagIds ?? [])].sort((a, b) => a - b),
-    correspondentId: options.correspondentId ?? null
+    tagIds: [...(options.tagIds ?? [])].sort((a, b) => a - b)
   };
   const cacheKey = `paperless:documents:filter-ids:v1:${organizationId}:${JSON.stringify(
     normalized
@@ -271,9 +260,6 @@ async function resolvePaperlessIdFilter(
     else params.set("query", normalized.q);
   }
   if (normalized.tagIds.length) params.set("tags__id__in", normalized.tagIds.join(","));
-  if (normalized.correspondentId) {
-    params.set("correspondent__id__in", String(normalized.correspondentId));
-  }
 
   const ids: number[] = [];
   let path: string | null = `/api/documents/?${params.toString()}`;
@@ -378,22 +364,13 @@ async function listDocumentsPage(
     return emptyDocumentsResult(options.page, pageSize);
   }
 
-  // Contradictory by construction (a document "connected to entity X" necessarily has a
-  // connection) — never issued as a query, just short-circuited.
-  if (options.hasNoConnections && options.entityId) {
-    return emptyDocumentsResult(options.page, pageSize);
-  }
   if (options.documentIds && options.documentIds.length === 0) {
     return emptyDocumentsResult(options.page, pageSize);
   }
 
-  if (options.hasNoConnections) {
-    return listDocumentsWithoutConnections(organizationId, options, pageSize, limit, paperlessIds);
-  }
-
-  // Resolves the folder + all its descendant ids up front (same shape as entityConnectedDocIds
-  // below) — "access/filter cascades to subfolders" is a business filter served entirely from
-  // our own DB, applied alongside (not instead of) the Paperless-id-set filter above.
+  // Resolves the folder + all its descendant ids up front — "access/filter cascades to
+  // subfolders" is a business filter served entirely from our own DB, applied alongside (not
+  // instead of) the Paperless-id-set filter above.
   let folderIds: string[] | null = null;
   if (options.folderId) {
     if (options.includeSubfolders === false) {
@@ -410,21 +387,6 @@ async function listDocumentsPage(
     }
   }
 
-  let entityConnectedDocIds: Set<string> | null = null;
-  if (options.entityId) {
-    const ctx: ServiceContext = {
-      db,
-      orgId: organizationId,
-      actorId: null,
-      correlationId: randomUUID()
-    };
-    // listConnectedIds(), not getConnections() — this only needs which documents are on the
-    // other side, never the label/entity-type hydration getConnections() also does.
-    const others = await listConnectedIds(ctx, "entity", options.entityId);
-    entityConnectedDocIds = new Set(others.filter((o) => o.kind === "document").map((o) => o.id));
-    if (entityConnectedDocIds.size === 0) return emptyDocumentsResult(options.page, pageSize);
-  }
-
   let query = db
     .from("documents")
     .select(LIST_DOCUMENT_COLUMNS, options.cursor || options.limit ? undefined : { count: "exact" })
@@ -437,7 +399,6 @@ async function listDocumentsPage(
   if (options.dateFrom) query = query.gte("created_at", `${options.dateFrom}T00:00:00.000Z`);
   if (options.dateTo) query = query.lt("created_at", nextUtcDate(options.dateTo));
   if (paperlessIds) query = query.in("paperless_document_id", [...paperlessIds]);
-  if (entityConnectedDocIds) query = query.in("id", [...entityConnectedDocIds]);
   if (options.documentIds) query = query.in("id", options.documentIds);
   if (options.folderId === null) query = query.is("folder_id", null);
   else if (folderIds) query = query.in("folder_id", folderIds);
@@ -542,74 +503,6 @@ function paginateCursor(
           })
         : null
   };
-}
-
-// "Documents with no connections" — specs/05's workhorse view, how a tenant works through an
-// import backlog. Used to pull every connection row for the org into memory to build a
-// `NOT IN (id, id, id, ...)` string — specs/10-nonfunctional.md's named anti-pattern, and the
-// first thing a real import's own "review your unconnected documents" flow would have hit at
-// scale. list_documents_without_connections() (supabase/migrations/
-// 20260916140000_documents_query_perf.sql) does the whole filtered, paginated query in one
-// indexed statement (NOT EXISTS against connections' existing partial indexes) instead.
-async function listDocumentsWithoutConnections(
-  organizationId: string,
-  options: ListDocumentsOptions,
-  pageSize: DocumentPageSize,
-  limit: number,
-  paperlessIds: Set<number> | null
-): Promise<ListDocumentsResult> {
-  const db = await createClient();
-  const cursor = decodeDocumentCursor(options.cursor);
-  const isCursorMode = Boolean(options.cursor || options.limit);
-
-  if (!isCursorMode) {
-    const page = normalizePage(options.page);
-    const offset = (page - 1) * pageSize;
-    const rpcArgs = {
-      p_organization_id: organizationId,
-      p_document_type_key: options.documentTypeKey ?? null,
-      p_status: options.status ?? null,
-      p_date_from: options.dateFrom ?? null,
-      p_date_to: options.dateTo ?? null,
-      p_paperless_ids: paperlessIds ? [...paperlessIds] : null
-    };
-
-    const [itemsResult, countResult] = await Promise.all([
-      db.rpc("list_documents_without_connections_page", {
-        ...rpcArgs,
-        p_sort: options.sort ?? "created",
-        p_sort_direction: options.sortDirection ?? "desc",
-        p_offset: offset,
-        p_limit: pageSize
-      }),
-      db.rpc("count_documents_without_connections", rpcArgs)
-    ]);
-
-    if (itemsResult.error) throw itemsResult.error;
-    if (countResult.error) throw countResult.error;
-
-    return paginateNumbered(
-      (itemsResult.data ?? []) as Document[],
-      Number(countResult.data ?? 0),
-      options.page,
-      pageSize
-    );
-  }
-
-  const { data, error } = await db.rpc("list_documents_without_connections", {
-    p_organization_id: organizationId,
-    p_document_type_key: options.documentTypeKey ?? null,
-    p_status: options.status ?? null,
-    p_date_from: options.dateFrom ?? null,
-    p_date_to: options.dateTo ?? null,
-    p_paperless_ids: paperlessIds ? [...paperlessIds] : null,
-    p_cursor_created_at: cursor?.sortValue ?? null,
-    p_cursor_id: cursor?.id ?? null,
-    p_limit: limit + 1
-  });
-  if (error) throw error;
-
-  return paginateCursor(data, limit, "created_at");
 }
 
 // specs/05-level-1-structure.md §Bulk business actions/§Export: "select all matching filter"
@@ -733,7 +626,6 @@ export async function recordBulkEditProvenance(
   ctx: ServiceContext,
   documentIds: string[],
   method:
-    | "set_correspondent"
     | "set_document_type"
     | "add_tag"
     | "remove_tag"
@@ -746,7 +638,6 @@ export async function recordBulkEditProvenance(
 
   const fieldKeys: string[] = [];
   if (method === "set_document_type") fieldKeys.push("document.type");
-  if (method === "set_correspondent") fieldKeys.push("document.correspondent");
   if (method === "modify_custom_fields") {
     const defs = await listCustomFieldDefs(ctx);
     const keyByPaperlessFieldId = new Map(
@@ -799,7 +690,6 @@ export async function updateBulkEditMirror(
   organizationId: string,
   documentIds: string[],
   method:
-    | "set_correspondent"
     | "set_document_type"
     | "add_tag"
     | "remove_tag"
@@ -809,25 +699,10 @@ export async function updateBulkEditMirror(
   parameters: Record<string, unknown> | undefined
 ): Promise<void> {
   if (documentIds.length === 0) return;
-  if (method !== "set_correspondent" && method !== "set_document_type") return;
+  if (method !== "set_document_type") return;
 
   const client = await paperlessFor(organizationId);
   const admin = createAdminClient();
-
-  if (method === "set_correspondent") {
-    const correspondentId = parameters?.correspondent;
-    const correspondentName =
-      typeof correspondentId === "number"
-        ? await getPaperlessCorrespondentName(client, correspondentId)
-        : null;
-    const { error } = await admin
-      .from("documents")
-      .update({ correspondent_name: correspondentName })
-      .eq("organization_id", organizationId)
-      .in("id", documentIds);
-    if (error) throw error;
-    return;
-  }
 
   const documentTypeId = parameters?.document_type;
   const documentTypeKey =
@@ -842,26 +717,7 @@ export async function updateBulkEditMirror(
   if (error) throw error;
 }
 
-export async function countConnectionsForDocuments(
-  organizationId: string,
-  documentIds: string[]
-): Promise<Record<string, number>> {
-  if (documentIds.length === 0) return {};
-
-  const db = await createClient();
-  const { data, error } = await db.rpc("count_document_connections", {
-    p_organization_id: organizationId,
-    p_document_ids: documentIds
-  });
-  if (error) throw error;
-
-  const counts: Record<string, number> = Object.fromEntries(documentIds.map((id) => [id, 0]));
-  for (const row of data ?? []) counts[row.document_id] = Number(row.connection_count);
-  return counts;
-}
-
 export type DocumentDetails = Document & {
-  connections: ConnectionWithOther[];
   paperless: {
     customFields: Array<{ field: number; value: unknown }>;
     content: string;
@@ -871,7 +727,7 @@ export type DocumentDetails = Document & {
   history: DocumentHistoryEntry[];
 };
 
-// specs/03-api.md GET /documents/:id — mirror row + connections + history + a best-effort
+// specs/03-api.md GET /documents/:id — mirror row + history + a best-effort
 // Paperless read, all in one round of parallel fan-out off a single document-row fetch. This
 // used to be two separate exported functions (getDocument + getDocumentHistory), each fetching
 // the document row independently and running its own work sequentially after the caller's
@@ -900,15 +756,8 @@ export async function getDocument(documentId: string): Promise<DocumentDetails> 
   if (!doc) throw new NotFoundError("Document not found");
 
   const organizationId = doc.organization_id;
-  const ctx: ServiceContext = {
-    db,
-    orgId: organizationId,
-    actorId: null,
-    correlationId: randomUUID()
-  };
 
-  const [connections, paperless, history, resolvedByteSize] = await Promise.all([
-    getConnections(ctx, "document", documentId),
+  const [paperless, history, resolvedByteSize] = await Promise.all([
     (async (): Promise<DocumentDetails["paperless"]> => {
       try {
         const client = await paperlessFor(organizationId);
@@ -947,7 +796,7 @@ export async function getDocument(documentId: string): Promise<DocumentDetails> 
       : Promise.resolve(doc.byte_size)
   ]);
 
-  return { ...doc, byte_size: resolvedByteSize, connections, paperless, history };
+  return { ...doc, byte_size: resolvedByteSize, paperless, history };
 }
 
 export type DocumentHistoryEntry =
@@ -1000,7 +849,7 @@ export async function getDocumentHistory(
     paperlessDocumentId = doc.paperless_document_id;
   }
 
-  const [paperlessEntries, businessEntries, connectionEntries] = await Promise.all([
+  const [paperlessEntries, businessEntries] = await Promise.all([
     (async (): Promise<DocumentHistoryEntry[]> => {
       try {
         const client = await paperlessFor(organizationId);
@@ -1036,37 +885,10 @@ export async function getDocumentHistory(
         actorId: row.actor_id,
         metadata: row.metadata
       }));
-    })(),
-    // Connection create/delete events are logged with entity_type='connection' and the
-    // connection's own row id (connections.service.ts), never entity_type='document' — a
-    // document's own history needs a separate lookup by the document id appearing as either
-    // side of the connection in the event's metadata. Known gap: the >50-item async bulk-connect
-    // path logs one aggregate event with only the target entity's id, not each document's id, so
-    // a document connected that way won't show the event here — see bulkCreateConnections's own
-    // logEvent call.
-    (async (): Promise<DocumentHistoryEntry[]> => {
-      const { data: rows, error: auditError } = await db
-        .from("audit_logs")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .eq("entity_type", "connection")
-        .or(`metadata->>source_id.eq.${documentId},metadata->>target_id.eq.${documentId}`)
-        .order("created_at", { ascending: false });
-
-      if (auditError) throw auditError;
-
-      return (rows ?? []).map((row) => ({
-        source: "business" as const,
-        id: row.id,
-        timestamp: row.created_at,
-        action: row.action,
-        actorId: row.actor_id,
-        metadata: row.metadata
-      }));
     })()
   ]);
 
-  return [...paperlessEntries, ...businessEntries, ...connectionEntries].sort((a, b) =>
+  return [...paperlessEntries, ...businessEntries].sort((a, b) =>
     b.timestamp.localeCompare(a.timestamp)
   );
 }
@@ -1085,7 +907,6 @@ export async function updateDocument(
     title?: string;
     documentDate?: string;
     documentTypeId?: number | null;
-    correspondentId?: number | null;
     tagIds?: number[];
     customFieldValues?: Array<{ field: number; value: unknown }>;
   }
@@ -1113,7 +934,6 @@ export async function updateDocument(
   if (input.title !== undefined) patch.title = input.title;
   if (input.documentDate !== undefined) patch.created = input.documentDate;
   if (input.documentTypeId !== undefined) patch.document_type = input.documentTypeId;
-  if (input.correspondentId !== undefined) patch.correspondent = input.correspondentId;
   if (input.tagIds !== undefined) patch.tags = input.tagIds;
   if (input.customFieldValues !== undefined) patch.custom_fields = input.customFieldValues;
 
@@ -1130,11 +950,6 @@ export async function updateDocument(
   if (input.documentTypeId !== undefined) {
     mirrorUpdate.document_type_key = updated.document_type
       ? toDocumentTypeKey(await getPaperlessDocumentTypeName(client, updated.document_type))
-      : null;
-  }
-  if (input.correspondentId !== undefined) {
-    mirrorUpdate.correspondent_name = updated.correspondent
-      ? await getPaperlessCorrespondentName(client, updated.correspondent)
       : null;
   }
   // tagIds isn't mirrored (documents has no tags column, per specs/02 — tags stay
@@ -1168,7 +983,6 @@ export async function updateDocument(
   const admin = createAdminClient();
   const provenanceFieldKeys: string[] = [];
   if (input.documentTypeId !== undefined) provenanceFieldKeys.push("document.type");
-  if (input.correspondentId !== undefined) provenanceFieldKeys.push("document.correspondent");
   if (input.customFieldValues !== undefined) {
     const defsCtx: ServiceContext = {
       db: admin,

@@ -17,11 +17,7 @@
       "myStats": "My stats",
       "memberStats": "Member stats",
       "documents": "Documents",
-      "noConnections": "No connections",
-      "entities": "Entities",
-      "connections": "Connections",
       "tags": "Tags",
-      "correspondents": "Correspondents",
       "documentTypes": "Document types"
     },
     "selectMember": "Select a member",

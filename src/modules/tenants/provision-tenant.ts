@@ -8,7 +8,7 @@ import { TENANT_MODEL_PERMISSIONS } from "@/lib/paperless/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Names only, not Slovenian labels — specs/04-level-0-foundation.md gives these as the literal
-// list, unlike entity_types' field_schema which specs/05 demonstrates localizing.
+// list.
 const DEFAULT_DOCUMENT_TYPES = ["Invoice", "Contract", "Service report", "Quotation"] as const;
 
 const DEFAULT_STORAGE_PATH_NAME = "Default";

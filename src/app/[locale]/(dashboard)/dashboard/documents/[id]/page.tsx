@@ -2,14 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { notFound } from "next/navigation";
 
-import { ConnectionPicker } from "@/components/connections/connection-picker";
-import { ConnectionsPanel } from "@/components/documents/connections-panel";
 import { DocumentContentTab } from "@/components/documents/document-content-tab";
 import { DocumentDetailShell } from "@/components/documents/document-detail-shell";
 import { DocumentHistoryTab } from "@/components/documents/document-history-tab";
 import { NotFoundError } from "@/lib/errors";
 import { paperlessFor } from "@/lib/paperless/client";
-import { getCachedCorrespondents, getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
+import { getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -78,9 +76,8 @@ export default async function DocumentDetailPage({
     actorId: context.user.id,
     correlationId: randomUUID()
   };
-  const [tags, correspondents, documentTypes, customFieldDefs, previousId, nextId, access] = await Promise.all([
+  const [tags, documentTypes, customFieldDefs, previousId, nextId, access] = await Promise.all([
     getCachedTags(client, document.organization_id),
-    getCachedCorrespondents(client, document.organization_id),
     getCachedDocumentTypes(client, document.organization_id),
     listCustomFieldDefs(defsCtx),
     getAdjacentDocumentId(document.organization_id, document, filter, "previous"),
@@ -93,20 +90,10 @@ export default async function DocumentDetailPage({
       <DocumentDetailShell
         canEdit={access.canEdit}
         canManage={access.canManage}
-        connectionsTab={
-          <div className="grid gap-4">
-            {access.canEdit ? (
-              <div className="flex items-center justify-end">
-                <ConnectionPicker sourceId={document.id} sourceKind="document" />
-              </div>
-            ) : null}
-            <ConnectionsPanel connections={document.connections} readOnly={!access.canEdit} />
-          </div>
-        }
         contentTab={<DocumentContentTab document={document} />}
         ctxQuery={ctxQuery}
         customFieldDefs={customFieldDefs}
-        filterOptions={{ tags, correspondents, documentTypes }}
+        filterOptions={{ tags, documentTypes }}
         historyTab={<DocumentHistoryTab history={document.history} />}
         initialDocument={document}
         nextId={nextId}

@@ -4,25 +4,20 @@ import { buildCsv, buildXlsx } from "./file-builders";
 import type { ResolvedExportData } from "./exports.service";
 
 const sampleData: ResolvedExportData = {
-  entityTypeColumns: [{ key: "customer", label: "Stranka" }],
   rows: [
     {
       documentId: "doc-1",
       title: "Invoice; with semicolon",
       documentTypeKey: "invoice",
       documentDate: "2026-03-05",
-      correspondentName: "Acme d.o.o.",
-      status: "ready",
-      entityColumns: { customer: "Acme d.o.o.; Beta d.o.o." }
+      status: "ready"
     },
     {
       documentId: "doc-2",
       title: "Plain title",
       documentTypeKey: null,
       documentDate: null,
-      correspondentName: null,
-      status: "processing",
-      entityColumns: {}
+      status: "processing"
     }
   ]
 };
@@ -32,9 +27,9 @@ describe("buildCsv", () => {
     const csv = buildCsv(sampleData);
     const lines = csv.replace(/^﻿/, "").split("\r\n");
 
-    expect(lines[0]).toBe("Title;Type;Date;Correspondent;Status;Stranka");
-    expect(lines[1]).toBe('"Invoice; with semicolon";invoice;05.03.2026;Acme d.o.o.;ready;"Acme d.o.o.; Beta d.o.o."');
-    expect(lines[2]).toBe("Plain title;;;;processing;");
+    expect(lines[0]).toBe("Title;Type;Date;Status");
+    expect(lines[1]).toBe('"Invoice; with semicolon";invoice;05.03.2026;ready');
+    expect(lines[2]).toBe("Plain title;;;processing");
   });
 
   it("starts with a UTF-8 BOM so Excel opens it correctly", () => {

@@ -293,7 +293,7 @@ export async function moveDocumentToFolder(
   if (error) throw error;
 
   // Fire-and-forget, matching updateDocument()'s own document.updated logging — folder placement
-  // is a plain field write like document_type/correspondent, not one of ADR-0008's fixed list of
+  // is a plain field write like document_type, not one of ADR-0008's fixed list of
   // mutations requiring a same-transaction atomic audit row (that list is share/unshare and
   // grant/revoke_folder_access, already atomic RPCs above).
   await logEvent({

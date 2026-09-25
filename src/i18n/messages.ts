@@ -13,11 +13,7 @@ const namespaces = [
   "emails",
   // Dokumenti Level 1 — not part of the upstream Dokumenti.
   "documents",
-  "entities",
-  "entityTypes",
-  "connections",
   "savedViews",
-  "imports",
   "rules",
   "folders"
 ] as const;

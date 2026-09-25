@@ -1,9 +1,5 @@
 import { paperlessFor } from "@/lib/paperless/client";
-import {
-  getCachedCorrespondents,
-  getCachedDocumentTypes,
-  getCachedTags
-} from "@/lib/paperless/metadata-cache";
+import { getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { createClient } from "@/lib/supabase/server";
 
 // specs/05-level-1-structure.md §Dashboard information architecture — Home content differs by
@@ -11,50 +7,36 @@ import { createClient } from "@/lib/supabase/server";
 // their own stats plus a reduced org-wide set. Counts come from SQL (get_org_dashboard_counts /
 // get_member_dashboard_counts, supabase/migrations/20260921000000_dashboard_stats_rpc.sql)
 // instead of pulling full rows into JS — see that migration's header for why. Tags/
-// correspondents/document types live only in Paperless, which has no per-user creator
+// document types live only in Paperless, which has no per-user creator
 // attribution, so they're org-wide only and never appear in getMemberStats().
 
 export type OrgStats = {
   documents: number;
-  entities: number;
-  connections: number;
-  noConnections: number;
   tags: number;
-  correspondents: number;
   documentTypes: number;
 };
 
 export type MemberStats = {
   documents: number;
-  entities: number;
-  connections: number;
 };
 
 export async function getOrgStats(organizationId: string): Promise<OrgStats> {
   const db = await createClient();
   const client = await paperlessFor(organizationId);
 
-  const [countsResult, noConnectionsResult, tags, correspondents, documentTypes] =
-    await Promise.all([
-      db.rpc("get_org_dashboard_counts", { p_organization_id: organizationId }),
-      db.rpc("count_documents_without_connections", { p_organization_id: organizationId }),
-      getCachedTags(client, organizationId),
-      getCachedCorrespondents(client, organizationId),
-      getCachedDocumentTypes(client, organizationId)
-    ]);
+  const [countsResult, tags, documentTypes] = await Promise.all([
+    db.rpc("get_org_dashboard_counts", { p_organization_id: organizationId }),
+    getCachedTags(client, organizationId),
+    getCachedDocumentTypes(client, organizationId)
+  ]);
 
   if (countsResult.error) throw countsResult.error;
-  if (noConnectionsResult.error) throw noConnectionsResult.error;
 
   const counts = countsResult.data?.[0];
 
   return {
     documents: Number(counts?.documents ?? 0),
-    entities: Number(counts?.entities ?? 0),
-    connections: Number(counts?.connections ?? 0),
-    noConnections: Number(noConnectionsResult.data ?? 0),
     tags: tags.length,
-    correspondents: correspondents.length,
     documentTypes: documentTypes.length
   };
 }
@@ -74,9 +56,7 @@ export async function getMemberStats(
   const counts = data?.[0];
 
   return {
-    documents: Number(counts?.documents ?? 0),
-    entities: Number(counts?.entities ?? 0),
-    connections: Number(counts?.connections ?? 0)
+    documents: Number(counts?.documents ?? 0)
   };
 }
 

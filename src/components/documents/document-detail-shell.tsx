@@ -14,7 +14,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { recordDocumentOpen } from "@/lib/dashboard/recent-activity";
 import {
   toDocumentTypeKey,
-  type PaperlessCorrespondent,
   type PaperlessDocumentType,
   type PaperlessTag
 } from "@/lib/paperless/documents";
@@ -31,7 +30,6 @@ import {
 export type DocumentDraft = {
   title: string;
   documentTypeId: number | null;
-  correspondentId: number | null;
   tagIds: number[];
   customFieldValues: KeyedCustomFieldValues;
 };
@@ -46,7 +44,6 @@ function draftsEqual(a: DocumentDraft, b: DocumentDraft): boolean {
   return (
     a.title === b.title &&
     a.documentTypeId === b.documentTypeId &&
-    a.correspondentId === b.correspondentId &&
     sameTagIds(a.tagIds, b.tagIds) &&
     aCustomKeys.length === bCustomKeys.length &&
     aCustomKeys.every((key) => Object.is(a.customFieldValues[key], b.customFieldValues[key]))
@@ -56,13 +53,11 @@ function draftsEqual(a: DocumentDraft, b: DocumentDraft): boolean {
 function draftFrom(
   document: DocumentDetails,
   typeId: number | null,
-  correspondentId: number | null,
   customFieldDefs: CustomFieldDef[]
 ): DocumentDraft {
   return {
     title: document.title,
     documentTypeId: typeId,
-    correspondentId: correspondentId,
     tagIds: document.paperless?.tagIds ?? [],
     customFieldValues: mapRawCustomFieldValues(document.paperless?.customFields, customFieldDefs)
   };
@@ -70,13 +65,11 @@ function draftFrom(
 
 // Owns everything the document detail page needs client-side state for: the one page-level
 // "Save changes" bar (not per-tab — draft edits from the Details tab, with Permissions to join
-// once it has real fields; Connections stays its own instant two-interaction actions per
-// specs/05-level-1-structure.md, deliberately not folded into this draft/save cycle), and —
-// the actual fix for "editing is slow" — updating local state directly from what
-// updateDocumentAction() already returns instead of a post-save router.refresh(). A refresh
-// re-ran the *entire* page's data-fetch waterfall (document + connections + a live Paperless
-// read + history + three metadata lists + two adjacent-document lookups) for a one-field edit;
-// this cuts that to exactly the one PATCH the save itself needs.
+// once it has real fields), and — the actual fix for "editing is slow" — updating local state
+// directly from what updateDocumentAction() already returns instead of a post-save
+// router.refresh(). A refresh re-ran the *entire* page's data-fetch waterfall (document + a live
+// Paperless read + history + three metadata lists + two adjacent-document lookups) for a
+// one-field edit; this cuts that to exactly the one PATCH the save itself needs.
 export function DocumentDetailShell({
   initialDocument,
   filterOptions,
@@ -86,7 +79,6 @@ export function DocumentDetailShell({
   customFieldDefs,
   contentTab,
   historyTab,
-  connectionsTab,
   canEdit,
   canManage,
   permissions
@@ -94,7 +86,6 @@ export function DocumentDetailShell({
   initialDocument: DocumentDetails;
   filterOptions: {
     tags: PaperlessTag[];
-    correspondents: PaperlessCorrespondent[];
     documentTypes: PaperlessDocumentType[];
   };
   previousId: string | null;
@@ -103,12 +94,11 @@ export function DocumentDetailShell({
   customFieldDefs: CustomFieldDef[];
   // Async Server Components (getTranslations, etc.) — must be constructed in the server-side
   // page.tsx and passed down as already-rendered elements. Building `<DocumentContentTab/>` (or
-  // ConnectionsPanel/DocumentHistoryTab) directly inside this "use client" file's own render
-  // function breaks with "`getTranslations` is not supported in Client Components" — found live
-  // the moment tabs got lifted into this shell.
+  // DocumentHistoryTab) directly inside this "use client" file's own render function breaks with
+  // "`getTranslations` is not supported in Client Components" — found live the moment tabs got
+  // lifted into this shell.
   contentTab: ReactNode;
   historyTab: ReactNode;
-  connectionsTab: ReactNode;
   // Rendering hints only — every write is re-checked server-side (can_edit_document /
   // can_manage_document). canManage = creator or owner (share + delete).
   canEdit: boolean;
@@ -123,7 +113,6 @@ export function DocumentDetailShell({
 
   const [document, setDocument] = useState(initialDocument);
   const [tagOptions, setTagOptions] = useState(filterOptions.tags);
-  const [correspondentOptions, setCorrespondentOptions] = useState(filterOptions.correspondents);
   const [documentTypeOptions, setDocumentTypeOptions] = useState(filterOptions.documentTypes);
   const [customFieldDefOptions, setCustomFieldDefOptions] = useState(customFieldDefs);
 
@@ -135,14 +124,9 @@ export function DocumentDetailShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  const initialCorrespondentId = useMemo(
-    () => correspondentOptions.find((c) => c.name === document.correspondent_name)?.id ?? null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
 
   const [baseline, setBaseline] = useState<DocumentDraft>(() =>
-    draftFrom(document, initialTypeId, initialCorrespondentId, customFieldDefs)
+    draftFrom(document, initialTypeId, customFieldDefs)
   );
   const [draft, setDraft] = useState<DocumentDraft>(baseline);
   const isDirty = !draftsEqual(draft, baseline);
@@ -167,15 +151,14 @@ export function DocumentDetailShell({
     const input: Record<string, unknown> = {};
     if (draft.title !== baseline.title) input.title = draft.title;
     if (draft.documentTypeId !== baseline.documentTypeId) input.documentTypeId = draft.documentTypeId;
-    if (draft.correspondentId !== baseline.correspondentId) input.correspondentId = draft.correspondentId;
     if (!sameTagIds(draft.tagIds, baseline.tagIds)) input.tagIds = draft.tagIds;
     const customFieldChanged = !draftsEqual(
-      { ...baseline, title: draft.title, documentTypeId: draft.documentTypeId, correspondentId: draft.correspondentId, tagIds: draft.tagIds },
+      { ...baseline, title: draft.title, documentTypeId: draft.documentTypeId, tagIds: draft.tagIds },
       draft
     );
     if (customFieldChanged) {
-      const applicableDefs = customFieldDefOptions.filter(
-        (def) => def.data_type !== "documentlink" && isCustomFieldApplicable(def, document.document_type_key)
+      const applicableDefs = customFieldDefOptions.filter((def) =>
+        isCustomFieldApplicable(def, document.document_type_key)
       );
       input.customFieldValues = applicableDefs
         .filter((def) => draft.customFieldValues[def.key] !== undefined)
@@ -254,19 +237,16 @@ export function DocumentDetailShell({
             ) : null}
 
             <DocumentDetailTabs
-              connections={connectionsTab}
               content={contentTab}
               details={
                 <DocumentDetailsTab
                   readOnly={!canEdit}
-                  correspondentOptions={correspondentOptions}
                   document={document}
                   documentTypeOptions={documentTypeOptions}
                   draft={draft}
-                  customFieldDefs={customFieldDefOptions.filter(
-                    (def) => def.data_type !== "documentlink" && isCustomFieldApplicable(def, document.document_type_key)
+                  customFieldDefs={customFieldDefOptions.filter((def) =>
+                    isCustomFieldApplicable(def, document.document_type_key)
                   )}
-                  onCorrespondentCreated={(c) => setCorrespondentOptions((prev) => [...prev, c])}
                   onCustomFieldDefCreated={(def) => setCustomFieldDefOptions((prev) => [...prev, def])}
                   onDocumentTypeCreated={(dt) => setDocumentTypeOptions((prev) => [...prev, dt])}
                   onDraftChange={handleDraftChange}

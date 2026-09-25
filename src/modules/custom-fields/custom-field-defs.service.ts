@@ -5,7 +5,7 @@
 // isolation spike). Every caller (UI, Server Actions, worker jobs) must go through
 // listCustomFieldDefs()/getCustomFieldDef() below — never call Paperless's raw endpoint for
 // definitions from anywhere else in the codebase.
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import { ConflictError, NotFoundError } from "@/lib/errors";
 import { logEvent } from "@/lib/events";
 import type { ServiceContext } from "@/lib/service-context";
 import type { Database } from "@/types/database";
@@ -20,23 +20,6 @@ export type CustomFieldDataType = CustomFieldDef["data_type"];
 export type CustomFieldSelectOption = { id?: string; label: string };
 
 const UNIQUE_VIOLATION = "23505";
-
-// specs/02-data-model.md's decision table: "a link to a business entity (customer, project) —
-// Dokumenti connections — never a Paperless field." `documentlink` is the data type that
-// represents exactly this, so it can never be backed by a real Paperless custom field —
-// specs/12-agent-rules.md rule 6, the single most likely wrong turn in this build. This is a
-// runtime assertion, not just a comment: violating it is rejected, not merely discouraged.
-function assertDocumentLinkNeverBacksAPaperlessField(
-  dataType: CustomFieldDataType,
-  paperlessCustomFieldId: number | null | undefined
-): void {
-  if (dataType === "documentlink" && paperlessCustomFieldId != null) {
-    throw new ValidationError(
-      "A documentlink field represents a connection to a business entity and can never be " +
-        "backed by a Paperless custom field — create a connection instead (specs/12-agent-rules.md rule 6)"
-    );
-  }
-}
 
 async function fetchCustomFieldDef(ctx: ServiceContext, id: string): Promise<CustomFieldDef> {
   const { data, error } = await ctx.db
@@ -78,8 +61,6 @@ export async function createCustomFieldDef(
     isRequired?: boolean;
   }
 ): Promise<CustomFieldDef> {
-  assertDocumentLinkNeverBacksAPaperlessField(input.dataType, input.paperlessCustomFieldId);
-
   const { data, error } = await ctx.db
     .from("custom_field_defs")
     .insert({

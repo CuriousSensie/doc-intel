@@ -17,11 +17,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog";
-import type {
-  PaperlessCorrespondent,
-  PaperlessDocumentType,
-  PaperlessTag
-} from "@/lib/paperless/documents";
+import type { PaperlessDocumentType, PaperlessTag } from "@/lib/paperless/documents";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import { bulkEditDocumentsAction } from "@/modules/documents/documents.actions";
 import type { ListDocumentsOptions } from "@/modules/documents/documents.service";
@@ -39,7 +35,6 @@ export function BulkAssignAttributesDialog({
   disabled?: boolean;
   options: {
     tags: PaperlessTag[];
-    correspondents: PaperlessCorrespondent[];
     documentTypes: PaperlessDocumentType[];
   };
   customFieldDefs: CustomFieldDef[];
@@ -49,10 +44,8 @@ export function BulkAssignAttributesDialog({
   const [open, setOpen] = useState(false);
   const [tagsToAdd, setTagsToAdd] = useState<number[]>([]);
   const [tagsToRemove, setTagsToRemove] = useState<number[]>([]);
-  const [correspondentId, setCorrespondentId] = useState<number | null>(null);
   const [documentTypeId, setDocumentTypeId] = useState<number | null>(null);
   const [tagOptions, setTagOptions] = useState(options.tags);
-  const [correspondentOptions, setCorrespondentOptions] = useState(options.correspondents);
   const [documentTypeOptions, setDocumentTypeOptions] = useState(options.documentTypes);
   const [selectedCustomKeys, setSelectedCustomKeys] = useState<string[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
@@ -66,7 +59,6 @@ export function BulkAssignAttributesDialog({
   function reset() {
     setTagsToAdd([]);
     setTagsToRemove([]);
-    setCorrespondentId(null);
     setDocumentTypeId(null);
     setSelectedCustomKeys([]);
     setCustomValues({});
@@ -93,14 +85,6 @@ export function BulkAssignAttributesDialog({
         }
         for (const tagId of tagsToRemove) {
           await run({ ...selection, method: "remove_tag", parameters: { tag: tagId } });
-          operations += 1;
-        }
-        if (correspondentId !== null) {
-          await run({
-            ...selection,
-            method: "set_correspondent",
-            parameters: { correspondent: correspondentId }
-          });
           operations += 1;
         }
         if (documentTypeId !== null) {
@@ -174,19 +158,6 @@ export function BulkAssignAttributesDialog({
             <PaperlessMetaPicker kind="tag" mode="multi" onChange={setTagsToRemove} options={tagOptions} value={tagsToRemove} />
           </div>
           <div className="grid gap-2 md:grid-cols-2">
-            <div className="grid gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("correspondent")}</span>
-              <PaperlessMetaPicker
-                kind="correspondent"
-                mode="single"
-                onChange={(ids, created) => {
-                  if (created) setCorrespondentOptions((prev) => [...prev, created as PaperlessCorrespondent]);
-                  setCorrespondentId(ids[0] ?? null);
-                }}
-                options={correspondentOptions}
-                value={correspondentId ? [correspondentId] : []}
-              />
-            </div>
             <div className="grid gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("documentType")}</span>
               <PaperlessMetaPicker

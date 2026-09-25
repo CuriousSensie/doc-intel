@@ -8,13 +8,12 @@ afterEach(() => {
   vi.doUnmock("@/lib/paperless/client");
   vi.doUnmock("@/lib/paperless/documents");
   vi.doUnmock("@/lib/redis");
-  vi.doUnmock("@/modules/connections/connections.service");
   vi.doUnmock("@/modules/organizations/organizations.service");
   vi.resetModules();
 });
 
-// Chainable + thenable fake, same shape used across the entities/connections test suites —
-// every method returns itself, and awaiting at any point resolves to the configured result.
+// Chainable + thenable fake — every method returns itself, and awaiting at any point resolves
+// to the configured result.
 function makeChain(result: unknown) {
   const target: Record<string, unknown> = {};
   const proxy: unknown = new Proxy(target, {
@@ -295,12 +294,9 @@ describe("getDocument", () => {
     title: "Invoice"
   };
 
-  it("returns the mirror row with connections and Paperless custom fields", async () => {
+  it("returns the mirror row with Paperless custom fields", async () => {
     vi.doMock("@/lib/supabase/server", () => ({
       createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
-    }));
-    vi.doMock("@/modules/connections/connections.service", () => ({
-      getConnections: vi.fn().mockResolvedValue([{ id: "conn-1" }])
     }));
     vi.doMock("@/lib/paperless/client", () => ({
       paperlessFor: vi.fn().mockResolvedValue({})
@@ -312,16 +308,12 @@ describe("getDocument", () => {
     const { getDocument } = await import("@/modules/documents/documents.service");
     const result = await getDocument("doc-1");
 
-    expect(result.connections).toEqual([{ id: "conn-1" }]);
     expect(result.paperless).toEqual({ customFields: [{ field: 1, value: "x" }] });
   });
 
   it("degrades to paperless: null when Paperless is unreachable, without failing the page", async () => {
     vi.doMock("@/lib/supabase/server", () => ({
       createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
-    }));
-    vi.doMock("@/modules/connections/connections.service", () => ({
-      getConnections: vi.fn().mockResolvedValue([])
     }));
     vi.doMock("@/lib/paperless/client", () => ({
       paperlessFor: vi.fn().mockRejectedValue(new Error("unreachable"))
@@ -458,78 +450,6 @@ describe("updateDocument", () => {
     expect(result).toEqual(DOC_ROW);
   });
 
-  it("patches correspondent and mirrors the resolved name back", async () => {
-    vi.doMock("@/lib/supabase/server", () => ({
-      createClient: async () => makeQueryClient({ documents: [{ data: DOC_ROW, error: null }] })
-    }));
-    vi.doMock("@/modules/organizations/organizations.service", () => ({
-      getMembership: vi.fn().mockResolvedValue({ role: "member" })
-    }));
-    vi.doMock("@/lib/paperless/client", () => ({
-      paperlessFor: vi.fn().mockResolvedValue({})
-    }));
-    const updatePaperlessDocument = vi.fn().mockResolvedValue({ correspondent: 7 });
-    const getPaperlessCorrespondentName = vi.fn().mockResolvedValue("Acme Corp");
-    vi.doMock("@/lib/paperless/documents", () => ({
-      updatePaperlessDocument,
-      getPaperlessCorrespondentName
-    }));
-
-    let mirrorUpdatePayload: unknown;
-    let provenanceUpsertPayload: unknown;
-    vi.doMock("@/lib/supabase/admin", () => ({
-      createAdminClient: () => ({
-        from: (table: string) => {
-          if (table === "field_provenance") {
-            return {
-              upsert: (payload: unknown) => {
-                provenanceUpsertPayload = payload;
-                return Promise.resolve({ error: null });
-              }
-            };
-          }
-          return {
-            update: (payload: unknown) => {
-              mirrorUpdatePayload = payload;
-              return {
-                eq: () => ({
-                  eq: () => ({
-                    select: () => ({
-                      single: () =>
-                        Promise.resolve({
-                          data: { ...DOC_ROW, correspondent_name: "Acme Corp" },
-                          error: null
-                        })
-                    })
-                  })
-                })
-              };
-            }
-          };
-        }
-      })
-    }));
-    vi.doMock("@/lib/events", () => ({ logEvent: vi.fn().mockResolvedValue(undefined) }));
-
-    const { updateDocument } = await import("@/modules/documents/documents.service");
-    const result = await updateDocument("user-1", "org-1", "doc-1", { correspondentId: 7 });
-
-    expect(updatePaperlessDocument).toHaveBeenCalledWith({}, 42, { correspondent: 7 });
-    expect(getPaperlessCorrespondentName).toHaveBeenCalledWith({}, 7);
-    expect(mirrorUpdatePayload).toEqual({ correspondent_name: "Acme Corp" });
-    expect(result.correspondent_name).toBe("Acme Corp");
-    // specs/07-rules-engine.md "user edits win over rules always" — a human editing a field
-    // through this app marks it in field_provenance, so a later rule run never overwrites it.
-    expect(provenanceUpsertPayload).toEqual([
-      expect.objectContaining({
-        organization_id: "org-1",
-        document_id: "doc-1",
-        field_key: "document.correspondent",
-        updated_by: "user",
-        source_id: "user-1"
-      })
-    ]);
-  });
 });
 
 describe("deleteDocument", () => {
@@ -675,60 +595,6 @@ describe("getAdjacentDocumentId", () => {
   });
 });
 
-describe("listDocuments — hasNoConnections", () => {
-  function makeRow(id: string) {
-    return {
-      id,
-      organization_id: "org-1",
-      paperless_document_id: 1,
-      title: "Invoice",
-      created_at: "2026-01-01T00:00:00Z"
-    };
-  }
-
-  it("dispatches to the paginated no-connections RPCs instead of building a NOT IN list", async () => {
-    const rpc = vi.fn((name: string) => {
-      if (name === "list_documents_without_connections_page") {
-        return Promise.resolve({ data: [makeRow("doc-1")], error: null });
-      }
-      if (name === "count_documents_without_connections") {
-        return Promise.resolve({ data: 1, error: null });
-      }
-      return Promise.resolve({ data: null, error: null });
-    });
-    const from = vi.fn(() => {
-      throw new Error("hasNoConnections must not touch documents/connections via .from()");
-    });
-    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from, rpc }) }));
-
-    const { listDocuments } = await import("@/modules/documents/documents.service");
-    const result = await listDocuments("org-1", { hasNoConnections: true, status: "ready" });
-
-    expect(rpc).toHaveBeenCalledWith(
-      "list_documents_without_connections_page",
-      expect.objectContaining({ p_organization_id: "org-1", p_status: "ready", p_limit: 25 })
-    );
-    expect(rpc).toHaveBeenCalledWith(
-      "count_documents_without_connections",
-      expect.objectContaining({ p_organization_id: "org-1", p_status: "ready" })
-    );
-    expect(result.items).toHaveLength(1);
-    expect(result.totalCount).toBe(1);
-  });
-
-  it("short-circuits to empty when hasNoConnections and entityId are both set (contradictory)", async () => {
-    const from = vi.fn(() => {
-      throw new Error("a contradictory filter must never reach a query");
-    });
-    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
-
-    const { listDocuments } = await import("@/modules/documents/documents.service");
-    const result = await listDocuments("org-1", { hasNoConnections: true, entityId: "entity-1" });
-
-    expect(result).toMatchObject({ items: [], nextCursor: null, totalCount: 0 });
-  });
-});
-
 describe("listDocuments — sort", () => {
   function makeRow(id: string, title: string) {
     return {
@@ -852,7 +718,7 @@ describe("listDocuments — folder path decoration", () => {
 });
 
 describe("resolvePaperlessIdFilter (via listDocumentIds)", () => {
-  it("combines q/titleOnly/tagIds/correspondentId into a single Paperless request", async () => {
+  it("combines q/titleOnly/tagIds into a single Paperless request", async () => {
     const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }] });
     vi.doMock("@/lib/paperless/client", () => ({ paperlessFor: async () => ({ get }) }));
     vi.doMock("@/lib/redis", () => ({
@@ -878,15 +744,13 @@ describe("resolvePaperlessIdFilter (via listDocumentIds)", () => {
     await listDocumentIds("org-1", {
       q: "invoice",
       titleOnly: true,
-      tagIds: [1, 2],
-      correspondentId: 9
+      tagIds: [1, 2]
     });
 
     expect(get).toHaveBeenCalledTimes(1);
     const url = get.mock.calls[0][0] as string;
     expect(url).toContain("title__icontains=invoice");
     expect(url).toContain("tags__id__in=1%2C2");
-    expect(url).toContain("correspondent__id__in=9");
     expect(url).not.toContain("query=");
   });
 });

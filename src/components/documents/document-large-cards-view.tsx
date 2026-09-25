@@ -48,7 +48,6 @@ export function DocumentLargeCardsView({
   contentByPaperlessId,
   ctxQuery = "",
   tagsByDocumentId = {},
-  connectionCountsByDocumentId = {},
   customFieldDefs = [],
   customFieldValuesByDocumentId = {},
   visibleFields
@@ -60,7 +59,6 @@ export function DocumentLargeCardsView({
   contentByPaperlessId: Record<number, string>;
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
-  connectionCountsByDocumentId?: Record<string, number>;
   customFieldDefs?: CustomFieldDef[];
   customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
@@ -154,14 +152,6 @@ export function DocumentLargeCardsView({
                     <dd className="mt-0.5 min-w-0 truncate" title={document.folder_path ?? undefined}>
                       {document.folder_path ? folderLeafName(document.folder_path) : t("list.unfiled")}
                     </dd>
-                  </div>
-                ) : null}
-                {visible.has("connections") ? (
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      {tFilters("field_connections")}
-                    </dt>
-                    <dd className="mt-0.5">{connectionCountsByDocumentId[document.id] ?? 0}</dd>
                   </div>
                 ) : null}
                 {visible.has("pages") ? (

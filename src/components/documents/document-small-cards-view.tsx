@@ -46,7 +46,6 @@ export function DocumentSmallCardsView({
   onToggle,
   ctxQuery = "",
   tagsByDocumentId = {},
-  connectionCountsByDocumentId = {},
   customFieldDefs = [],
   customFieldValuesByDocumentId = {},
   visibleFields
@@ -57,7 +56,6 @@ export function DocumentSmallCardsView({
   onToggle: (id: string) => void;
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
-  connectionCountsByDocumentId?: Record<string, number>;
   customFieldDefs?: CustomFieldDef[];
   customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
@@ -133,12 +131,6 @@ export function DocumentSmallCardsView({
                     <dd className="truncate text-right" title={document.folder_path ?? undefined}>
                       {document.folder_path ? folderLeafName(document.folder_path) : t("list.unfiled")}
                     </dd>
-                  </div>
-                ) : null}
-                {visible.has("connections") ? (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted">{tFilters("field_connections")}</dt>
-                    <dd>{connectionCountsByDocumentId[document.id] ?? 0}</dd>
                   </div>
                 ) : null}
                 {visible.has("pages") ? (

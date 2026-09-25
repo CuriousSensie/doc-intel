@@ -6,16 +6,14 @@ import { parsePostDocumentTaskId, pollPaperlessTask } from "@/lib/paperless/task
 import { setRuleBackfillControl } from "@/lib/rules/backfill-control";
 import { enqueue, QUEUE_NAMES } from "@/lib/queue";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getEntityTypeByKey } from "@/modules/entity-types/entity-types.service";
-import { createEntity } from "@/modules/entities/entities.service";
 import { upsertDocumentObjectMap } from "@/modules/documents/sync-paperless-document";
 
 type Args = { docs: number; execute: boolean; keep: boolean; concurrency: number; timeoutMinutes: number };
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 // specs/07-rules-engine.md definition-of-done #3: "Backfill applies it to 5,000 existing
-// documents, with progress, and can be undone." Mirrors scripts/loadtest-import.ts's own
-// precedent exactly: build the script capable of the full number, actually run it at a scale
+// documents, with progress, and can be undone." Build the script capable of the full number,
+// actually run it at a scale
 // this session can complete, and document the gap honestly rather than fake the larger number.
 // The expensive part is identical to M9's finding too — real Paperless consumption, not our own
 // claim/cursor/dispatch logic — so --docs is intentionally capped low by default; --docs 5000
@@ -135,13 +133,6 @@ async function main() {
   );
   console.log(`created ${documentIds.length} documents in ${((Date.now() - createStarted) / 1000).toFixed(1)}s`);
 
-  const ctx = { db: admin, orgId: fixture.orgId, actorId: fixture.user.userId, correlationId: "verify-phase4" };
-  const customerType = await getEntityTypeByKey(ctx, "customer");
-  const entity = await createEntity(ctx, {
-    entityTypeId: customerType.id,
-    displayName: `Phase4 Backfill Customer ${Date.now()}`
-  });
-
   const { data: rule, error: ruleError } = await admin
     .from("rules")
     .insert({
@@ -149,9 +140,7 @@ async function main() {
       name: "Phase4 backfill scale test",
       trigger: "manual",
       conditions: { field: "document.type", op: "eq", value: "invoice" },
-      actions: [
-        { type: "connect_entity", entity_ref: { by: "id", entityId: entity.id }, relation: "issued_to" }
-      ]
+      actions: [{ type: "add_tag", value: "phase4-backfill" }]
     })
     .select("*")
     .single();
@@ -201,13 +190,6 @@ async function main() {
     } else {
       console.log(`backfill ${finalStatus} in ${((Date.now() - runStarted) / 1000).toFixed(1)}s`);
     }
-
-    const { data: connections } = await admin
-      .from("connections")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", fixture.orgId)
-      .eq("rule_backfill_id", backfill.id);
-    console.log(`connections created: ${connections}`);
   }
 
   if (args.keep) {

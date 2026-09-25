@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const attributeKindSchema = z.enum(["tags", "correspondents", "document-types", "custom-fields"]);
+export const attributeKindSchema = z.enum(["tags", "document-types", "custom-fields"]);
 export type AttributeKind = z.infer<typeof attributeKindSchema>;
 
 export const customFieldDataTypeSchema = z.enum([
@@ -11,7 +11,6 @@ export const customFieldDataTypeSchema = z.enum([
   "date",
   "boolean",
   "select",
-  "documentlink",
   "url"
 ]);
 export type CustomFieldDataType = z.infer<typeof customFieldDataTypeSchema>;
@@ -49,8 +48,8 @@ export const attributeFormSchema = z
     // Real bug found via live testing: the custom-fields form never renders/submits this field
     // (matching is meaningless for a custom field), and this was previously required with no
     // default — every custom-field create/update failed Zod validation before reaching the
-    // service layer at all. Defaulting to "none" is a no-op for tags/correspondents/document-
-    // types, which always submit a real value from their own visible select.
+    // service layer at all. Defaulting to "none" is a no-op for tags/document-types, which
+    // always submit a real value from their own visible select.
     matchingAlgorithm: matchingAlgorithmSchema.default("none"),
     match: z.string().trim().max(256).optional().or(z.literal("")),
     // custom-fields kind only

@@ -37,12 +37,9 @@
     "folders": "Mape",
     "attributes": "Atributi",
     "tags": "Oznake",
-    "correspondents": "Korespondenti",
     "documentTypes": "Vrste dokumentov",
     "customFields": "Polja po meri",
-    "entities": "Entitete",
     "views": "Pogledi",
-    "imports": "Uvozi",
     "rules": "Pravila",
     "billing": "Obračunavanje",
     "organization": "Organizacija",
@@ -59,7 +56,6 @@
   "attributes": {
     "description": "Upravljajte metapodatke, ki jih Paperless uporablja za organiziranje in ujemanje dokumentov.",
     "tagsTitle": "Oznake",
-    "correspondentsTitle": "Korespondenti",
     "documentTypesTitle": "Vrste dokumentov",
     "customFieldsTitle": "Polja po meri",
     "createTitle": "Ustvari {kind}",
@@ -119,7 +115,6 @@
       "date": "Datum",
       "boolean": "Da / Ne",
       "select": "Izbor (eno od seznama)",
-      "documentlink": "Povezava s subjektom",
       "url": "URL"
     },
     "matching": {

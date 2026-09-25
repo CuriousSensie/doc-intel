@@ -16,8 +16,8 @@ import { createAttribute, deleteAttribute, updateAttribute } from "./attributes.
 
 type Translator = Awaited<ReturnType<typeof getTranslations>>;
 
-function requireAttributeFeature(kind: string): void {
-  requireFeature(kind === "custom-fields" ? "entities" : "documents");
+function requireAttributeFeature(): void {
+  requireFeature("documents");
 }
 
 function redirectWithError(path: string, error: unknown, t: Translator, locale: Locale): never {
@@ -36,7 +36,7 @@ function listPath(kind: string): string {
 
 export async function saveAttributeFormAction(formData: FormData) {
   const rawKind = String(formData.get("kind") ?? "");
-  requireAttributeFeature(rawKind);
+  requireAttributeFeature();
   const [ctx, t, locale] = await Promise.all([
     buildRequestContext(),
     getTranslations("common.attributes"),
@@ -87,7 +87,7 @@ export async function saveAttributeFormAction(formData: FormData) {
 // detail page, not /dashboard/attributes/custom-fields, so it needs the created def back to
 // select it immediately rather than a redirect to the attributes list.
 export async function createCustomFieldDefAction(formData: FormData): Promise<CustomFieldDef> {
-  requireFeature("entities");
+  requireFeature("documents");
   const ctx = await buildRequestContext();
   const parsed = attributeFormSchema.parse({
     kind: "custom-fields",
@@ -116,7 +116,7 @@ export async function createCustomFieldDefAction(formData: FormData): Promise<Cu
 
 export async function deleteAttributeFormAction(formData: FormData) {
   const rawKind = String(formData.get("kind") ?? "");
-  requireAttributeFeature(rawKind);
+  requireAttributeFeature();
   const [ctx, t, locale] = await Promise.all([
     buildRequestContext(),
     getTranslations("common.attributes"),

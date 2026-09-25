@@ -7,7 +7,7 @@
     "hero": {
       "eyebrow": "Document intelligence workspace",
       "title": "Dokumenti",
-      "description": "Turn Paperless documents into connected records, views, entities, rules, imports, and team workflows.",
+      "description": "Turn Paperless documents into connected records, views, rules, and team workflows.",
       "openDashboard": "Open dashboard",
       "viewPricing": "View pricing"
     },
@@ -24,15 +24,15 @@
       },
       "organizations": {
         "title": "Connected workspaces",
-        "body": "Give every team a shared document workspace with members, roles, saved views, entities, and activity where the work happens."
+        "body": "Give every team a shared document workspace with members, roles, saved views, and activity where the work happens."
       },
       "billing": {
         "title": "Document workflows",
-        "body": "Use rules, backfills, imports, and bulk actions to keep documents connected to the people, projects, and records they belong to."
+        "body": "Use rules, backfills, and bulk actions to keep documents connected to the people, projects, and records they belong to."
       },
       "messaging": {
         "title": "Notifications that matter",
-        "body": "Keep users aware of document shares, imports, team changes, and operational events without burying them in noise."
+        "body": "Keep users aware of document shares, team changes, and operational events without burying them in noise."
       },
       "guardrails": {
         "title": "Operational guardrails",

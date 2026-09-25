@@ -7,7 +7,7 @@ import { CustomFieldPicker } from "@/components/documents/custom-field-picker";
 import { PaperlessMetaPicker } from "@/components/documents/paperless-meta-picker";
 import { DocumentCustomFieldInput } from "@/components/documents/document-custom-field-input";
 import { Input } from "@/components/ui/input";
-import { toDocumentTypeKey, type PaperlessCorrespondent, type PaperlessDocumentType, type PaperlessTag } from "@/lib/paperless/documents";
+import { toDocumentTypeKey, type PaperlessDocumentType, type PaperlessTag } from "@/lib/paperless/documents";
 import type { CustomFieldDataType } from "@/modules/attributes/attributes.schemas";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type { DocumentDetails } from "@/modules/documents/documents.service";
@@ -28,11 +28,9 @@ export function DocumentDetailsTab({
   draft,
   onDraftChange,
   tagOptions,
-  correspondentOptions,
   documentTypeOptions,
   customFieldDefs,
   onTagCreated,
-  onCorrespondentCreated,
   onDocumentTypeCreated,
   onCustomFieldDefCreated,
   readOnly = false
@@ -41,11 +39,9 @@ export function DocumentDetailsTab({
   draft: DocumentDraft;
   onDraftChange: (next: Partial<DocumentDraft>) => void;
   tagOptions: PaperlessTag[];
-  correspondentOptions: PaperlessCorrespondent[];
   documentTypeOptions: PaperlessDocumentType[];
   customFieldDefs: CustomFieldDef[];
   onTagCreated: (tag: PaperlessTag) => void;
-  onCorrespondentCreated: (c: PaperlessCorrespondent) => void;
   onDocumentTypeCreated: (dt: PaperlessDocumentType) => void;
   onCustomFieldDefCreated: (def: CustomFieldDef) => void;
   // View-only access (a 'view' share, or a read-only member): fields render but can't change.
@@ -82,7 +78,6 @@ export function DocumentDetailsTab({
     date: tAttributes("dataTypes.date"),
     boolean: tAttributes("dataTypes.boolean"),
     select: tAttributes("dataTypes.select"),
-    documentlink: tAttributes("dataTypes.documentlink"),
     url: tAttributes("dataTypes.url")
   };
 
@@ -112,21 +107,6 @@ export function DocumentDetailsTab({
           }}
           options={documentTypeOptions}
           value={draft.documentTypeId ? [draft.documentTypeId] : []}
-        />
-      </div>
-
-      <div className="grid gap-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">{t("correspondent")}</span>
-        <PaperlessMetaPicker
-          disabled={readOnly}
-          kind="correspondent"
-          mode="single"
-          onChange={(ids, created) => {
-            if (created) onCorrespondentCreated(created);
-            onDraftChange({ correspondentId: ids[0] ?? null });
-          }}
-          options={correspondentOptions}
-          value={draft.correspondentId ? [draft.correspondentId] : []}
         />
       </div>
 

@@ -19,20 +19,11 @@ import { buildRequestContext } from "@/lib/service-context";
 export const dynamic = "force-dynamic";
 
 function hrefFor(view: SavedView): string {
-  const filters = (view.filters ?? {}) as Record<string, unknown>;
-
-  if (view.scope === "entities") {
-    const entityTypeKey = filters.entityTypeKey;
-    return typeof entityTypeKey === "string"
-      ? `/dashboard/entities/${entityTypeKey}`
-      : "/dashboard/entities";
-  }
-
   return `/dashboard/documents?savedViewId=${view.id}`;
 }
 
 export default async function ViewsPage() {
-  requireFeature("entities");
+  requireFeature("documents");
   await requireUser("/dashboard/views");
   const ctx = await buildRequestContext();
   const [views, t, locale] = await Promise.all([

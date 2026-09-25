@@ -15,7 +15,6 @@ const customFieldDataTypes: CustomFieldDataType[] = [
   "date",
   "boolean",
   "select",
-  "documentlink",
   "url"
 ];
 

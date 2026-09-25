@@ -6,7 +6,7 @@
     "newDescription": "Ustvarite novo pravilo za avtomatizacijo determinističnih potekov dela.",
     "newRule": "Novo pravilo",
     "empty": "Ni še pravil.",
-    "emptyDescription": "Ustvarite pravilo za samodejno povezovanje dokumentov z entitetami, nastavljanje polj ali pošiljanje opomnikov.",
+    "emptyDescription": "Ustvarite pravilo za samodejno nastavljanje polj, dodeljevanje oznak ali pošiljanje opomnikov.",
     "trigger": "Sprožilec: {trigger}",
     "priority": "Prioriteta {priority}",
     "enabled": "Omogočeno",
@@ -53,7 +53,6 @@
       "filename": "Ime datoteke",
       "content": "Vsebina datoteke",
       "tags": "Oznake",
-      "correspondent": "Korespondent",
       "documentType": "Vrsta dokumenta"
     },
     "conditionOps": {
@@ -73,14 +72,7 @@
     "actionKinds": {
       "add_tag": "Dodeli oznako",
       "remove_tag": "Odstrani oznako",
-      "set_document_type": "Dodeli vrsto dokumenta",
-      "set_correspondent": "Dodeli korespondenta",
-      "connect_entity": "Poveži z entiteto",
-      "disconnect_entity": "Prekini povezavo z entiteto"
-    },
-    "actionModes": {
-      "attribute": "Atribute",
-      "entity": "Entitete"
+      "set_document_type": "Dodeli vrsto dokumenta"
     },
     "attributeOperationLabel": "Operacija atributa",
     "attributeOperations": {
@@ -90,27 +82,11 @@
     "attributeKindLabel": "Atribut",
     "attributeKinds": {
       "tag": "Oznake",
-      "correspondent": "Korespondenti",
       "documentType": "Vrste dokumentov"
-    },
-    "entityOperationLabel": "Operacija entitete",
-    "entityOperations": {
-      "connect": "Poveži",
-      "disconnect": "Prekini"
-    },
-    "relations": {
-      "belongs_to": "Pripada",
-      "issued_to": "Izdano za",
-      "assigned_to": "Dodeljeno",
-      "part_of": "Del",
-      "related": "Povezano"
     },
     "addAction": "Dodaj dejanje",
     "attributeRemoveClearsValue": "Počisti trenutno vrednost — ni česa izbrati.",
     "needsConditionAndAction": "Pred shranjevanjem dodajte vsaj en pogoj in eno dejanje.",
-    "searchPlaceholder": "Iščite stranke, projekte, pogodbe …",
-    "searchFailed": "Iskanje ni uspelo",
-    "removeEntityValue": "Odstrani izbrano entiteto",
     "saving": "Shranjujem …",
     "save": "Shrani pravilo",
     "create": "Ustvari pravilo"
@@ -118,8 +94,6 @@
   "triggers": {
     "document_ingested": "Dokument uvožen",
     "document_updated": "Dokument posodobljen",
-    "document_connected": "Dokument povezan",
-    "entity_created": "Entiteta ustvarjena",
     "manual": "Samo ročno"
   },
   "detail": {
@@ -172,7 +146,7 @@
     "resume": "Nadaljuj",
     "cancel": "Prekliči",
     "undo": "Razveljavi",
-    "confirmUndo": "Razveljavite to naknadno uporabo? Odstranjene bodo samo povezave, ki jih je ustvarila.",
+    "confirmUndo": "Razveljavite to naknadno uporabo? Razveljavljene bodo spremembe, ki jih je naredila.",
     "status": "Status: {status}",
     "progress": "{applied} uporabljenih / {matched} ujemanj",
     "recentBackfills": "Zadnje naknadne uporabe",

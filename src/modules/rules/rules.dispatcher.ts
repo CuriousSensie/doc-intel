@@ -1,26 +1,22 @@
 import { paperlessFor } from "@/lib/paperless/client";
 import {
-  createPaperlessCorrespondent,
   createPaperlessDocumentType,
   createPaperlessTag,
   updatePaperlessDocument
 } from "@/lib/paperless/documents";
 import {
-  getCachedCorrespondents,
   getCachedDocumentTypes,
   getCachedTags,
   addCachedTag,
-  addCachedCorrespondent,
   addCachedDocumentType
 } from "@/lib/paperless/metadata-cache";
 import { UnprocessableError } from "@/lib/errors";
 import type { ServiceContext } from "@/lib/service-context";
-import { normalizeIdentifier } from "@/modules/entities/identifier-normalization";
 import { createNotification } from "@/modules/notifications/notifications.service";
 import type { Database } from "@/types/database";
 
 import type { SubjectContext } from "./rules.context";
-import type { ConnectEntityRef, RuleAction } from "./rules.schemas";
+import type { RuleAction } from "./rules.schemas";
 
 type Rule = Database["public"]["Tables"]["rules"]["Row"];
 
@@ -38,8 +34,6 @@ function fieldKeyForAction(action: RuleAction): string | null {
       return `document.custom.${action.key}`;
     case "set_document_type":
       return "document.type";
-    case "set_correspondent":
-      return "document.correspondent";
     case "set_storage_path":
       return "document.storage_path";
     case "move_to_folder":
@@ -47,61 +41,6 @@ function fieldKeyForAction(action: RuleAction): string | null {
     default:
       return null; // add_tag/remove_tag are additive, not a single-value field — no conflict slot
   }
-}
-
-// specs/10-nonfunctional.md isolation test #10: "A's rule references B's entity" must be a
-// validation failure, not a cross-tenant connection. entity_ref by "identifier"/"name" are
-// already scoped by ctx.orgId in their own queries below; by "id" is the one shape that takes a
-// raw entity id directly from the rule's own stored actions jsonb — a rule authored (or, more
-// realistically, restored/migrated/copy-pasted) with another tenant's entity id in it must not
-// silently resolve. Same ownership check connections.service.ts#assertBelongsToOrg() already
-// does for a client-supplied connection target.
-async function resolveEntityRef(ctx: ServiceContext, ref: ConnectEntityRef): Promise<string | null> {
-  if (ref.by === "id") {
-    const { data, error } = await ctx.db
-      .from("entities")
-      .select("id")
-      .eq("id", ref.entityId)
-      .eq("organization_id", ctx.orgId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (error) throw error;
-    return data?.id ?? null;
-  }
-
-  if (ref.by === "identifier") {
-    const normalized = normalizeIdentifier(ref.kind, ref.value);
-    const { data, error } = await ctx.db
-      .from("entity_identifiers")
-      .select("entity_id")
-      .eq("organization_id", ctx.orgId)
-      .eq("kind", ref.kind)
-      .eq("normalized", normalized)
-      .maybeSingle();
-    if (error) throw error;
-    return data?.entity_id ?? null;
-  }
-
-  // by: "name"
-  const { data: entityType, error: typeError } = await ctx.db
-    .from("entity_types")
-    .select("id")
-    .eq("organization_id", ctx.orgId)
-    .eq("key", ref.entityTypeKey)
-    .maybeSingle();
-  if (typeError) throw typeError;
-  if (!entityType) return null;
-
-  const { data, error } = await ctx.db
-    .from("entities")
-    .select("id")
-    .eq("organization_id", ctx.orgId)
-    .eq("entity_type_id", entityType.id)
-    .eq("display_name", ref.name)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.id ?? null;
 }
 
 async function findOrCreateTagId(ctx: ServiceContext, name: string): Promise<number> {
@@ -123,19 +62,6 @@ async function findExistingTagId(ctx: ServiceContext, name: string): Promise<num
   const client = await paperlessFor(ctx.orgId);
   const tags = await getCachedTags(client, ctx.orgId);
   return tags.find((t) => t.name.toLowerCase() === name.toLowerCase())?.id ?? null;
-}
-
-async function findOrCreateCorrespondentId(ctx: ServiceContext, name: string): Promise<number> {
-  const client = await paperlessFor(ctx.orgId);
-  const correspondents = await getCachedCorrespondents(client, ctx.orgId);
-  const existing = correspondents.find((c) => c.name.toLowerCase() === name.toLowerCase());
-  if (existing) return existing.id;
-
-  const ownership = client.ownership;
-  if (!ownership) throw new UnprocessableError("Tenant Paperless client has no ownership context");
-  const created = await createPaperlessCorrespondent(client, name, ownership);
-  await addCachedCorrespondent(ctx.orgId, created);
-  return created.id;
 }
 
 async function findOrCreateDocumentTypeId(ctx: ServiceContext, name: string): Promise<number> {
@@ -203,8 +129,7 @@ export async function dispatchRuleActions(
   rule: Rule,
   ruleRunId: string,
   subject: SubjectContext,
-  fieldClaims: Map<string, string>,
-  options: { ruleBackfillId?: string | null } = {}
+  fieldClaims: Map<string, string>
 ): Promise<ActionOutcome[]> {
   const outcomes: ActionOutcome[] = [];
   const userOwnedFieldKeys =
@@ -218,7 +143,7 @@ export async function dispatchRuleActions(
   const tagState: { ids: number[] | null } = { ids: null };
 
   for (const action of rule.actions as unknown as RuleAction[]) {
-    outcomes.push(await dispatchOne(ctx, rule, ruleRunId, subject, fieldClaims, userOwnedFieldKeys, action, options, tagState));
+    outcomes.push(await dispatchOne(ctx, rule, ruleRunId, subject, fieldClaims, userOwnedFieldKeys, action, tagState));
   }
 
   return outcomes;
@@ -232,36 +157,8 @@ async function dispatchOne(
   fieldClaims: Map<string, string>,
   userOwnedFieldKeys: Set<string>,
   action: RuleAction,
-  options: { ruleBackfillId?: string | null },
   tagState: { ids: number[] | null }
 ): Promise<ActionOutcome> {
-  if (action.type === "connect_entity" || action.type === "disconnect_entity" || action.type === "assign_responsible") {
-    const ref = action.entity_ref;
-    const targetId = await resolveEntityRef(ctx, ref);
-    if (!targetId) return { action, status: "skipped_entity_not_found" };
-
-    const sourceKind = subject.kind;
-    const sourceId = subject.kind === "document" ? subject.documentId : subject.entityId;
-    const relation = action.type === "assign_responsible" ? "assigned_to" : action.relation;
-    const actionType = action.type === "disconnect_entity" ? "disconnect_entity" : "connect_entity";
-
-    const { data: status, error } = await ctx.db.rpc("apply_rule_action", {
-      p_organization_id: ctx.orgId,
-      p_rule_id: rule.id,
-      p_rule_run_id: ruleRunId,
-      p_action_type: actionType,
-      p_action: action as never,
-      p_source_kind: sourceKind,
-      p_source_id: sourceId,
-      p_target_kind: "entity",
-      p_target_id: targetId,
-      p_relation: relation,
-      p_rule_backfill_id: options.ruleBackfillId ?? null
-    });
-    if (error) throw error;
-    return { action, status: status as string };
-  }
-
   // ADR-0019: a plain documents.folder_id column write, never routed through paperlessFor() —
   // folders are app-owned, Paperless stays unaware of them. Kept separate from the combined
   // Paperless-actions block below rather than added to it, since every action there ends in a
@@ -312,7 +209,6 @@ async function dispatchOne(
     action.type === "set_document_type" ||
     action.type === "add_tag" ||
     action.type === "remove_tag" ||
-    action.type === "set_correspondent" ||
     action.type === "set_storage_path"
   ) {
     if (subject.kind !== "document") return { action, status: "skipped_not_a_document" };
@@ -343,9 +239,6 @@ async function dispatchOne(
       // object to remove.
       const id = action.value === null ? null : await findOrCreateDocumentTypeId(ctx, action.value);
       await updatePaperlessDocument(client, subject.paperlessDocumentId, { document_type: id });
-    } else if (action.type === "set_correspondent") {
-      const id = action.value === null ? null : await findOrCreateCorrespondentId(ctx, action.value);
-      await updatePaperlessDocument(client, subject.paperlessDocumentId, { correspondent: id });
     } else if (action.type === "add_tag" || action.type === "remove_tag") {
       const id = action.type === "add_tag" ? await findOrCreateTagId(ctx, action.value) : await findExistingTagId(ctx, action.value);
       if (id === null) return { action, status: "noop_tag_not_found" };

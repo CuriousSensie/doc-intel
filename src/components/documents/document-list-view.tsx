@@ -34,7 +34,6 @@ export function DocumentListView({
   onToggle,
   ctxQuery = "",
   tagsByDocumentId = {},
-  connectionCountsByDocumentId = {},
   customFieldDefs = [],
   customFieldValuesByDocumentId = {},
   visibleFields
@@ -45,7 +44,6 @@ export function DocumentListView({
   onToggle: (id: string) => void;
   ctxQuery?: string;
   tagsByDocumentId?: Record<string, PaperlessTag[]>;
-  connectionCountsByDocumentId?: Record<string, number>;
   customFieldDefs?: CustomFieldDef[];
   customFieldValuesByDocumentId?: Record<string, Record<string, unknown>>;
   visibleFields: DocumentListField[];
@@ -93,9 +91,6 @@ export function DocumentListView({
             ) : null}
             {visible.has("documentType") ? (
               <TableHead className="w-44">{tFilters("field_documentType")}</TableHead>
-            ) : null}
-            {visible.has("connections") ? (
-              <TableHead className="w-32">{tFilters("field_connections")}</TableHead>
             ) : null}
             {visible.has("pages") ? (
               <TableHead className="w-24">{tFilters("field_pages")}</TableHead>
@@ -163,11 +158,6 @@ export function DocumentListView({
               {visible.has("documentType") ? (
                 <TableCell className="w-44 truncate text-muted">
                   {document.document_type_key ?? t("list.uncategorized")}
-                </TableCell>
-              ) : null}
-              {visible.has("connections") ? (
-                <TableCell className="text-muted">
-                  {connectionCountsByDocumentId[document.id] ?? 0}
                 </TableCell>
               ) : null}
               {visible.has("pages") ? (

@@ -11,7 +11,7 @@ export async function fireDueReminders(): Promise<number> {
 
   const { data: reminders, error } = await db
     .from("reminders")
-    .select("id, organization_id, document_id, entity_id, assignee_role, message")
+    .select("id, organization_id, document_id, assignee_role, message")
     .lte("due_date", new Date().toISOString().slice(0, 10))
     .is("fired_at", null);
   if (error) throw error;
@@ -34,8 +34,7 @@ export async function fireDueReminders(): Promise<number> {
             message: reminder.message,
             metadata: {
               reminderId: reminder.id,
-              documentId: reminder.document_id,
-              entityId: reminder.entity_id
+              documentId: reminder.document_id
             }
           })
         )

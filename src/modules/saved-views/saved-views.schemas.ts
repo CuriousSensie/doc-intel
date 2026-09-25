@@ -5,9 +5,8 @@ const uuidListSchema = z.array(z.string().uuid()).default([]);
 export const createSavedViewSchema = z
   .object({
     name: z.string().trim().min(1, "Enter a name").max(200),
-    scope: z.enum(["documents", "entities"]),
+    scope: z.enum(["documents"]),
     viewKind: z.enum(["dynamic", "static"]).default("dynamic"),
-    entityTypeId: z.string().uuid().optional(),
     filters: z.record(z.string(), z.unknown()).default({}),
     columns: z.array(z.string()).default([]),
     sort: z.record(z.string(), z.unknown()).optional(),
@@ -16,13 +15,6 @@ export const createSavedViewSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.viewKind === "static") {
-      if (value.scope !== "documents") {
-        ctx.addIssue({
-          code: "custom",
-          message: "Static views are only supported for documents",
-          path: ["scope"]
-        });
-      }
       if (value.documentIds.length === 0) {
         ctx.addIssue({
           code: "custom",

@@ -9,14 +9,11 @@ export type ConditionTrace =
 
 export type EvaluationResult = { matched: boolean; trace: ConditionTrace };
 
-// specs/07-rules-engine.md §Condition fields: document.custom.<key> / entity.data.<key> are the
-// only field paths not covered by the subject's fixed `fields` map.
+// specs/07-rules-engine.md §Condition fields: document.custom.<key> is the only field path not
+// covered by the subject's fixed `fields` map.
 function resolveFieldValue(subject: SubjectContext, field: string): unknown {
   if (field.startsWith("document.custom.")) {
     return subject.kind === "document" ? subject.custom[field.slice("document.custom.".length)] : undefined;
-  }
-  if (field.startsWith("entity.data.")) {
-    return subject.kind === "entity" ? subject.data[field.slice("entity.data.".length)] : undefined;
   }
   return (subject.fields as Record<string, unknown>)[field];
 }
@@ -47,7 +44,7 @@ function evaluateOperator(op: ConditionLeaf["op"], actual: unknown, expected: un
     // Real bug found via live testing: a document whose real OCR'd content contained "Tintash"
     // never matched a rule condition written as `contains "tintash"` — plain .includes() is
     // case-sensitive, and nobody writing a free-text content/filename condition expects to have
-    // to guess exact capitalization. Paperless's own tag/correspondent matching is always
+    // to guess exact capitalization. Paperless's own tag matching is always
     // is_insensitive: true (attributes.service.ts) — text-comparison operators here match that
     // convention. eq/neq/in/not_in stay exact, since those compare precise identifiers (a tag
     // name, a document type), not free text.

@@ -12,12 +12,10 @@ function makeSubject(overrides: Partial<DocumentSubjectContext["fields"]> = {}):
       "document.type": null,
       "document.title": "Invoice 123",
       "document.content": "Invoice content",
-      "document.correspondent": null,
       "document.date": null,
       "document.tags": [],
       "document.filename": "invoice-123.pdf",
       "document.source": "upload",
-      "connection.count": 0,
       ...overrides
     },
     custom: {},

@@ -65,12 +65,10 @@ describe("ensureStarterViews", () => {
     } as unknown as ServiceContext["db"];
 
     const result = await ensureStarterViews(makeCtx(db));
-    expect(result).toHaveLength(5);
+    expect(result).toHaveLength(3);
     expect(inserted.map((v) => (v as { name: string }).name)).toEqual([
       "All documents",
-      "Documents with no connections",
       "Invoices this year",
-      "Open contracts",
       "Recently added"
     ]);
   });

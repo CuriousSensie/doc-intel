@@ -1,10 +1,8 @@
 import { getRedisClient } from "@/lib/redis";
 
-// Mirrors src/lib/import/control.ts's pattern exactly (pause/resume/cancel must take effect for
-// a chunk already mid-flight in the queue, not just future ones) — kept as its own module rather
-// than generalizing the import one, since the two control domains (import jobs, rule backfills)
-// have no other shared code and forcing a shared abstraction over just this one Redis key shape
-// isn't worth the indirection.
+// A Redis-keyed pause/resume/cancel flag (pause/resume/cancel must take effect for a chunk
+// already mid-flight in the queue, not just future ones) — kept as its own small module since
+// rule-backfill control has no other shared code worth forcing an abstraction over.
 export type RuleBackfillControlState = "running" | "paused" | "cancelled";
 
 const TTL_SECONDS = 7 * 24 * 60 * 60;

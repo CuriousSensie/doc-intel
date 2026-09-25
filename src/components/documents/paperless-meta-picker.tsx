@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { createPaperlessMetaAction } from "@/modules/documents/documents.actions";
 
 type MetaOption = { id: number; name: string; color?: string; text_color?: string };
-type Kind = "tag" | "correspondent" | "documentType";
+type Kind = "tag" | "documentType";
 
 // A reasonable fixed palette rather than a full color wheel — quick to scan, matches the
 // pastel character of Paperless's own seeded tag colors (#a6cee3 etc. — ColorBrewer-ish).
@@ -19,7 +19,7 @@ const TAG_COLOR_PALETTE = [
   "#fdbf6f", "#ff7f00", "#cab2d6", "#6a3d9a", "#ffff99", "#b15928"
 ];
 
-// Shared by the Details tab's tags (multi-select)/correspondent/document-type (single-select)
+// Shared by the Details tab's tags (multi-select)/document-type (single-select)
 // fields — inline search, create, and assign in one control, matching paperless-ngx's own
 // document-edit UX. Selecting/removing an *existing* option is a pure local state change (via
 // `onChange`, synchronous) — nothing is sent to the server until the page-level Save button

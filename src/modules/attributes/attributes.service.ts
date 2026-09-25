@@ -1,19 +1,15 @@
 import type { OwnedObjectPermissions, PaperlessClient } from "@/lib/paperless/client";
 import { paperlessFor } from "@/lib/paperless/client";
 import {
-  createPaperlessCorrespondent,
   createPaperlessCustomField,
   createPaperlessDocumentType,
   createPaperlessTag,
-  deletePaperlessCorrespondent,
   deletePaperlessCustomField,
   deletePaperlessDocumentType,
   deletePaperlessTag,
-  listPaperlessCorrespondents,
   listPaperlessDocumentTypes,
   listPaperlessTags,
   toDocumentTypeKey,
-  updatePaperlessCorrespondent,
   updatePaperlessCustomField,
   updatePaperlessDocumentType,
   updatePaperlessTag,
@@ -138,21 +134,6 @@ export async function listAttributes(ctx: ServiceContext, kind: AttributeKind): 
     }));
   }
 
-  if (kind === "correspondents") {
-    const correspondents = await listPaperlessCorrespondents(client);
-    return correspondents.map((correspondent) => ({
-      id: String(correspondent.id),
-      numericId: correspondent.id,
-      kind,
-      name: correspondent.name,
-      documentCount: correspondent.document_count ?? 0,
-      match: correspondent.match ?? "",
-      matchingAlgorithm: fromPaperlessMatch(correspondent.matching_algorithm),
-      viewDocumentsHref: `/dashboard/documents?correspondentId=${correspondent.id}`,
-      canViewDocuments: true
-    }));
-  }
-
   const documentTypes = await listPaperlessDocumentTypes(client);
   return documentTypes.map((documentType) => ({
     id: String(documentType.id),
@@ -174,28 +155,22 @@ export async function createAttribute(
 ): Promise<CustomFieldDef | void> {
   if (kind === "custom-fields") {
     const dataType = input.dataType ?? "string";
-    let paperlessCustomFieldId: number | null = null;
-    let options: CustomFieldSelectOption[] | undefined;
 
-    // documentlink is never backed by a real Paperless field (specs/12-agent-rules.md rule 6) —
-    // it represents a Connection, so there's nothing to provision on the Paperless side at all.
-    if (dataType !== "documentlink") {
-      const client = await paperlessFor(ctx.orgId);
-      const ownership = requireOwnership(client);
-      const created = await createPaperlessCustomField(
-        client,
-        {
-          name: input.name,
-          data_type: dataType,
-          ...(dataType === "select"
-            ? { extra_data: { select_options: (input.options ?? []).map((label) => ({ label })) } }
-            : {})
-        },
-        ownership
-      );
-      paperlessCustomFieldId = created.id;
-      options = created.extra_data?.select_options;
-    }
+    const client = await paperlessFor(ctx.orgId);
+    const ownership = requireOwnership(client);
+    const created = await createPaperlessCustomField(
+      client,
+      {
+        name: input.name,
+        data_type: dataType,
+        ...(dataType === "select"
+          ? { extra_data: { select_options: (input.options ?? []).map((label) => ({ label })) } }
+          : {})
+      },
+      ownership
+    );
+    const paperlessCustomFieldId = created.id;
+    const options = created.extra_data?.select_options;
 
     return createCustomFieldDef(ctx, {
       key: toCustomFieldKey(input.name),
@@ -215,12 +190,6 @@ export async function createAttribute(
   if (kind === "tags") {
     await createPaperlessTag(client, input.name, ownership, input.color, matching);
     await invalidateCachedMetadataList(ctx.orgId, "tags");
-    return;
-  }
-
-  if (kind === "correspondents") {
-    await createPaperlessCorrespondent(client, input.name, ownership, matching);
-    await invalidateCachedMetadataList(ctx.orgId, "correspondents");
     return;
   }
 
@@ -286,12 +255,6 @@ export async function updateAttribute(
     return;
   }
 
-  if (kind === "correspondents") {
-    await updatePaperlessCorrespondent(client, numericId, { name: input.name, ...matching });
-    await invalidateCachedMetadataList(ctx.orgId, "correspondents");
-    return;
-  }
-
   await updatePaperlessDocumentType(client, numericId, { name: input.name, ...matching });
   await invalidateCachedMetadataList(ctx.orgId, "document_types");
 }
@@ -324,12 +287,6 @@ export async function deleteAttribute(
   if (kind === "tags") {
     await deletePaperlessTag(client, numericId);
     await invalidateCachedMetadataList(ctx.orgId, "tags");
-    return;
-  }
-
-  if (kind === "correspondents") {
-    await deletePaperlessCorrespondent(client, numericId);
-    await invalidateCachedMetadataList(ctx.orgId, "correspondents");
     return;
   }
 

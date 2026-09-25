@@ -380,7 +380,6 @@ export type Database = {
             | "tag"
             | "document_type"
             | "custom_field"
-            | "correspondent"
             | "storage_path"
             | "workflow"
             | "saved_view";
@@ -396,7 +395,6 @@ export type Database = {
             | "tag"
             | "document_type"
             | "custom_field"
-            | "correspondent"
             | "storage_path"
             | "workflow"
             | "saved_view";
@@ -465,42 +463,6 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
-      // specs/02-data-model.md, specs/05-level-1-structure.md. is_system rows are the four
-      // seeded types (customer/project/employee/contract) — complete_provisioning().
-      entity_types: {
-        Row: {
-          id: string;
-          organization_id: string;
-          key: string;
-          name: string;
-          name_plural: string;
-          icon: string | null;
-          is_system: boolean;
-          field_schema: Json;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          key: string;
-          name: string;
-          name_plural: string;
-          icon?: string | null;
-          is_system?: boolean;
-          field_schema?: Json;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          name?: string;
-          name_plural?: string;
-          icon?: string | null;
-          field_schema?: Json;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
       // Paperless mirror (specs/02-data-model.md). Written only by the sync worker — no
       // insert/update/delete policy, select-only for members.
       documents: {
@@ -511,14 +473,12 @@ export type Database = {
           title: string;
           document_type_key: string | null;
           document_date: string | null;
-          correspondent_name: string | null;
           page_count: number | null;
           byte_size: number | null;
           mime_type: string | null;
           checksum: string | null;
           status: "pending" | "processing" | "ready" | "failed" | "orphaned";
-          source: "upload" | "import" | "email" | "template";
-          import_job_id: string | null;
+          source: "upload" | "email" | "template";
           synced_at: string | null;
           created_by: string | null;
           created_at: string;
@@ -534,14 +494,12 @@ export type Database = {
           title: string;
           document_type_key?: string | null;
           document_date?: string | null;
-          correspondent_name?: string | null;
           page_count?: number | null;
           byte_size?: number | null;
           mime_type?: string | null;
           checksum?: string | null;
           status?: "pending" | "processing" | "ready" | "failed" | "orphaned";
-          source?: "upload" | "import" | "email" | "template";
-          import_job_id?: string | null;
+          source?: "upload" | "email" | "template";
           synced_at?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -553,7 +511,6 @@ export type Database = {
           title?: string;
           document_type_key?: string | null;
           document_date?: string | null;
-          correspondent_name?: string | null;
           page_count?: number | null;
           byte_size?: number | null;
           mime_type?: string | null;
@@ -586,15 +543,13 @@ export type Database = {
             | "expired";
           error_message: string | null;
           paperless_task_id: string | null;
-          import_row_id: number | null;
-          source_archive_key: string | null;
           document_id: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
           expires_at: string;
           // ADR-0019 Phase D — resolved before the upload intent is created, read by
-          // sync-paperless-document.ts the same way it reads import_row_id.
+          // sync-paperless-document.ts.
           folder_id: string | null;
         };
         Insert: {
@@ -616,8 +571,6 @@ export type Database = {
             | "expired";
           error_message?: string | null;
           paperless_task_id?: string | null;
-          import_row_id?: number | null;
-          source_archive_key?: string | null;
           document_id?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -638,8 +591,6 @@ export type Database = {
             | "expired";
           error_message?: string | null;
           paperless_task_id?: string | null;
-          import_row_id?: number | null;
-          source_archive_key?: string | null;
           document_id?: string | null;
           updated_at?: string;
           folder_id?: string | null;
@@ -745,269 +696,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      // Dokumenti Level 1 Phase 3 — import job, materialized rows, reusable mappings.
-      import_jobs: {
-        Row: {
-          id: string;
-          organization_id: string;
-          status:
-            | "draft"
-            | "mapping"
-            | "validating"
-            | "ready"
-            | "running"
-            | "paused"
-            | "completed"
-            | "completed_with_errors"
-            | "failed"
-            | "cancelled";
-          kind: "documents" | "entities" | "metadata_only";
-          source_filename: string | null;
-          storage_key: string | null;
-          total_rows: number;
-          processed_rows: number;
-          succeeded_rows: number;
-          failed_rows: number;
-          skipped_rows: number;
-          mapping: Json;
-          options: Json;
-          error: string | null;
-          created_by: string | null;
-          started_at: string | null;
-          finished_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          status?:
-            | "draft"
-            | "mapping"
-            | "validating"
-            | "ready"
-            | "running"
-            | "paused"
-            | "completed"
-            | "completed_with_errors"
-            | "failed"
-            | "cancelled";
-          kind: "documents" | "entities" | "metadata_only";
-          source_filename?: string | null;
-          storage_key?: string | null;
-          total_rows?: number;
-          processed_rows?: number;
-          succeeded_rows?: number;
-          failed_rows?: number;
-          skipped_rows?: number;
-          mapping?: Json;
-          options?: Json;
-          error?: string | null;
-          created_by?: string | null;
-          started_at?: string | null;
-          finished_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          status?:
-            | "draft"
-            | "mapping"
-            | "validating"
-            | "ready"
-            | "running"
-            | "paused"
-            | "completed"
-            | "completed_with_errors"
-            | "failed"
-            | "cancelled";
-          source_filename?: string | null;
-          storage_key?: string | null;
-          total_rows?: number;
-          processed_rows?: number;
-          succeeded_rows?: number;
-          failed_rows?: number;
-          skipped_rows?: number;
-          mapping?: Json;
-          options?: Json;
-          error?: string | null;
-          started_at?: string | null;
-          finished_at?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      import_rows: {
-        Row: {
-          id: number;
-          organization_id: string;
-          import_job_id: string;
-          row_number: number;
-          raw: Json;
-          status: "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
-          result: Json | null;
-          error_code: string | null;
-          error_message: string | null;
-          attempts: number;
-          processed_at: string | null;
-        };
-        Insert: {
-          id?: number;
-          organization_id: string;
-          import_job_id: string;
-          row_number: number;
-          raw: Json;
-          status?:
-            "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
-          result?: Json | null;
-          error_code?: string | null;
-          error_message?: string | null;
-          attempts?: number;
-          processed_at?: string | null;
-        };
-        Update: {
-          status?:
-            "pending" | "processing" | "ok" | "skipped_duplicate" | "failed" | "needs_review";
-          result?: Json | null;
-          error_code?: string | null;
-          error_message?: string | null;
-          attempts?: number;
-          processed_at?: string | null;
-        };
-        Relationships: [];
-      };
-      import_mappings: {
-        Row: {
-          id: string;
-          organization_id: string;
-          name: string;
-          kind: "documents" | "entities" | "metadata_only";
-          mapping: Json;
-          created_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          name: string;
-          kind: "documents" | "entities" | "metadata_only";
-          mapping?: Json;
-          created_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          name?: string;
-          kind?: "documents" | "entities" | "metadata_only";
-          mapping?: Json;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
-      // Dokumenti Level 1 (specs/02-data-model.md, specs/05-level-1-structure.md).
-      entities: {
-        Row: {
-          id: string;
-          organization_id: string;
-          entity_type_id: string;
-          display_name: string;
-          status: "active" | "archived";
-          data: Json;
-          search_tsv: unknown;
-          created_by: string | null;
-          created_at: string;
-          updated_at: string;
-          deleted_at: string | null;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          entity_type_id: string;
-          display_name: string;
-          status?: "active" | "archived";
-          data?: Json;
-          created_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-          deleted_at?: string | null;
-        };
-        Update: {
-          display_name?: string;
-          status?: "active" | "archived";
-          data?: Json;
-          updated_at?: string;
-          deleted_at?: string | null;
-        };
-        Relationships: [];
-      };
-      // The import matching key — normalized is what makes "SI 1234 5678"/"si12345678" collide.
-      entity_identifiers: {
-        Row: {
-          id: string;
-          organization_id: string;
-          entity_id: string;
-          kind: string;
-          value: string;
-          normalized: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          entity_id: string;
-          kind: string;
-          value: string;
-          normalized: string;
-          created_at?: string;
-        };
-        Update: {
-          value?: string;
-          normalized?: string;
-        };
-        Relationships: [];
-      };
-      // The core primitive — one row, read from either direction via
-      // src/modules/connections/connections.service.ts's getConnections(). No FK on
-      // source_id/target_id: polymorphic (document | entity), app-layer enforced by design.
-      connections: {
-        Row: {
-          id: string;
-          organization_id: string;
-          source_kind: "document" | "entity";
-          source_id: string;
-          target_kind: "document" | "entity";
-          target_id: string;
-          relation: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
-          metadata: Json;
-          created_by: string | null;
-          created_via: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
-          rule_id: string | null;
-          rule_backfill_id: string | null;
-          created_at: string;
-          deleted_at: string | null;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          source_kind: "document" | "entity";
-          source_id: string;
-          target_kind: "document" | "entity";
-          target_id: string;
-          relation?: "belongs_to" | "issued_to" | "assigned_to" | "part_of" | "related";
-          metadata?: Json;
-          created_by?: string | null;
-          created_via?: "manual" | "rule" | "import" | "template" | "ai_accepted" | "bulk";
-          rule_id?: string | null;
-          rule_backfill_id?: string | null;
-          created_at?: string;
-          deleted_at?: string | null;
-        };
-        Update: {
-          deleted_at?: string | null;
-        };
-        Relationships: [];
-      };
       // Mirror of Paperless custom field *definitions* only — never read from Paperless's
       // /api/custom_fields/ directly (cross-tenant leak, docs/spike-findings.md §1 #6).
       custom_field_defs: {
@@ -1024,7 +712,6 @@ export type Database = {
             | "date"
             | "boolean"
             | "select"
-            | "documentlink"
             | "url";
           options: Json | null;
           applies_to: string[];
@@ -1045,7 +732,6 @@ export type Database = {
             | "date"
             | "boolean"
             | "select"
-            | "documentlink"
             | "url";
           options?: Json | null;
           applies_to?: string[];
@@ -1066,9 +752,8 @@ export type Database = {
           id: string;
           organization_id: string;
           name: string;
-          scope: "documents" | "entities";
+          scope: "documents";
           view_kind: "dynamic" | "static";
-          entity_type_id: string | null;
           filters: Json;
           columns: Json;
           sort: Json | null;
@@ -1081,9 +766,8 @@ export type Database = {
           id?: string;
           organization_id: string;
           name: string;
-          scope: "documents" | "entities";
+          scope: "documents";
           view_kind?: "dynamic" | "static";
-          entity_type_id?: string | null;
           filters?: Json;
           columns?: Json;
           sort?: Json | null;
@@ -1164,8 +848,6 @@ export type Database = {
           trigger:
             | "document.ingested"
             | "document.updated"
-            | "document.connected"
-            | "entity.created"
             | "manual";
           priority: number;
           conditions: Json;
@@ -1185,8 +867,6 @@ export type Database = {
           trigger:
             | "document.ingested"
             | "document.updated"
-            | "document.connected"
-            | "entity.created"
             | "manual";
           priority?: number;
           conditions: Json;
@@ -1204,8 +884,6 @@ export type Database = {
           trigger?:
             | "document.ingested"
             | "document.updated"
-            | "document.connected"
-            | "entity.created"
             | "manual";
           priority?: number;
           conditions?: Json;
@@ -1323,7 +1001,6 @@ export type Database = {
           id: string;
           organization_id: string;
           document_id: string | null;
-          entity_id: string | null;
           due_date: string;
           assignee_role: "owner" | "admin" | "member";
           message: string;
@@ -1335,7 +1012,6 @@ export type Database = {
           id?: string;
           organization_id: string;
           document_id?: string | null;
-          entity_id?: string | null;
           due_date: string;
           assignee_role: "owner" | "admin" | "member";
           message: string;
@@ -1358,12 +1034,6 @@ export type Database = {
           p_rule_run_id: string | null;
           p_action_type: string;
           p_action: Json;
-          p_source_kind?: string | null;
-          p_source_id?: string | null;
-          p_target_kind?: string | null;
-          p_target_id?: string | null;
-          p_relation?: string | null;
-          p_rule_backfill_id?: string | null;
           p_document_id?: string | null;
           p_field_key?: string | null;
         };
@@ -1510,87 +1180,12 @@ export type Database = {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: boolean;
       };
-      claim_import_chunk: {
-        Args: { p_import_job_id: string; p_organization_id: string; p_limit?: number };
-        Returns: Database["public"]["Tables"]["import_rows"]["Row"][];
-      };
-      complete_import_job: {
-        Args: { p_import_job_id: string; p_organization_id: string };
-        Returns: boolean;
-      };
-      fail_import_job: {
-        Args: { p_import_job_id: string; p_organization_id: string; p_reason: string };
-        Returns: boolean;
-      };
-      bulk_update_import_rows: {
-        Args: { p_import_job_id: string; p_organization_id: string; p_rows: Json };
-        Returns: undefined;
-      };
-      increment_import_job_progress: {
-        Args: {
-          p_import_job_id: string;
-          p_organization_id: string;
-          p_processed_delta: number;
-          p_succeeded_delta: number;
-          p_failed_delta: number;
-          p_skipped_delta: number;
-        };
-        Returns: undefined;
-      };
-      list_documents_without_connections: {
-        Args: {
-          p_organization_id: string;
-          p_document_type_key?: string | null;
-          p_status?: string | null;
-          p_date_from?: string | null;
-          p_date_to?: string | null;
-          p_paperless_ids?: number[] | null;
-          p_cursor_created_at?: string | null;
-          p_cursor_id?: string | null;
-          p_limit?: number;
-        };
-        Returns: Database["public"]["Tables"]["documents"]["Row"][];
-      };
-      count_document_connections: {
-        Args: { p_organization_id: string; p_document_ids: string[] };
-        Returns: { document_id: string; connection_count: number }[];
-      };
-      count_documents_without_connections: {
-        Args: {
-          p_organization_id: string;
-          p_document_type_key?: string | null;
-          p_status?: string | null;
-          p_date_from?: string | null;
-          p_date_to?: string | null;
-          p_paperless_ids?: number[] | null;
-        };
-        Returns: number;
-      };
-      list_documents_without_connections_page: {
-        Args: {
-          p_organization_id: string;
-          p_document_type_key?: string | null;
-          p_status?: string | null;
-          p_date_from?: string | null;
-          p_date_to?: string | null;
-          p_paperless_ids?: number[] | null;
-          p_sort?: string;
-          p_sort_direction?: string;
-          p_offset?: number;
-          p_limit?: number;
-        };
-        Returns: Database["public"]["Tables"]["documents"]["Row"][];
-      };
       complete_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string };
         Returns: undefined;
       };
       fail_upload_validation: {
         Args: { p_upload_id: string; p_organization_id: string; p_reason: string };
-        Returns: undefined;
-      };
-      merge_entities: {
-        Args: { p_keep_id: string; p_merge_id: string };
         Returns: undefined;
       };
       can_manage_document: {
@@ -1688,11 +1283,11 @@ export type Database = {
       };
       get_org_dashboard_counts: {
         Args: { p_organization_id: string };
-        Returns: { documents: number; entities: number; connections: number }[];
+        Returns: { documents: number }[];
       };
       get_member_dashboard_counts: {
         Args: { p_organization_id: string; p_user_id: string };
-        Returns: { documents: number; entities: number; connections: number }[];
+        Returns: { documents: number }[];
       };
     };
     Enums: {

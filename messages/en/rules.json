@@ -6,7 +6,7 @@
     "newDescription": "Create a new rule to automate deterministic workflows",
     "newRule": "New rule",
     "empty": "No rules yet.",
-    "emptyDescription": "Create a rule to connect documents to entities, set fields, or send reminders automatically.",
+    "emptyDescription": "Create a rule to set fields, assign tags, or send reminders automatically.",
     "trigger": "Trigger: {trigger}",
     "priority": "Priority {priority}",
     "enabled": "Enabled",
@@ -53,7 +53,6 @@
       "filename": "File name",
       "content": "File content",
       "tags": "Tags",
-      "correspondent": "Correspondent",
       "documentType": "Document type"
     },
     "conditionOps": {
@@ -73,14 +72,7 @@
     "actionKinds": {
       "add_tag": "Assign tag",
       "remove_tag": "Remove tag",
-      "set_document_type": "Assign document type",
-      "set_correspondent": "Assign correspondent",
-      "connect_entity": "Connect to entity",
-      "disconnect_entity": "Disconnect from entity"
-    },
-    "actionModes": {
-      "attribute": "Attributes",
-      "entity": "Entities"
+      "set_document_type": "Assign document type"
     },
     "attributeOperationLabel": "Attribute operation",
     "attributeOperations": {
@@ -90,27 +82,11 @@
     "attributeKindLabel": "Attribute",
     "attributeKinds": {
       "tag": "Tags",
-      "correspondent": "Correspondents",
       "documentType": "Document types"
-    },
-    "entityOperationLabel": "Entity operation",
-    "entityOperations": {
-      "connect": "Connect",
-      "disconnect": "Disconnect"
-    },
-    "relations": {
-      "belongs_to": "Belongs to",
-      "issued_to": "Issued to",
-      "assigned_to": "Assigned to",
-      "part_of": "Part of",
-      "related": "Related"
     },
     "addAction": "Add action",
     "attributeRemoveClearsValue": "Clears the current value — nothing to pick.",
     "needsConditionAndAction": "Add at least one condition and one action before saving.",
-    "searchPlaceholder": "Search customers, projects, contracts…",
-    "searchFailed": "Search failed",
-    "removeEntityValue": "Remove selected entity",
     "saving": "Saving…",
     "save": "Save rule",
     "create": "Create rule"
@@ -118,8 +94,6 @@
   "triggers": {
     "document_ingested": "Document ingested",
     "document_updated": "Document updated",
-    "document_connected": "Document connected",
-    "entity_created": "Entity created",
     "manual": "Manual only"
   },
   "detail": {
@@ -172,7 +146,7 @@
     "resume": "Resume",
     "cancel": "Cancel",
     "undo": "Undo",
-    "confirmUndo": "Undo this backfill? This removes only the connections it created.",
+    "confirmUndo": "Undo this backfill? This reverts the changes it made.",
     "status": "Status: {status}",
     "progress": "{applied} applied / {matched} matched",
     "recentBackfills": "Recent backfills",

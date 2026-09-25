@@ -17,8 +17,6 @@ export function DocumentCustomFieldInput({
   value: unknown;
   onChange: (next: unknown) => void;
 }) {
-  if (def.data_type === "documentlink") return null;
-
   if (def.data_type === "boolean") {
     return (
       <label className="flex h-10 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm">

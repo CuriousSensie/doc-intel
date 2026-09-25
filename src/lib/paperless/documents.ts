@@ -26,7 +26,6 @@ export function updatePaperlessDocument(
     title?: string;
     created?: string;
     document_type?: number | null;
-    correspondent?: number | null;
     tags?: number[];
     custom_fields?: Array<{ field: number; value: unknown }>;
   }
@@ -44,9 +43,9 @@ export function deletePaperlessDocument(
 
 // specs/12-agent-rules.md rule 4: never create a Paperless object without explicit owner/group
 // permissions — same createOwnedObject() path provision-tenant.ts already uses for document
-// types/storage paths, now reused for the document detail page's inline "create tag/
-// correspondent/document type" pickers. Paperless itself enforces name uniqueness per model;
-// a duplicate name surfaces as a normal mapped Paperless error, not something checked here.
+// types/storage paths, now reused for the document detail page's inline "create tag/document
+// type" pickers. Paperless itself enforces name uniqueness per model; a duplicate name surfaces
+// as a normal mapped Paperless error, not something checked here.
 // `color` accepted on create, confirmed live (2026-09-16) — Paperless derives `text_color`
 // itself from the contrast, never sent by us.
 export function createPaperlessTag(
@@ -63,15 +62,6 @@ export function createPaperlessTag(
   );
 }
 
-export function createPaperlessCorrespondent(
-  client: PaperlessClient,
-  name: string,
-  ownership: OwnedObjectPermissions,
-  matching?: PaperlessMatchingFields
-): Promise<PaperlessCorrespondent> {
-  return client.createOwnedObject("/api/correspondents/", { name, ...matching }, ownership);
-}
-
 export function createPaperlessDocumentType(
   client: PaperlessClient,
   name: string,
@@ -82,14 +72,14 @@ export function createPaperlessDocumentType(
 }
 
 // specs/05-level-1-structure.md §Bulk business actions: "Paperless's [bulk actions]: change
-// document type, tags, correspondent, custom field values, reprocess, delete — proxied to
+// document type, tags, custom field values, reprocess, delete — proxied to
 // Paperless bulk_edit, not reimplemented." Paperless applies these atomically server-side
 // (its own task queue), so this is a single synchronous proxy call, not a worker job.
 export function bulkEditPaperlessDocuments(
   client: PaperlessClient,
   input: {
     documentIds: number[];
-    method: "set_correspondent" | "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess";
+    method: "set_document_type" | "add_tag" | "remove_tag" | "modify_custom_fields" | "delete" | "reprocess";
     parameters?: Record<string, unknown>;
   }
 ): Promise<{ result: string }> {
@@ -117,15 +107,6 @@ export function getPaperlessDocumentTypeName(
   return client
     .get<{ name: string }>(`/api/document_types/${documentTypeId}/`)
     .then((dt) => dt.name);
-}
-
-export function getPaperlessCorrespondentName(
-  client: PaperlessClient,
-  correspondentId: number
-): Promise<string> {
-  return client
-    .get<{ name: string }>(`/api/correspondents/${correspondentId}/`)
-    .then((c) => c.name);
 }
 
 // envelope.next is a full absolute URL (confirmed live) — PaperlessClient prepends its own
@@ -159,7 +140,7 @@ export async function listAllPaperlessDocumentIds(
   return ids;
 }
 
-// Full option lists for the documents filter bar (tags/correspondents/document types) — always
+// Full option lists for the documents filter bar (tags/document types) — always
 // small (tens to low hundreds of rows for a real tenant), so one page is enough; still follows
 // the `next`-pagination pattern in case a tenant genuinely has more than page_size.
 async function listAllPaginated<T>(client: PaperlessClient, path: string): Promise<T[]> {
@@ -186,11 +167,6 @@ export type PaperlessTag = PaperlessMatchingFields & {
   text_color: string;
   document_count?: number;
 };
-export type PaperlessCorrespondent = PaperlessMatchingFields & {
-  id: number;
-  name: string;
-  document_count?: number;
-};
 export type PaperlessDocumentType = PaperlessMatchingFields & {
   id: number;
   name: string;
@@ -199,12 +175,6 @@ export type PaperlessDocumentType = PaperlessMatchingFields & {
 
 export function listPaperlessTags(client: PaperlessClient): Promise<PaperlessTag[]> {
   return listAllPaginated<PaperlessTag>(client, "/api/tags/?page_size=200");
-}
-
-export function listPaperlessCorrespondents(
-  client: PaperlessClient
-): Promise<PaperlessCorrespondent[]> {
-  return listAllPaginated<PaperlessCorrespondent>(client, "/api/correspondents/?page_size=200");
 }
 
 export function listPaperlessDocumentTypes(
@@ -221,14 +191,6 @@ export function updatePaperlessTag(
   return client.patch<PaperlessTag>(`/api/tags/${id}/`, patch);
 }
 
-export function updatePaperlessCorrespondent(
-  client: PaperlessClient,
-  id: number,
-  patch: Partial<Pick<PaperlessCorrespondent, "name" | "match" | "matching_algorithm" | "is_insensitive">>
-): Promise<PaperlessCorrespondent> {
-  return client.patch<PaperlessCorrespondent>(`/api/correspondents/${id}/`, patch);
-}
-
 export function updatePaperlessDocumentType(
   client: PaperlessClient,
   id: number,
@@ -239,10 +201,6 @@ export function updatePaperlessDocumentType(
 
 export function deletePaperlessTag(client: PaperlessClient, id: number): Promise<void> {
   return client.delete(`/api/tags/${id}/`);
-}
-
-export function deletePaperlessCorrespondent(client: PaperlessClient, id: number): Promise<void> {
-  return client.delete(`/api/correspondents/${id}/`);
 }
 
 export function deletePaperlessDocumentType(client: PaperlessClient, id: number): Promise<void> {

@@ -13,11 +13,7 @@ import { RuleForm, type RuleFormValue } from "@/components/rules/rule-form";
 import { RuleTestPanel } from "@/components/rules/rule-test-panel";
 import { AuthorizationError, NotFoundError } from "@/lib/errors";
 import { paperlessFor } from "@/lib/paperless/client";
-import {
-  getCachedCorrespondents,
-  getCachedDocumentTypes,
-  getCachedTags
-} from "@/lib/paperless/metadata-cache";
+import { getCachedDocumentTypes, getCachedTags } from "@/lib/paperless/metadata-cache";
 import { buildRequestContext } from "@/lib/service-context";
 import { requireFeature } from "@/modules/auth/authorization";
 import { requireUser } from "@/modules/auth/session";
@@ -27,49 +23,9 @@ import {
   startRuleBackfillFormAction,
   toggleRuleEnabledFormAction
 } from "@/modules/rules/rules.actions";
-import { type RuleAction } from "@/modules/rules/rules.schemas";
 import { getRule, listRuleRunsForRule } from "@/modules/rules/rules.service";
 
 export const dynamic = "force-dynamic";
-
-// entity_ref for connect_entity/disconnect_entity only ever stores {by:"id", entityId} — the
-// rule-form builder has no other way to show a human-readable chip for a bare id, so this
-// resolves each referenced entity's current display name and attaches it as `label` before the
-// action ever reaches the client. Never sent back to the server as-is; RuleForm rebuilds a fresh
-// {by:"id", entityId} on submit (rules.dispatcher.ts#resolveEntityRef() re-checks org ownership
-// at evaluation time regardless).
-async function enrichEntityRefs(
-  ctx: Awaited<ReturnType<typeof buildRequestContext>>,
-  actions: unknown
-): Promise<unknown> {
-  const list = Array.isArray(actions) ? (actions as RuleAction[]) : [];
-  const entityIds = list
-    .filter(
-      (a) =>
-        (a.type === "connect_entity" || a.type === "disconnect_entity") && a.entity_ref.by === "id"
-    )
-    .map(
-      (a) => (a as Extract<RuleAction, { type: "connect_entity" | "disconnect_entity" }>).entity_ref
-    )
-    .filter((ref): ref is Extract<typeof ref, { by: "id" }> => ref.by === "id")
-    .map((ref) => ref.entityId);
-
-  if (entityIds.length === 0) return actions;
-
-  const { data } = await ctx.db.from("entities").select("id, display_name").in("id", entityIds);
-  const labelById = new Map((data ?? []).map((e) => [e.id, e.display_name]));
-
-  return list.map((action) => {
-    if (
-      (action.type === "connect_entity" || action.type === "disconnect_entity") &&
-      action.entity_ref.by === "id"
-    ) {
-      const label = labelById.get(action.entity_ref.entityId);
-      return label ? { ...action, entity_ref: { ...action.entity_ref, label } } : action;
-    }
-    return action;
-  });
-}
 
 export default async function RuleDetailPage({
   params,
@@ -97,15 +53,12 @@ export default async function RuleDetailPage({
   }
 
   const client = await paperlessFor(ctx.orgId);
-  const [runs, backfillsResult, tags, correspondents, documentTypes, enrichedActions] =
-    await Promise.all([
-      listRuleRunsForRule(ctx, id),
-      listRuleBackfillsForRuleAction(id),
-      getCachedTags(client, ctx.orgId),
-      getCachedCorrespondents(client, ctx.orgId),
-      getCachedDocumentTypes(client, ctx.orgId),
-      enrichEntityRefs(ctx, rule.actions)
-    ]);
+  const [runs, backfillsResult, tags, documentTypes] = await Promise.all([
+    listRuleRunsForRule(ctx, id),
+    listRuleBackfillsForRuleAction(id),
+    getCachedTags(client, ctx.orgId),
+    getCachedDocumentTypes(client, ctx.orgId)
+  ]);
   const runDocumentIds = [
     ...new Set(
       runs.map((run) => run.document_id).filter((value): value is string => Boolean(value))
@@ -139,7 +92,7 @@ export default async function RuleDetailPage({
     trigger: rule.trigger,
     priority: rule.priority,
     conditions: rule.conditions,
-    actions: enrichedActions
+    actions: rule.actions
   };
 
   return (
@@ -171,7 +124,7 @@ export default async function RuleDetailPage({
           <RuleForm
             enabled={rule.enabled}
             initial={formValue}
-            metaOptions={{ tags, correspondents, documentTypes }}
+            metaOptions={{ tags, documentTypes }}
             showHeader={false}
           />
         }

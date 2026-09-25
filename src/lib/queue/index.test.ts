@@ -41,12 +41,12 @@ describe("queue helpers", () => {
 
     const { enqueueBulk, QUEUE_NAMES } = await import("@/lib/queue");
 
-    await enqueueBulk(QUEUE_NAMES.runImportChunk, [{ orgId: "org-1", rowId: 1 }], { priority: 10 });
+    await enqueueBulk(QUEUE_NAMES.runRule, [{ orgId: "org-1", documentId: "doc-1", trigger: "document.ingested" }], { priority: 10 });
 
     expect(addBulk).toHaveBeenCalledWith([
       {
-        name: "run-import-chunk",
-        data: { orgId: "org-1", rowId: 1 },
+        name: "run-rule",
+        data: { orgId: "org-1", documentId: "doc-1", trigger: "document.ingested" },
         opts: { priority: 10 }
       }
     ]);

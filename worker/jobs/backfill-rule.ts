@@ -100,10 +100,9 @@ async function tryFinalize(admin: AdminDb, orgId: string, ruleBackfillId: string
 }
 
 // specs/07-rules-engine.md §Dry run and backfill: chunked, pausable, fully audited, reversible.
-// Mirrors worker/jobs/run-import-chunk.ts's self-perpetuating chain shape — a Redis control flag
-// checked before each claim, cursor-based pagination over the filtered document set (see
-// claim_rule_backfill_documents() in the migration for why this isn't a row-claim table), one
-// re-enqueue per chunk while still running.
+// A self-perpetuating chain — a Redis control flag checked before each claim, cursor-based
+// pagination over the filtered document set (see claim_rule_backfill_documents() in the migration
+// for why this isn't a row-claim table), one re-enqueue per chunk while still running.
 // rule_backfills.status is documented as worker-managed (no update RLS policy for authenticated
 // users) — pauseRuleBackfillAction()/cancelRuleBackfillAction() only ever set the Redis control
 // flag, so without this the DB row (and the UI reading it) stayed stuck on "running" forever
@@ -216,7 +215,7 @@ export async function backfillRuleJob(job: Job<JobPayload>): Promise<void> {
         matchedDelta++;
         const fieldClaims = new Map<string, string>();
         const outcomes = await withPaperlessWriteLock(() =>
-          dispatchRuleActions(ctx, rule, ruleRun.id, subject, fieldClaims, { ruleBackfillId })
+          dispatchRuleActions(ctx, rule, ruleRun.id, subject, fieldClaims)
         );
         if (outcomes.some((o) => o.status === "applied")) appliedDelta++;
       }
