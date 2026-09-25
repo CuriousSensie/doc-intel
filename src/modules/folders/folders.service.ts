@@ -1,6 +1,7 @@
 import { logEvent } from "@/lib/events";
 import { AuthorizationError, NotFoundError, ValidationError } from "@/lib/errors";
 import type { ServiceContext } from "@/lib/service-context";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   listDocuments,
   type DocumentPageSize,
@@ -183,22 +184,15 @@ export async function updateFolderMatchConditions(
   folderId: string,
   matchConditions: ConditionNode | null
 ): Promise<void> {
-  // No dedicated RPC — this is a plain column write, not access-cascading or path-recomputing
-  // like create/rename/move, so it goes through the RLS-scoped table update directly (RLS's
-  // folders_select_member + a manage check below are the enforcement, matching how
-  // rename_folder/move_folder gate on can_manage_folder rather than trusting RLS alone for writes).
-  const { data: canManage, error: manageError } = await ctx.db.rpc("can_manage_folder", {
-    p_folder_id: folderId
+  // SECURITY DEFINER RPC, not a plain table update: `folders` has no UPDATE policy (only SELECT),
+  // so an RLS-scoped `.update()` silently affects 0 rows. Matches every other folder mutation
+  // (create/rename/move/delete/grant), each of which owns its can_manage_folder check and audit
+  // row inside the RPC.
+  const { error } = await ctx.db.rpc("update_folder_match_conditions", {
+    p_folder_id: folderId,
+    p_match_conditions: (matchConditions ?? null) as never
   });
-  if (manageError) throw manageError;
-  if (!canManage) throw new AuthorizationError("You do not have access to edit this folder's matching pattern");
-
-  const { error } = await ctx.db
-    .from("folders")
-    .update({ match_conditions: matchConditions as never })
-    .eq("id", folderId)
-    .eq("organization_id", ctx.orgId);
-  if (error) throw error;
+  if (error) toValidationOrThrow(error);
 }
 
 export async function deleteFolder(
@@ -277,6 +271,11 @@ async function assertCanEditDocument(ctx: ServiceContext, documentId: string): P
 // Filing a document requires edit rights on both the document and the destination folder — moving
 // a document doesn't just relabel it, it also changes who can see it (ADR-0019), so both sides of
 // that change need to be authorized independently. `folderId: null` unfiles the document.
+//
+// The write itself goes through the admin client, not ctx.db: `documents` has no UPDATE policy by
+// design (only the sync worker writes it — see updateDocument()/deleteDocument()'s own comments),
+// so an RLS-scoped `.update()` here silently affects 0 rows while reporting success. The
+// permission checks above are the real enforcement.
 export async function moveDocumentToFolder(
   ctx: ServiceContext,
   documentId: string,
@@ -285,7 +284,8 @@ export async function moveDocumentToFolder(
   await assertCanEditDocument(ctx, documentId);
   if (folderId) await assertCanAccessFolderForEdit(ctx, folderId);
 
-  const { error } = await ctx.db
+  const admin = createAdminClient();
+  const { error } = await admin
     .from("documents")
     .update({ folder_id: folderId })
     .eq("id", documentId)
@@ -327,22 +327,29 @@ export async function moveDocumentsToFolder(
   const allowed = editableIds ?? [];
   if (allowed.length === 0) return { movedCount: 0, skippedCount: documentIds.length };
 
-  const { error: updateError } = await ctx.db
+  // Admin client for the same reason as moveDocumentToFolder above — documents has no UPDATE
+  // policy. `.select("id")` makes the write self-verifying: if the id set ever drifts from what
+  // was actually written, this fails loudly instead of toasting a phantom success.
+  const admin = createAdminClient();
+  const { data: moved, error: updateError } = await admin
     .from("documents")
     .update({ folder_id: folderId })
     .in("id", allowed)
-    .eq("organization_id", ctx.orgId);
+    .eq("organization_id", ctx.orgId)
+    .select("id");
   if (updateError) throw updateError;
+
+  const movedIds = (moved ?? []).map((row) => row.id);
 
   await logEvent({
     actorId: ctx.actorId,
     action: "document.moved_to_folder",
     entityType: "document",
     organizationId: ctx.orgId,
-    metadata: { folderId, documentIds: allowed, via: "user" }
+    metadata: { folderId, documentIds: movedIds, via: "user" }
   });
 
-  return { movedCount: allowed.length, skippedCount: documentIds.length - allowed.length };
+  return { movedCount: movedIds.length, skippedCount: documentIds.length - movedIds.length };
 }
 
 // Phase D bulk folder upload. Walks each path's segments top-down, creating any missing folder

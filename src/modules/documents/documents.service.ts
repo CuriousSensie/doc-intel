@@ -29,7 +29,12 @@ import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.s
 import type { Database } from "@/types/database";
 
 export type DocumentUpload = Database["public"]["Tables"]["document_uploads"]["Row"];
-export type Document = Database["public"]["Tables"]["documents"]["Row"];
+// folder_path is a display-only decoration attached by listDocuments() (see attachFolderPaths)
+// from the RLS-visible `folders` row, never a mirrored column — null/absent when the document is
+// unfiled or the viewer can't see its folder.
+export type Document = Database["public"]["Tables"]["documents"]["Row"] & {
+  folder_path?: string | null;
+};
 
 const RECENT_LIST_LIMIT = 50;
 const DEFAULT_PAGE_SIZE = 25;
@@ -318,7 +323,41 @@ function decodeDocumentCursor(value: string | null | undefined): DocumentCursor 
 //
 // `precomputed.paperlessIds` lets listDocumentIds() hoist resolvePaperlessIdFilter() out of its
 // own per-page loop instead of re-resolving it on every page.
+//
+// Public entry point: adds the display-only folder path to each item. Thin wrapper over
+// listDocumentsPage() so listDocumentIds()'s cursor loop (which only needs ids) can skip the
+// extra folders read on every 200-row page.
 export async function listDocuments(
+  organizationId: string,
+  options: ListDocumentsOptions = {},
+  precomputed: { paperlessIds?: Set<number> | null } = {}
+): Promise<ListDocumentsResult> {
+  const result = await listDocumentsPage(organizationId, options, precomputed);
+  return { ...result, items: await attachFolderPaths(result.items) };
+}
+
+// Resolves each item's folder_id to its current path in one batched, RLS-scoped read — a document
+// whose folder the caller can't see (folder RLS is narrower than document RLS) simply stays
+// unlabeled. Never mirrors the path onto the row.
+async function attachFolderPaths(items: Document[]): Promise<Document[]> {
+  const folderIds = [
+    ...new Set(items.map((d) => d.folder_id).filter((id): id is string => Boolean(id)))
+  ];
+  if (folderIds.length === 0) return items;
+
+  const db = await createClient();
+  const { data, error } = await db.from("folders").select("id, path").in("id", folderIds);
+  if (error) throw error;
+
+  const pathById = new Map((data ?? []).map((folder) => [folder.id, folder.path]));
+  return items.map((document) =>
+    document.folder_id
+      ? { ...document, folder_path: pathById.get(document.folder_id) ?? null }
+      : document
+  );
+}
+
+async function listDocumentsPage(
   organizationId: string,
   options: ListDocumentsOptions = {},
   precomputed: { paperlessIds?: Set<number> | null } = {}
@@ -594,7 +633,7 @@ export async function listDocumentIds(
   const pageSize = 200;
 
   while (ids.length < cap) {
-    const { items, nextCursor } = await listDocuments(
+    const { items, nextCursor } = await listDocumentsPage(
       organizationId,
       { ...options, cursor, limit: pageSize },
       { paperlessIds }

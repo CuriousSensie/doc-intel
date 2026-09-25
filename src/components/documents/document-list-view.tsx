@@ -21,6 +21,10 @@ import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-val
 import type { DocumentListField } from "@/modules/documents/documents.schemas";
 import type { Document } from "@/modules/documents/documents.service";
 
+export function folderLeafName(path: string): string {
+  return path.split("/").filter(Boolean).at(-1) ?? path;
+}
+
 // The original (and still default) row rendering — extracted out of documents-bulk-list.tsx so
 // it can be swapped for the two card view modes without duplicating selection/bulk-action logic.
 export function DocumentListView({
@@ -84,8 +88,8 @@ export function DocumentListView({
             {visible.has("tags") ? (
               <TableHead className="w-52">{tFilters("field_tags")}</TableHead>
             ) : null}
-            {visible.has("correspondent") ? (
-              <TableHead className="w-48">{tFilters("field_correspondent")}</TableHead>
+            {visible.has("folder") ? (
+              <TableHead className="w-48">{tFilters("field_folder")}</TableHead>
             ) : null}
             {visible.has("documentType") ? (
               <TableHead className="w-44">{tFilters("field_documentType")}</TableHead>
@@ -151,9 +155,9 @@ export function DocumentListView({
                   <DocumentTagChips max={3} tags={tagsByDocumentId[document.id] ?? []} />
                 </TableCell>
               ) : null}
-              {visible.has("correspondent") ? (
-                <TableCell className="w-48 truncate text-muted">
-                  {document.correspondent_name ?? "—"}
+              {visible.has("folder") ? (
+                <TableCell className="w-48 truncate text-muted" title={document.folder_path ?? undefined}>
+                  {document.folder_path ? folderLeafName(document.folder_path) : t("list.unfiled")}
                 </TableCell>
               ) : null}
               {visible.has("documentType") ? (
@@ -180,7 +184,7 @@ export function DocumentListView({
                 </TableCell>
               ))}
               <TableCell className="w-36">
-                <DocumentRowActions documentId={document.id} detailHref={detailHref(document.id)} />
+                <DocumentRowActions documentId={document.id} title={document.title} detailHref={detailHref(document.id)} />
               </TableCell>
             </TableRow>
           ))}

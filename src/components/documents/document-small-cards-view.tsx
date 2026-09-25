@@ -7,6 +7,7 @@ import { useRouter } from "@/i18n/navigation";
 import { useRef, useState } from "react";
 
 import { DocumentRowActions } from "@/components/documents/document-row-actions";
+import { folderLeafName } from "@/components/documents/document-list-view";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentTagChips } from "@/components/documents/document-tag-chips";
 import type { PaperlessTag } from "@/lib/paperless/documents";
@@ -126,10 +127,12 @@ export function DocumentSmallCardsView({
                     </dd>
                   </div>
                 ) : null}
-                {visible.has("correspondent") ? (
+                {visible.has("folder") ? (
                   <div className="flex justify-between gap-2">
-                    <dt className="text-muted">{tFilters("field_correspondent")}</dt>
-                    <dd className="truncate text-right">{document.correspondent_name ?? "—"}</dd>
+                    <dt className="text-muted">{tFilters("field_folder")}</dt>
+                    <dd className="truncate text-right" title={document.folder_path ?? undefined}>
+                      {document.folder_path ? folderLeafName(document.folder_path) : t("list.unfiled")}
+                    </dd>
                   </div>
                 ) : null}
                 {visible.has("connections") ? (
@@ -164,7 +167,7 @@ export function DocumentSmallCardsView({
               </div>
             </div>
           </div>
-          <DocumentRowActions documentId={document.id} detailHref={detailHref(document.id)} />
+          <DocumentRowActions documentId={document.id} title={document.title} detailHref={detailHref(document.id)} />
         </div>
       ))}
     </section>

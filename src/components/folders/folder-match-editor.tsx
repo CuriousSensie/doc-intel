@@ -112,7 +112,7 @@ function serialize(rows: Row[], mode: "all" | "any"): ConditionNode | null {
   return leaves.length === 1 ? leaves[0] : ({ [mode]: leaves } as ConditionNode);
 }
 
-export function FolderMatchEditor({ folder }: { folder: Folder }) {
+export function FolderMatchEditor({ folder, onSaved }: { folder: Folder; onSaved?: () => void }) {
   const t = useTranslations("folders.match");
   const hydrated = hydrate(folder.matchConditions);
   const [unsupported] = useState(hydrated === "unsupported");
@@ -130,6 +130,7 @@ export function FolderMatchEditor({ folder }: { folder: Folder }) {
           matchConditions: serialize(rows, mode)
         });
         toast.success(t("saved"));
+        onSaved?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : t("saveFailed"));
       }
@@ -143,6 +144,7 @@ export function FolderMatchEditor({ folder }: { folder: Folder }) {
       try {
         await updateFolderMatchConditionsAction({ folderId: folder.id, matchConditions: null });
         toast.success(t("cleared"));
+        onSaved?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : t("saveFailed"));
       }

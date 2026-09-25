@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import messages from "@/../messages/en/folders.json";
+import documentsMessages from "@/../messages/en/documents.json";
 
 import type { Document } from "@/modules/documents/documents.service";
 import type { Folder } from "@/modules/folders/folders.service";
@@ -15,7 +16,21 @@ const listFolderTreeAction = vi.hoisted(() => vi.fn());
 const listFolderDocumentsAction = vi.hoisted(() => vi.fn());
 
 vi.mock("@/i18n/navigation", () => ({
+  // Radix's DropdownMenuItem asChild clones this; a host anchor keeps the test free of the real
+  // locale-aware Link.
+  Link: "a",
   useRouter: () => ({ push })
+}));
+
+// DocumentActionsMenu (rendered on each document leaf) imports these; stubbed so this explorer
+// test never pulls in the server-action/Paperless modules behind them.
+vi.mock("@/modules/documents/documents.actions", () => ({
+  updateDocumentAction: vi.fn(),
+  deleteDocumentAction: vi.fn()
+}));
+
+vi.mock("@/modules/documents/document-shares.actions", () => ({
+  getDocumentPermissionsAction: vi.fn()
 }));
 
 vi.mock("@/modules/folders/folders.actions", () => ({
@@ -53,7 +68,7 @@ function fakeDocument(id: string, title: string): Document {
 
 function view() {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ folders: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ documents: documentsMessages, folders: messages }}>
       <FolderExplorer />
     </NextIntlClientProvider>
   );

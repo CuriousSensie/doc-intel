@@ -7,6 +7,7 @@ import { useRouter } from "@/i18n/navigation";
 import { useRef, useState } from "react";
 
 import { DocumentRowActions } from "@/components/documents/document-row-actions";
+import { folderLeafName } from "@/components/documents/document-list-view";
 import { DocumentStatusBadge } from "@/components/documents/document-status-badge";
 import { DocumentTagChips } from "@/components/documents/document-tag-chips";
 import type { PaperlessTag } from "@/lib/paperless/documents";
@@ -145,13 +146,13 @@ export function DocumentLargeCardsView({
                     </dd>
                   </div>
                 ) : null}
-                {visible.has("correspondent") ? (
+                {visible.has("folder") ? (
                   <div>
                     <dt className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      {tFilters("field_correspondent")}
+                      {tFilters("field_folder")}
                     </dt>
-                    <dd className="mt-0.5 min-w-0 truncate">
-                      {document.correspondent_name ?? "—"}
+                    <dd className="mt-0.5 min-w-0 truncate" title={document.folder_path ?? undefined}>
+                      {document.folder_path ? folderLeafName(document.folder_path) : t("list.unfiled")}
                     </dd>
                   </div>
                 ) : null}
@@ -192,7 +193,7 @@ export function DocumentLargeCardsView({
               </dl>
               {snippet ? <p className="mt-1 line-clamp-3 text-sm text-muted">{snippet}</p> : null}
               <div className="mt-auto pt-2">
-                <DocumentRowActions documentId={document.id} detailHref={detailHref(document.id)} />
+                <DocumentRowActions documentId={document.id} title={document.title} detailHref={detailHref(document.id)} />
               </div>
             </div>
           </div>

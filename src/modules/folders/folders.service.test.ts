@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ServiceContext } from "@/lib/service-context";
 
+// documents has no UPDATE policy, so moveDocumentToFolder/moveDocumentsToFolder write through the
+// admin client (see the service comments) — mocked here so those paths don't need real env keys.
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+
+import { createAdminClient } from "@/lib/supabase/admin";
+
 function makeCtx(overrides: Partial<ServiceContext["db"]> = {}): ServiceContext {
   const db = { rpc: vi.fn(), from: vi.fn(), ...overrides } as unknown as ServiceContext["db"];
   return { db, orgId: "org-1", actorId: "user-1", correlationId: "corr-1" };
@@ -100,17 +106,60 @@ describe("grantFolderAccess / revokeFolderAccess", () => {
   });
 });
 
+describe("updateFolderMatchConditions", () => {
+  it("calls the SECURITY DEFINER RPC with the pattern", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const ctx = makeCtx({ rpc });
+    const { updateFolderMatchConditions } = await import("./folders.service");
+    const pattern = { field: "document.filename", op: "contains", value: "invoice" } as const;
+
+    await updateFolderMatchConditions(ctx, "folder-1", pattern);
+
+    expect(rpc).toHaveBeenCalledWith("update_folder_match_conditions", {
+      p_folder_id: "folder-1",
+      p_match_conditions: pattern
+    });
+  });
+
+  it("clears the pattern with null", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    const ctx = makeCtx({ rpc });
+    const { updateFolderMatchConditions } = await import("./folders.service");
+
+    await updateFolderMatchConditions(ctx, "folder-1", null);
+
+    expect(rpc).toHaveBeenCalledWith("update_folder_match_conditions", {
+      p_folder_id: "folder-1",
+      p_match_conditions: null
+    });
+  });
+
+  it("turns a raise-exception into a user-facing validation error", async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ error: { code: "P0001", message: "You do not have access to edit this folder's matching pattern" } });
+    const ctx = makeCtx({ rpc });
+    const { updateFolderMatchConditions } = await import("./folders.service");
+
+    await expect(updateFolderMatchConditions(ctx, "folder-1", null)).rejects.toMatchObject({
+      code: "validation_error"
+    });
+  });
+});
+
 describe("moveDocumentToFolder", () => {
-  it("requires edit access to both the document and the destination folder", async () => {
+  it("requires edit access to both the document and the destination folder, then writes via admin", async () => {
     const rpc = vi.fn((fn: string) => {
       if (fn === "can_edit_document") return Promise.resolve({ data: true, error: null });
       if (fn === "can_access_folder") return Promise.resolve({ data: true, error: null });
       return Promise.resolve({ data: null, error: null });
     });
-    const update = vi.fn().mockReturnThis();
-    const eq = vi.fn().mockReturnThis();
-    const from = vi.fn().mockReturnValue({ update, eq });
-    const ctx = makeCtx({ rpc, from } as never);
+    const eq = vi.fn();
+    eq.mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi.fn().mockReturnValue({ update });
+    vi.mocked(createAdminClient).mockReturnValue({ from } as never);
+    const ctx = makeCtx({ rpc } as never);
     const { moveDocumentToFolder } = await import("./folders.service");
 
     await moveDocumentToFolder(ctx, "doc-1", "folder-1");
@@ -122,14 +171,14 @@ describe("moveDocumentToFolder", () => {
 
   it("rejects without touching the database when the caller cannot edit the document", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
-    const from = vi.fn();
-    const ctx = makeCtx({ rpc, from } as never);
+    vi.mocked(createAdminClient).mockClear();
+    const ctx = makeCtx({ rpc } as never);
     const { moveDocumentToFolder } = await import("./folders.service");
 
     await expect(moveDocumentToFolder(ctx, "doc-1", "folder-1")).rejects.toMatchObject({
       code: "authorization_error"
     });
-    expect(from).not.toHaveBeenCalled();
+    expect(createAdminClient).not.toHaveBeenCalled();
   });
 });
 

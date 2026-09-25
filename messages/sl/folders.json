@@ -1,5 +1,7 @@
 {
   "title": "Mape",
+  "notInOrganization": "Niste še del nobene organizacije.",
+  "createOrganization": "Ustvari organizacijo",
   "allDocuments": "Vsi dokumenti",
   "unfiled": "Brez mape",
   "newFolderTitle": "Nova mapa",
@@ -36,6 +38,7 @@
   "loadDocumentsFailed": "Dokumentov ni bilo mogoče naložiti",
   "manageAccess": "Dostop",
   "manageMatch": "Vzorec samodejnega razvrščanja",
+  "hasMatchPattern": "Ta mapa ima vzorec samodejnega razvrščanja",
   "access": {
     "title": "Dostop do \"{name}\"",
     "directTitle": "Neposreden dostop",

@@ -796,6 +796,61 @@ describe("listDocuments — sort", () => {
   });
 });
 
+describe("listDocuments — folder path decoration", () => {
+  it("attaches folder_path from the RLS-visible folder", async () => {
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: () => proxy,
+        limit: () => Promise.resolve({ data: [{ id: "doc-1", folder_id: "folder-1" }], error: null }),
+        range: () =>
+          Promise.resolve({ data: [{ id: "doc-1", folder_id: "folder-1" }], error: null, count: 1 })
+      };
+      return proxy;
+    }
+    const from = vi.fn((table: string) =>
+      table === "folders"
+        ? makeChain({ data: [{ id: "folder-1", path: "/Invoices/2025" }], error: null })
+        : chain()
+    );
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocuments } = await import("@/modules/documents/documents.service");
+    const result = await listDocuments("org-1", {});
+
+    expect(result.items[0].folder_path).toBe("/Invoices/2025");
+  });
+
+  it("leaves folder_path unset and skips the folder read for an unfiled document", async () => {
+    function chain(): Record<string, unknown> {
+      const proxy: Record<string, unknown> = {
+        select: () => proxy,
+        eq: () => proxy,
+        is: () => proxy,
+        in: () => proxy,
+        or: () => proxy,
+        order: () => proxy,
+        limit: () => Promise.resolve({ data: [{ id: "doc-1", folder_id: null }], error: null }),
+        range: () =>
+          Promise.resolve({ data: [{ id: "doc-1", folder_id: null }], error: null, count: 1 })
+      };
+      return proxy;
+    }
+    const from = vi.fn(() => chain());
+    vi.doMock("@/lib/supabase/server", () => ({ createClient: async () => ({ from }) }));
+
+    const { listDocuments } = await import("@/modules/documents/documents.service");
+    const result = await listDocuments("org-1", {});
+
+    expect(result.items[0].folder_path).toBeUndefined();
+    expect(from).not.toHaveBeenCalledWith("folders");
+  });
+});
+
 describe("resolvePaperlessIdFilter (via listDocumentIds)", () => {
   it("combines q/titleOnly/tagIds/correspondentId into a single Paperless request", async () => {
     const get = vi.fn().mockResolvedValue({ results: [{ id: 1 }] });

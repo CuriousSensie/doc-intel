@@ -10,6 +10,7 @@ export type NavigationIcon =
   | "FileType"
   | "FileText"
   | "FolderKanban"
+  | "FolderTree"
   | "History"
   | "LayoutDashboard"
   | "ListFilter"
@@ -34,6 +35,7 @@ export type NavigationLabelKey =
   | "nav.documents"
   | "nav.documentTypes"
   | "nav.entities"
+  | "nav.folders"
   | "nav.imports"
   | "nav.login"
   | "nav.notifications"
@@ -94,6 +96,12 @@ export const dashboardNavigation: NavigationItem[] = [
     href: "/dashboard/documents",
     feature: "documents",
     icon: "FileText"
+  },
+  {
+    labelKey: "nav.folders",
+    href: "/dashboard/folders",
+    feature: "folders",
+    icon: "FolderTree"
   },
   {
     labelKey: "nav.views",

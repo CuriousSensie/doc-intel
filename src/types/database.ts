@@ -1662,6 +1662,10 @@ export type Database = {
         Args: { p_folder_id: string; p_new_parent_folder_id: string | null };
         Returns: undefined;
       };
+      update_folder_match_conditions: {
+        Args: { p_folder_id: string; p_match_conditions: Json | null };
+        Returns: undefined;
+      };
       delete_folder: {
         Args: {
           p_folder_id: string;

@@ -79,3 +79,17 @@ member within one org.
   without being scope for either itself.
 - Folder name uniqueness within a parent is case-sensitive for v1 (no `lower(name)` normalization) —
   flagged as an open question if Slovenian users expect case-insensitive matching in practice.
+
+## Amendments
+
+- **`match_conditions` writes go through a `SECURITY DEFINER` RPC.** The original implementation
+  updated the column through the RLS-scoped client, but `folders` only ever had a SELECT policy, so
+  the write silently affected 0 rows and the auto-file editor reported success while nothing
+  persisted. `update_folder_match_conditions()` now owns the `can_manage_folder` +
+  `has_organization_write_access` checks and writes a same-transaction `audit_logs` row
+  (ADR-0008), matching create/rename/move/delete/grant rather than adding a table UPDATE policy.
+- **Folders are a top-level destination (`/dashboard/folders`), not a documents view mode.** The
+  explorer's expand/breadcrumb state and its lazy per-folder document fetch never used the listing
+  filter bar that `?view=folders` rendered around it, so the view mode was dropped in favour of a
+  sidebar entry and its own route.
+

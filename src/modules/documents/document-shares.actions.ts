@@ -12,9 +12,11 @@ import {
 } from "@/modules/documents/document-shares.schemas";
 import {
   getDocumentPermissions,
+  loadDocumentPermissions,
   shareDocument,
   unshareDocument,
-  type DocumentPermissions
+  type DocumentPermissions,
+  type PermissionsResult
 } from "@/modules/documents/document-shares.service";
 import { getDocumentRow } from "@/modules/documents/documents.service";
 import { createNotification } from "@/modules/notifications/notifications.service";
@@ -47,6 +49,16 @@ export async function unshareDocumentAction(input: unknown): Promise<DocumentPer
   const db = await createClient();
   await unshareDocument(db, parsed);
   return getDocumentPermissions(db, parsed.documentId);
+}
+
+// Client-callable read used by the file-level actions menu (listings + folder explorer) to open
+// the permissions dialog on demand. Returns the never-rejecting PermissionsResult shape the
+// DocumentPermissionsTab already consumes, so a document the caller can't see degrades to the
+// tab's own error state rather than an unhandled rejection.
+export async function getDocumentPermissionsAction(documentId: string): Promise<PermissionsResult> {
+  requireFeature("documents");
+  await requireUser();
+  return loadDocumentPermissions(documentId);
 }
 
 // Best-effort — the grant is already committed (with its audit row) by the RPC; a failed

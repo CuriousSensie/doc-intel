@@ -53,6 +53,18 @@ export function FolderExplorer() {
     }
   }, []);
 
+  // Any folder mutation (move document, rename, delete, pattern save) changes what the per-folder
+  // document caches should contain — drop them and immediately refetch whatever is currently
+  // expanded, so an open folder never falls back to a stale list or a stuck "Loading…" row.
+  function handleChanged() {
+    const keys = [...expandedKeys];
+    setDocCacheState({});
+    void load();
+    for (const key of keys) {
+      fetchDocuments(key, key === UNFILED_KEY ? null : key);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     listFolderTreeAction()
@@ -78,6 +90,12 @@ export function FolderExplorer() {
   // runs during React's render pass, after this function would already have decided to fetch).
   function ensureDocumentsLoaded(key: string, folderId: string | null) {
     if (docCache[key]) return;
+    fetchDocuments(key, folderId);
+  }
+
+  // The uncached fetch itself — also called by handleChanged() to refresh folders that are
+  // already expanded, bypassing the cache-hit guard above.
+  function fetchDocuments(key: string, folderId: string | null) {
     patchDocCache(key, { items: [], page: 0, totalPages: 1, totalCount: 0, loading: true, error: null });
 
     listFolderDocumentsAction(folderId, { page: 1, pageSize: PAGE_SIZE })
@@ -166,7 +184,7 @@ export function FolderExplorer() {
           docCache={docCache}
           expandedKeys={expandedKeys}
           folders={folders}
-          onChanged={load}
+          onChanged={handleChanged}
           onLoadMore={handleLoadMore}
           onManage={(folderId, tab) => {
             setManagingFolderId(folderId);
@@ -191,7 +209,11 @@ export function FolderExplorer() {
               <DialogHeader>
                 <DialogTitle>{t("access.title", { name: managingFolder.name })}</DialogTitle>
               </DialogHeader>
-              <FolderAccessManager ancestorFolderIds={ancestorIds(folders, managingFolder.id)} folder={managingFolder} />
+              <FolderAccessManager
+                ancestorFolderIds={ancestorIds(folders, managingFolder.id)}
+                folder={managingFolder}
+                key={managingFolder.id}
+              />
             </>
           ) : null}
           {managingFolder && managingTab === "match" ? (
@@ -199,7 +221,11 @@ export function FolderExplorer() {
               <DialogHeader>
                 <DialogTitle>{t("match.title", { name: managingFolder.name })}</DialogTitle>
               </DialogHeader>
-              <FolderMatchEditor folder={managingFolder} />
+              <FolderMatchEditor
+                folder={managingFolder}
+                key={`${managingFolder.id}:${JSON.stringify(managingFolder.matchConditions)}`}
+                onSaved={handleChanged}
+              />
             </>
           ) : null}
         </DialogContent>

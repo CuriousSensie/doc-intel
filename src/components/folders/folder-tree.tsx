@@ -17,6 +17,7 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { DocumentActionsMenu } from "@/components/documents/document-actions-menu";
 import {
   Dialog,
   DialogClose,
@@ -296,13 +297,22 @@ function NewSubfolderDialog({
 }
 
 // A document leaf row — click navigates to the detail page (same route document-list-view.tsx
-// uses), draggable with the exact payload shape folder nodes' drop handlers already expect.
-function DocumentLeafRow({ document, depth }: { document: Document; depth: number }) {
+// uses), draggable with the exact payload shape folder nodes' drop handlers already expect, and
+// carrying the same file-level actions menu the flat listings use.
+function DocumentLeafRow({
+  document,
+  depth,
+  onChanged
+}: {
+  document: Document;
+  depth: number;
+  onChanged: () => void;
+}) {
   const router = useRouter();
 
   return (
     <li
-      className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted hover:bg-panel-strong/60"
+      className="group flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted hover:bg-panel-strong/60"
       draggable
       onClick={() => router.push(`/dashboard/documents/${document.id}`)}
       onDragStart={(e) => {
@@ -315,6 +325,12 @@ function DocumentLeafRow({ document, depth }: { document: Document; depth: numbe
     >
       <File className="size-3.5 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{document.title}</span>
+      <DocumentActionsMenu
+        detailHref={`/dashboard/documents/${document.id}`}
+        documentId={document.id}
+        onChanged={onChanged}
+        title={document.title}
+      />
     </li>
   );
 }
@@ -323,12 +339,14 @@ function DocumentLeaves({
   folderKey,
   depth,
   docCache,
-  onLoadMore
+  onLoadMore,
+  onChanged
 }: {
   folderKey: string;
   depth: number;
   docCache: Record<string, DocCacheEntry>;
   onLoadMore: (folderKey: string) => void;
+  onChanged: () => void;
 }) {
   const t = useTranslations("folders");
   const entry = docCache[folderKey];
@@ -358,7 +376,7 @@ function DocumentLeaves({
   return (
     <>
       {entry.items.map((document) => (
-        <DocumentLeafRow depth={depth} document={document} key={document.id} />
+        <DocumentLeafRow depth={depth} document={document} key={document.id} onChanged={onChanged} />
       ))}
       {entry.page < entry.totalPages ? (
         <li style={{ paddingLeft: `${depth * 14 + 24}px` }}>
@@ -512,6 +530,11 @@ function FolderTreeNode({
           type="button"
         >
           <span className="truncate font-medium">{node.name}</span>
+          {node.matchConditions ? (
+            <span className="shrink-0 text-muted" title={t("hasMatchPattern")}>
+              <Sparkles className="size-3.5" />
+            </span>
+          ) : null}
           <span className="shrink-0 text-xs text-muted">{countsLabel}</span>
         </button>
         {!isAncestorOnly ? (
@@ -565,7 +588,13 @@ function FolderTreeNode({
             />
           ))}
           {(node.documentCount ?? 0) > 0 ? (
-            <DocumentLeaves depth={depth} docCache={docCache} folderKey={node.id} onLoadMore={onLoadMore} />
+            <DocumentLeaves
+              depth={depth}
+              docCache={docCache}
+              folderKey={node.id}
+              onChanged={onChanged}
+              onLoadMore={onLoadMore}
+            />
           ) : null}
         </ul>
       ) : null}
@@ -703,7 +732,13 @@ export function FolderTree({
           </div>
           {unfiledExpanded ? (
             <ul>
-              <DocumentLeaves depth={0} docCache={docCache} folderKey={UNFILED_KEY} onLoadMore={onLoadMore} />
+              <DocumentLeaves
+                depth={0}
+                docCache={docCache}
+                folderKey={UNFILED_KEY}
+                onChanged={onChanged}
+                onLoadMore={onLoadMore}
+              />
             </ul>
           ) : null}
         </li>

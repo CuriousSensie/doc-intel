@@ -28,7 +28,6 @@ import { requireUser } from "@/modules/auth/session";
 import { getMembership } from "@/modules/organizations/organizations.service";
 import { listCustomFieldDefs } from "@/modules/custom-fields/custom-field-defs.service";
 import { mapRawCustomFieldValues } from "@/modules/custom-fields/custom-field-values";
-import { FolderExplorer } from "@/components/folders/folder-explorer";
 import {
   documentsViewSearchParamSchema,
   type DocumentListField,
@@ -130,10 +129,7 @@ export default async function DocumentsPage({
       : firstSearchValue(rawSearch.view);
   const viewParse = documentsViewSearchParamSchema.safeParse({ view: rawView });
   const foldersEnabled = isFeatureEnabled("folders");
-  // "folders" is a peer view mode gated by the same flag as the rest of the feature — an
-  // unparseable/disabled value falls back to the default list view, same as before.
-  const requestedView = viewParse.success ? viewParse.data.view : undefined;
-  const view = requestedView === "folders" && !foldersEnabled ? "list" : (requestedView ?? "list");
+  const view = viewParse.success ? (viewParse.data.view ?? "list") : "list";
   const savedFieldsParse = documentsViewSearchParamSchema.safeParse({ fields: savedColumns });
   const parsedVisibleFields =
     savedView?.view_kind === "dynamic" &&
@@ -143,41 +139,6 @@ export default async function DocumentsPage({
       : parseDocumentListFields(rawSearch);
 
   const client = await paperlessFor(organizationId);
-
-  // The explorer (view === "folders") owns its own navigation/fetching client-side (folder-
-  // explorer.tsx: listFolderTreeAction() + lazy per-folder listFolderDocumentsAction() calls) —
-  // it doesn't need this page's per-request document fetch at all, so that whole pipeline below
-  // is skipped for this view. The filter bar's own metadata (tags/correspondents/types/custom
-  // fields) is still needed since the view switcher — the only way back to the flat views — lives
-  // in it.
-  if (view === "folders") {
-    const [tags, correspondents, documentTypes, customFieldDefs] = await Promise.all([
-      getCachedTags(client, organizationId),
-      getCachedCorrespondents(client, organizationId),
-      getCachedDocumentTypes(client, organizationId),
-      listCustomFieldDefs(defsCtx)
-    ]);
-    return (
-      <div className="grid min-w-0 flex-1 gap-5">
-        <DocumentsFilterBar
-          current={{ fields: parsedVisibleFields, view }}
-          filterOptions={{
-            tags,
-            correspondents,
-            documentTypes: documentTypes.map((dt) => ({
-              key: toDocumentTypeKey(dt.name),
-              name: dt.name
-            })),
-            customFields: customFieldDefs.filter((def) => def.data_type !== "documentlink")
-          }}
-          foldersEnabled={foldersEnabled}
-          key={JSON.stringify(rawSearch)}
-          selectedEntity={null}
-        />
-        <FolderExplorer />
-      </div>
-    );
-  }
 
   const [
     { items: documents, totalCount, page, pageSize, totalPages },
@@ -317,7 +278,6 @@ export default async function DocumentsPage({
         foldersEnabled={foldersEnabled}
         filterOptions={{
           tags,
-          correspondents,
           documentTypes: documentTypes.map((dt) => ({
             key: toDocumentTypeKey(dt.name),
             name: dt.name

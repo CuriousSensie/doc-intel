@@ -5,7 +5,6 @@ import {
   ArrowUpAZ,
   CalendarDays,
   Columns3,
-  FolderTree,
   LayoutGrid,
   Rows3,
   Search,
@@ -33,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { SaveViewDialog } from "@/components/saved-views/save-view-dialog";
-import type { PaperlessCorrespondent, PaperlessTag } from "@/lib/paperless/documents";
+import type { PaperlessTag } from "@/lib/paperless/documents";
 import type { CustomFieldDef } from "@/modules/custom-fields/custom-field-defs.service";
 import type {
   DocumentListField,
@@ -42,11 +41,10 @@ import type {
 import type { DocumentSort, DocumentSortDirection } from "@/modules/documents/documents.service";
 import { DocumentUploadDialogButton } from "@/components/documents/document-upload-dialog-button";
 
-export type DocumentsViewMode = "list" | "smallCards" | "largeCards" | "folders";
+export type DocumentsViewMode = "list" | "smallCards" | "largeCards";
 
 type FilterOptions = {
   tags: PaperlessTag[];
-  correspondents: PaperlessCorrespondent[];
   // Pre-slugified server-side (toDocumentTypeKey()) so the option value matches
   // documents.document_type_key exactly — never the raw Paperless name.
   documentTypes: Array<{ key: string; name: string }>;
@@ -79,20 +77,17 @@ type Props = {
 const FIELD_VALUES: StaticDocumentListField[] = [
   "title",
   "tags",
-  "correspondent",
+  "folder",
   "documentType",
   "connections",
   "pages",
   "createdAt"
 ];
 
-// Folders is a peer view mode (ADR-0019 explorer redesign), filtered out below when the folders
-// feature flag is off — same gate as the "Upload folder" tab (foldersEnabled prop).
 const VIEW_MODE_LABEL_KEYS = {
   list: "viewTable",
   smallCards: "viewSmallCards",
-  largeCards: "viewLargeCards",
-  folders: "viewFolders"
+  largeCards: "viewLargeCards"
 } as const;
 const viewModeOptions: Array<{
   mode: DocumentsViewMode;
@@ -101,8 +96,7 @@ const viewModeOptions: Array<{
 }> = [
   { mode: "list", icon: Table2, labelKey: VIEW_MODE_LABEL_KEYS.list },
   { mode: "smallCards", icon: LayoutGrid, labelKey: VIEW_MODE_LABEL_KEYS.smallCards },
-  { mode: "largeCards", icon: Rows3, labelKey: VIEW_MODE_LABEL_KEYS.largeCards },
-  { mode: "folders", icon: FolderTree, labelKey: VIEW_MODE_LABEL_KEYS.folders }
+  { mode: "largeCards", icon: Rows3, labelKey: VIEW_MODE_LABEL_KEYS.largeCards }
 ];
 
 export function DocumentsFilterBar({ filterOptions, selectedEntity, current, foldersEnabled }: Props) {
@@ -161,9 +155,6 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
   }, [searchValue, current.q]);
 
   const activeTagCount = current.tagIds?.length ?? 0;
-  const selectedCorrespondent = filterOptions.correspondents.find(
-    (c) => c.id === current.correspondentId
-  );
   const selectedDocumentType = filterOptions.documentTypes.find(
     (dt) => dt.key === current.documentTypeKey
   );
@@ -192,7 +183,6 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
     ...(current.q ? { q: current.q } : {}),
     ...(current.titleOnly ? { titleOnly: true } : {}),
     ...(current.tagIds?.length ? { tagIds: current.tagIds } : {}),
-    ...(current.correspondentId ? { correspondentId: current.correspondentId } : {}),
     ...(current.documentTypeKey ? { documentTypeKey: current.documentTypeKey } : {}),
     ...(current.status ? { status: current.status } : {}),
     ...(current.dateFrom ? { dateFrom: current.dateFrom } : {}),
@@ -253,9 +243,7 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
       </Button>
 
       <div className="flex items-center overflow-hidden rounded-md border border-border">
-        {viewModeOptions
-          .filter(({ mode }) => mode !== "folders" || foldersEnabled)
-          .map(({ mode, icon: Icon, labelKey }) => (
+        {viewModeOptions.map(({ mode, icon: Icon, labelKey }) => (
             <button
               aria-label={t(labelKey)}
               aria-pressed={(current.view ?? "list") === mode}
@@ -347,33 +335,6 @@ export function DocumentsFilterBar({ filterOptions, selectedEntity, current, fol
               </DropdownMenuCheckboxItem>
             ))
           )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button className="justify-between" variant="outline">
-            {selectedCorrespondent?.name ?? t("allCorrespondents")}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="max-h-72 overflow-auto">
-          <DropdownMenuLabel>{t("correspondent")}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuRadioGroup
-            onValueChange={(value) =>
-              navigate((params) =>
-                setOrDelete(params, "correspondentId", value === "all" ? null : value)
-              )
-            }
-            value={current.correspondentId ? String(current.correspondentId) : "all"}
-          >
-            <DropdownMenuRadioItem value="all">{t("allCorrespondents")}</DropdownMenuRadioItem>
-            {filterOptions.correspondents.map((c) => (
-              <DropdownMenuRadioItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
 

@@ -1,5 +1,7 @@
 {
   "title": "Folders",
+  "notInOrganization": "You are not part of an organization yet.",
+  "createOrganization": "Create organization",
   "allDocuments": "All documents",
   "unfiled": "Unfiled",
   "newFolderTitle": "New folder",
@@ -36,6 +38,7 @@
   "loadDocumentsFailed": "Could not load documents",
   "manageAccess": "Access",
   "manageMatch": "Auto-file pattern",
+  "hasMatchPattern": "This folder has an auto-file pattern",
   "access": {
     "title": "Access to \"{name}\"",
     "directTitle": "Direct access",
