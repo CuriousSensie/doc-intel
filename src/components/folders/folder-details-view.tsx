@@ -87,19 +87,25 @@ export function FolderDetailsView(bag: ContentPaneBag) {
   );
 }
 
+// `...rest` receives whatever ContextMenuTrigger's `asChild` Slot merges onto this element
+// (onContextMenu, style, data-state/data-disabled) — FolderRow sits between the Slot and the real
+// `<tr>`, and since it's a plain component with a fixed prop list, those injected props would
+// otherwise be silently dropped before ever reaching a real DOM node, and the row's own right-click
+// menu would never open.
 function FolderRow({
   bag,
   node,
   selected,
   focused,
-  isCut
+  isCut,
+  ...rest
 }: {
   bag: ContentPaneBag;
   node: import("@/components/folders/folder-dnd").FolderNode;
   selected: boolean;
   focused: boolean;
   isCut: boolean;
-}) {
+} & React.HTMLAttributes<HTMLTableRowElement>) {
   const t = useTranslations("folders");
   const isAncestorOnly = node.accessLevel === "ancestor";
   const item = { kind: "folder" as const, id: node.id, folder: node };
@@ -107,6 +113,7 @@ function FolderRow({
 
   return (
     <TableRow
+      {...rest}
       className={cn(
         "group cursor-pointer",
         selected && "bg-panel-strong",
@@ -117,6 +124,12 @@ function FolderRow({
       data-selected={selected}
       draggable={!isAncestorOnly}
       onClick={(e) => bag.onItemMouseDown(item, e)}
+      onContextMenu={(e) => {
+        // Stop the native event from also reaching the content pane's blank-area context menu
+        // (whose trigger wraps the whole table) once this row's own menu has been asked to open.
+        e.stopPropagation();
+        rest.onContextMenu?.(e);
+      }}
       onDoubleClick={() => bag.onItemOpen(item)}
       onDragLeave={bag.onFolderDragLeave}
       onDragOver={(e) => bag.onFolderDragOver(node.id, e)}
@@ -176,23 +189,29 @@ function DocumentRow({
   document,
   selected,
   focused,
-  isCut
+  isCut,
+  ...rest
 }: {
   bag: ContentPaneBag;
   document: import("@/modules/documents/documents.service").Document;
   selected: boolean;
   focused: boolean;
   isCut: boolean;
-}) {
+} & React.HTMLAttributes<HTMLTableRowElement>) {
   const t = useTranslations("folders");
   const item = { kind: "document" as const, id: document.id, document };
 
   return (
     <TableRow
+      {...rest}
       className={cn("cursor-pointer", selected && "bg-panel-strong", focused && "ring-2 ring-inset ring-ring", isCut && "opacity-50")}
       data-selected={selected}
       draggable
       onClick={(e) => bag.onItemMouseDown(item, e)}
+      onContextMenu={(e) => {
+        e.stopPropagation();
+        rest.onContextMenu?.(e);
+      }}
       onDoubleClick={() => bag.onItemOpen(item)}
       onDragStart={(e) => bag.onItemDragStart(item, e)}
     >

@@ -246,4 +246,49 @@ describe("FolderExplorer", () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard/folders?folderId=folder-invoices"));
   });
+
+  it("right-clicking a document shows that document's own menu, not the folder's or the blank-area's", async () => {
+    listFolderTreeAction.mockResolvedValue([invoicesFolder]);
+    listFolderDocumentsAction.mockResolvedValue({
+      items: [fakeDocument("doc-1", "Receipt.pdf")],
+      totalCount: 1,
+      page: 1,
+      pageSize: 25,
+      totalPages: 1,
+      nextCursor: null
+    });
+
+    view();
+    await waitFor(() => expect(within(contentPane()).getByText("Invoices")).toBeVisible());
+    fireEvent.doubleClick(within(contentPane()).getByText("Invoices"));
+    await waitFor(() => expect(within(contentPane()).getByText("Receipt.pdf")).toBeVisible());
+
+    fireEvent.contextMenu(within(contentPane()).getByText("Receipt.pdf"));
+
+    // The document's own actions (rendered by Radix into a portal, so not scoped to contentPane).
+    await waitFor(() => expect(screen.getByText("Permissions")).toBeVisible());
+    // Never the folder-only or blank-area-only actions that the propagation bug used to leak in.
+    expect(screen.queryByText("Access")).not.toBeInTheDocument();
+    expect(screen.queryByText("New subfolder")).not.toBeInTheDocument();
+  });
+
+  it("right-clicking a folder shows that folder's own menu, not a document's", async () => {
+    listFolderTreeAction.mockResolvedValue([invoicesFolder]);
+    listFolderDocumentsAction.mockResolvedValue({
+      items: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 25,
+      totalPages: 1,
+      nextCursor: null
+    });
+
+    view();
+    await waitFor(() => expect(within(contentPane()).getByText("Invoices")).toBeVisible());
+
+    fireEvent.contextMenu(within(contentPane()).getByText("Invoices"));
+
+    await waitFor(() => expect(screen.getByText("Access")).toBeVisible());
+    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
+  });
 });

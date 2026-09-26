@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder as FolderIcon, Trash2, X } from "lucide-react";
+import { Folder as FolderIcon, Pencil, Trash2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -230,6 +230,37 @@ export function FolderExplorerContentPane({
     }
   }
 
+  function renameItem(id: string) {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (item.kind === "folder") setItemDialog({ type: "rename", folder: item.folder });
+    else {
+      setDocName(item.document.title);
+      setDocError(null);
+      setDocDialog({ type: "rename", document: item.document });
+    }
+  }
+
+  // A single selected item deletes through its own dialog (the folder dialog's require-empty/
+  // reassign/cascade/purge-everything modes, or the document's plain confirm) — the exact same
+  // dialog its "..." menu's Delete opens. Only an actual multi-item selection falls back to the
+  // generic "delete N items" confirmation, since there's no single set of modes that covers a
+  // mixed folder+document selection.
+  function deleteSelected(ids: string[]) {
+    if (ids.length === 1) {
+      const item = items.find((i) => i.id === ids[0]);
+      if (item?.kind === "folder") {
+        setItemDialog({ type: "delete", folder: item.folder });
+        return;
+      }
+      if (item?.kind === "document") {
+        setDocDialog({ type: "delete", document: item.document });
+        return;
+      }
+    }
+    setBulkDeleteOpen(true);
+  }
+
   const shortcuts = useFolderExplorerShortcuts({
     items,
     selectedIds: selection.selectedIds,
@@ -243,30 +274,8 @@ export function FolderExplorerContentPane({
         const item = items.find((i) => i.id === id);
         if (item) openItem(item);
       },
-      onRename: (id) => {
-        const item = items.find((i) => i.id === id);
-        if (!item) return;
-        if (item.kind === "folder") setItemDialog({ type: "rename", folder: item.folder });
-        else {
-          setDocName(item.document.title);
-          setDocError(null);
-          setDocDialog({ type: "rename", document: item.document });
-        }
-      },
-      onDelete: (ids) => {
-        if (ids.length === 1) {
-          const item = items.find((i) => i.id === ids[0]);
-          if (item?.kind === "folder") {
-            setItemDialog({ type: "delete", folder: item.folder });
-            return;
-          }
-          if (item?.kind === "document") {
-            setDocDialog({ type: "delete", document: item.document });
-            return;
-          }
-        }
-        setBulkDeleteOpen(true);
-      },
+      onRename: renameItem,
+      onDelete: deleteSelected,
       onCut: bulkCut,
       onPaste: () => (clipboard ? moveSelectionHere(currentFolderId === UNFILED_KEY ? null : currentFolderId) : undefined)
     }
@@ -279,7 +288,6 @@ export function FolderExplorerContentPane({
       onRename: node.accessLevel === "ancestor" ? undefined : () => setItemDialog({ type: "rename", folder: node }),
       onManageAccess: node.accessLevel === "ancestor" ? undefined : () => onManage(node.id, "access"),
       onManageMatch: node.accessLevel === "ancestor" ? undefined : () => onManage(node.id, "match"),
-      onCut: node.accessLevel === "ancestor" ? undefined : () => setClipboard({ kind: "folder", folderId: node.id }),
       onDelete: () => setItemDialog({ type: "delete", folder: node })
     };
   }
@@ -297,7 +305,6 @@ export function FolderExplorerContentPane({
         setDocPermissions(getDocumentPermissionsAction(document.id));
         setDocDialog({ type: "permissions", document });
       },
-      onCut: () => setClipboard({ kind: "documents", documentIds: [document.id] }),
       onDelete: () => setDocDialog({ type: "delete", document })
     };
   }
@@ -382,7 +389,7 @@ export function FolderExplorerContentPane({
 
   return (
     <div
-      className="min-h-96 rounded-lg border border-border bg-panel p-3 shadow-sm outline-none"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-panel p-3 shadow-sm outline-none"
       data-testid="folder-content-pane"
       onClick={() => selection.clear()}
       onKeyDown={shortcuts.onKeyDown}
@@ -390,12 +397,17 @@ export function FolderExplorerContentPane({
     >
       {selection.selectedIds.size > 0 ? (
         <div
-          className="mb-3 flex items-center justify-between gap-2 rounded-md bg-panel-strong px-3 py-1.5 text-sm"
+          className="mb-3 flex shrink-0 items-center justify-between gap-2 rounded-md bg-panel-strong px-3 py-1.5 text-sm"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="text-muted">{t("selectedCount", { count: selection.selectedIds.size })}</span>
           <div className="flex items-center gap-1">
-            <Button onClick={() => setBulkDeleteOpen(true)} size="sm" variant="outline">
+            {selection.selectedIds.size === 1 ? (
+              <Button onClick={() => renameItem([...selection.selectedIds][0])} size="sm" variant="outline">
+                <Pencil className="size-4" /> {t("rename")}
+              </Button>
+            ) : null}
+            <Button onClick={() => deleteSelected([...selection.selectedIds])} size="sm" variant="outline">
               <Trash2 className="size-4" /> {t("delete")}
             </Button>
             <Button onClick={() => selection.clear()} size="icon" variant="ghost">
@@ -411,7 +423,7 @@ export function FolderExplorerContentPane({
         onSetViewMode={onSetViewMode}
         viewMode={viewMode}
       >
-        <div onClick={(e) => e.stopPropagation()}>
+        <div className="-m-1 min-h-0 flex-1 overflow-y-auto p-1" onClick={(e) => e.stopPropagation()}>
           <ViewComponent {...bag} />
 
           {showUnfiledTile ? (
@@ -477,6 +489,7 @@ export function FolderExplorerContentPane({
       ) : null}
       {itemDialog?.type === "delete" ? (
         <DeleteFolderDialog
+          allFolders={allFolders}
           folder={itemDialog.folder}
           hasChildren={(itemDialog.folder.childFolderCount ?? 0) > 0}
           onDeleted={() => {

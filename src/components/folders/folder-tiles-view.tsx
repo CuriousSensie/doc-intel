@@ -14,6 +14,15 @@ import type { ContentPaneBag } from "@/components/folders/folder-content-types";
 import { FolderBulkContextMenu, FolderItemContextMenu } from "@/components/folders/folder-item-context-menu";
 import { cn } from "@/lib/utils";
 
+// The extra props ContextMenuTrigger's `asChild` Slot merges onto FolderTile/DocumentTile
+// (onContextMenu, style, data-state/data-disabled) — excludes the handlers these components
+// already declare explicitly with their own (differently-typed) signatures, so the two prop sets
+// never conflict.
+type TileRestProps = Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "onClick" | "onDoubleClick" | "onDragStart" | "onDragOver" | "onDragLeave" | "onDrop" | "children"
+>;
+
 // Large-icon grid — folders and documents as tiles, same responsive columns as
 // document-small-cards-view.tsx's grid for visual consistency across the app.
 export function FolderTilesView(bag: ContentPaneBag) {
@@ -70,6 +79,11 @@ export function FolderTilesView(bag: ContentPaneBag) {
   );
 }
 
+// `...rest` exists solely to receive whatever ContextMenuTrigger's `asChild` Slot merges onto
+// this element (onContextMenu, style, data-state/data-disabled) — FolderTile/DocumentTile sit
+// between the Slot and this div, and since they're plain components with a fixed prop list (not
+// `...props`-spreading passthroughs), those injected props would otherwise be silently dropped
+// before ever reaching a real DOM node, and the item's own right-click menu would never open.
 function TileShell({
   children,
   selected,
@@ -82,7 +96,8 @@ function TileShell({
   onDragStart,
   onDragOver,
   onDragLeave,
-  onDrop
+  onDrop,
+  ...rest
 }: {
   children: React.ReactNode;
   selected: boolean;
@@ -96,9 +111,10 @@ function TileShell({
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
+      {...rest}
       className={cn(
         "group relative flex flex-col items-center gap-1.5 rounded-lg border border-transparent p-3 text-center hover:bg-panel-strong/60",
         selected && "border-border bg-panel-strong",
@@ -109,6 +125,12 @@ function TileShell({
       data-selected={selected}
       draggable={draggable}
       onClick={onClick}
+      onContextMenu={(e) => {
+        // Stop the native event from also reaching the content pane's blank-area context menu
+        // (whose trigger wraps this whole grid) once this item's own menu has been asked to open.
+        e.stopPropagation();
+        rest.onContextMenu?.(e);
+      }}
       onDoubleClick={onDoubleClick}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
@@ -127,14 +149,15 @@ function FolderTile({
   node,
   selected,
   focused,
-  isCut
+  isCut,
+  ...rest
 }: {
   bag: ContentPaneBag;
   node: import("@/components/folders/folder-dnd").FolderNode;
   selected: boolean;
   focused: boolean;
   isCut: boolean;
-}) {
+} & TileRestProps) {
   const t = useTranslations("folders");
   const isAncestorOnly = node.accessLevel === "ancestor";
   const item = { kind: "folder" as const, id: node.id, folder: node };
@@ -142,6 +165,7 @@ function FolderTile({
 
   return (
     <TileShell
+      {...rest}
       draggable={!isAncestorOnly}
       dragOver={bag.dragOverFolderId === node.id}
       focused={focused}
@@ -202,18 +226,20 @@ function DocumentTile({
   document,
   selected,
   focused,
-  isCut
+  isCut,
+  ...rest
 }: {
   bag: ContentPaneBag;
   document: import("@/modules/documents/documents.service").Document;
   selected: boolean;
   focused: boolean;
   isCut: boolean;
-}) {
+} & TileRestProps) {
   const item = { kind: "document" as const, id: document.id, document };
 
   return (
     <TileShell
+      {...rest}
       draggable
       focused={focused}
       isCut={isCut}

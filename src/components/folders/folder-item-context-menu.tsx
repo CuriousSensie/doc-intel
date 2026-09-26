@@ -18,7 +18,6 @@ export type FolderItemMenuActions = {
   onManageAccess?: () => void;
   onManageMatch?: () => void;
   onDelete: () => void;
-  onCut?: () => void;
   onNewSubfolder?: () => void;
 };
 
@@ -28,12 +27,12 @@ export type DocumentItemMenuActions = {
   onRename: () => void;
   onPermissions: () => void;
   onDelete: () => void;
-  onCut?: () => void;
 };
 
-// Single-item right-click menu — folders and documents get their own action set (same actions as
-// the per-item dropdown menus), disabled/absent for ancestor-only folders (no menu at all,
-// matching the sidebar's rule for those nodes).
+// Single-item right-click menu — mirrors the "..." dropdown menu exactly for that item's kind
+// (same actions, nothing extra), so right-click never shows a folder-only action on a document or
+// vice versa. Disabled/absent entirely for ancestor-only folders (no menu at all, matching the
+// sidebar's rule for those nodes).
 export function FolderItemContextMenu({
   children,
   kind,
@@ -58,9 +57,6 @@ export function FolderItemContextMenu({
       <ContextMenuContent>
         {kind === "folder" && folderActions ? (
           <>
-            <ContextMenuItem onSelect={folderActions.onOpen}>
-              <ExternalLink className="size-4" /> {t("open")}
-            </ContextMenuItem>
             {folderActions.onNewSubfolder ? (
               <ContextMenuItem onSelect={folderActions.onNewSubfolder}>
                 <FolderPlus className="size-4" /> {t("newSubfolder")}
@@ -79,11 +75,6 @@ export function FolderItemContextMenu({
             {folderActions.onManageMatch ? (
               <ContextMenuItem onSelect={folderActions.onManageMatch}>
                 <Sparkles className="size-4" /> {t("manageMatch")}
-              </ContextMenuItem>
-            ) : null}
-            {folderActions.onCut ? (
-              <ContextMenuItem onSelect={folderActions.onCut}>
-                <Scissors className="size-4" /> {t("cut")}
               </ContextMenuItem>
             ) : null}
             <ContextMenuSeparator />
@@ -107,11 +98,6 @@ export function FolderItemContextMenu({
             <ContextMenuItem onSelect={documentActions.onPermissions}>
               <ShieldCheck className="size-4" /> {tDoc("permissions")}
             </ContextMenuItem>
-            {documentActions.onCut ? (
-              <ContextMenuItem onSelect={documentActions.onCut}>
-                <Scissors className="size-4" /> {t("cut")}
-              </ContextMenuItem>
-            ) : null}
             <ContextMenuSeparator />
             <ContextMenuItem className="text-danger" onSelect={documentActions.onDelete}>
               <Trash2 className="size-4" /> {tDoc("delete")}

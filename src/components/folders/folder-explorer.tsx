@@ -10,6 +10,7 @@ import { FolderAccessManager } from "@/components/folders/folder-access-manager"
 import { FolderMatchEditor } from "@/components/folders/folder-match-editor";
 import { FolderExplorerContentPane } from "@/components/folders/folder-explorer-content-pane";
 import { FolderExplorerSidebar } from "@/components/folders/folder-explorer-sidebar";
+import { FolderExplorerSkeleton } from "@/components/folders/folder-explorer-skeleton";
 import { FolderExplorerToolbar } from "@/components/folders/folder-explorer-toolbar";
 import { NewSubfolderDialog } from "@/components/folders/folder-dialogs";
 import { UNFILED_KEY, ancestorIds, buildTree } from "@/components/folders/folder-dnd";
@@ -183,7 +184,7 @@ export function FolderExplorer() {
   }
 
   if (folders === null) {
-    return <div className="rounded-lg border border-border bg-panel p-4 text-sm text-muted">{t("title")}…</div>;
+    return <FolderExplorerSkeleton />;
   }
 
   const tree = buildTree(folders);
@@ -203,7 +204,7 @@ export function FolderExplorer() {
   const newFolderParentId = currentFolder && currentFolder.accessLevel !== "ancestor" ? currentFolder.id : null;
 
   return (
-    <div className="flex min-w-0 flex-1 items-start gap-4">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 items-stretch gap-4">
       <FolderExplorerSidebar
         collapsed={sidebarCollapsed}
         currentFolderId={currentFolderId}
@@ -215,7 +216,7 @@ export function FolderExplorer() {
         onToggleExpand={toggleSidebarExpand}
       />
 
-      <div className="grid min-w-0 flex-1 gap-3">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[auto_1fr] gap-3">
         <FolderExplorerToolbar
           currentFolderId={currentFolderId}
           folders={folders}

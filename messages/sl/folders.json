@@ -11,6 +11,7 @@
   "renameTitle": "Preimenuj mapo",
   "renameFailed": "Mape ni bilo mogoče preimenovati",
   "delete": "Izbriši",
+  "deleting": "Brisanje…",
   "deleteTitle": "Izbriši \"{name}\"",
   "deleteDescription": "Izberite, kaj naj se zgodi z dokumenti in podmapami te mape.",
   "deleteFailed": "Mape ni bilo mogoče izbrisati",
@@ -18,7 +19,8 @@
   "deleteMode": {
     "requireEmpty": "Samo, če je prazna",
     "reassignToNull": "Premakni njene dokumente v Brez mape",
-    "cascade": "Izbriši tudi njene podmape"
+    "cascade": "Izbriši tudi njene podmape",
+    "purgeAll": "Izbriši to mapo in vse v njej (podmape in dokumente) — tega ni mogoče razveljaviti"
   },
   "create": "Ustvari",
   "createFailed": "Mape ni bilo mogoče ustvariti",

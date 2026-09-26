@@ -11,6 +11,7 @@
   "renameTitle": "Rename folder",
   "renameFailed": "Could not rename folder",
   "delete": "Delete",
+  "deleting": "Deleting…",
   "deleteTitle": "Delete \"{name}\"",
   "deleteDescription": "Choose what happens to this folder's documents and subfolders.",
   "deleteFailed": "Could not delete folder",
@@ -18,7 +19,8 @@
   "deleteMode": {
     "requireEmpty": "Only if empty",
     "reassignToNull": "Move its documents to Unfiled",
-    "cascade": "Delete its subfolders too"
+    "cascade": "Delete its subfolders too",
+    "purgeAll": "Delete this folder and everything inside it (subfolders and documents) — can't be undone"
   },
   "create": "Create",
   "createFailed": "Could not create folder",

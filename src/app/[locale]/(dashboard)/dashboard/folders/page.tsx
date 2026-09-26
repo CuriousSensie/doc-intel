@@ -36,7 +36,11 @@ export default async function FoldersPage() {
   }
 
   return (
-    <div className="grid min-w-0 flex-1 gap-5">
+    // Cancels the dashboard shell's own `main` padding (px-4 py-6 sm:px-6 lg:px-8 lg:py-8) and
+    // reinstates it as this element's own padding, so this div's height can be pinned to exactly
+    // the viewport below the topbar — the explorer's sidebar and content pane scroll internally
+    // instead of the whole page scrolling.
+    <div className="-mx-4 -my-6 flex h-[calc(100vh-var(--topbar-height))] min-h-0 min-w-0 flex-1 flex-col px-4 py-6 sm:-mx-6 sm:px-6 lg:-mx-8 lg:-my-8 lg:px-8 lg:py-8">
       <FolderExplorer />
     </div>
   );

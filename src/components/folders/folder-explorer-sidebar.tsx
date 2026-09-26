@@ -205,7 +205,7 @@ export function FolderExplorerSidebar({
 
   if (collapsed) {
     return (
-      <div className="flex h-fit flex-col items-center gap-2 rounded-lg border border-border bg-panel p-2 shadow-sm">
+      <div className="flex h-full flex-col items-center gap-2 rounded-lg border border-border bg-panel p-2 shadow-sm">
         <button
           aria-label={t("expandSidebar")}
           className="flex size-8 items-center justify-center rounded text-muted hover:bg-panel-strong"
@@ -221,9 +221,9 @@ export function FolderExplorerSidebar({
   return (
     <nav
       aria-label={t("title")}
-      className="grid w-56 shrink-0 content-start gap-1 self-start rounded-lg border border-border bg-panel p-2 shadow-sm"
+      className="flex h-full w-56 shrink-0 flex-col gap-1 overflow-hidden rounded-lg border border-border bg-panel p-2 shadow-sm"
     >
-      <div className="mb-1 flex items-center justify-between px-1.5">
+      <div className="mb-1 flex shrink-0 items-center justify-between px-1.5">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{t("title")}</h2>
         <div className="flex items-center gap-0.5">
           <button
@@ -245,7 +245,7 @@ export function FolderExplorerSidebar({
         </div>
       </div>
 
-      <ul>
+      <ul className="min-h-0 flex-1 overflow-y-auto">
         <li>
           <button
             className={cn(

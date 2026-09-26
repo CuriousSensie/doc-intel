@@ -38,6 +38,13 @@ export function isDescendant(folders: Folder[], candidateId: string, ancestorId:
   return false;
 }
 
+// Every folder in the subtree rooted at folderId (not including folderId itself) — used for the
+// "delete this folder and everything inside it" recursive delete, which has to walk down to every
+// descendant document across every descendant folder, not just this folder's direct children.
+export function descendantFolderIds(folders: Folder[], folderId: string): string[] {
+  return folders.filter((f) => isDescendant(folders, f.id, folderId)).map((f) => f.id);
+}
+
 // Resolves a folder's ancestor id chain by walking parentFolderId on the flat list — the only way
 // to get it client-side since path_ids isn't exposed to the client.
 export function ancestorIds(folders: Folder[], folderId: string): string[] {
