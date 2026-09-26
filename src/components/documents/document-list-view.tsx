@@ -120,7 +120,7 @@ export function DocumentListView({
               onDoubleClick={() => handleDoubleClick(document.id)}
               onDragStart={(e) => {
                 // Drag the current multi-selection if this row is part of it, otherwise just this
-                // row — read by folder-tree.tsx's drop handlers (DOCUMENT_DRAG_MIME).
+                // row — read by the folder explorer's drop handlers (DOCUMENT_DRAG_MIME).
                 const ids = selectedIds.has(document.id) ? [...selectedIds] : [document.id];
                 e.dataTransfer.setData(
                   "application/x-doc-intel-document-ids",

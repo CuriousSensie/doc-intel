@@ -27,7 +27,7 @@ import { deleteDocumentAction, updateDocumentAction } from "@/modules/documents/
 import { getDocumentPermissionsAction } from "@/modules/documents/document-shares.actions";
 import type { PermissionsResult } from "@/modules/documents/document-shares.service";
 
-// File-level counterpart to the folder actions menu in folder-tree.tsx: rename (title), permissions
+// File-level counterpart to the folder actions menus in the folder explorer: rename (title), permissions
 // and delete, in one dropdown reused by both the flat listings and the explorer's document leaves.
 // Open/download stay here too so a leaf has the same affordances as a listing row.
 export function DocumentActionsMenu({

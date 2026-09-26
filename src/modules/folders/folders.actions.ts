@@ -119,8 +119,8 @@ export async function resolveOrCreateFolderPathsAction(paths: string[]): Promise
   return resolveOrCreateFolderPaths(ctx, parsed.paths);
 }
 
-// Folders explorer view — a folder node's direct documents, fetched lazily on first expand and
-// cached client-side by the caller (folder-tree.tsx) so re-expanding never re-fetches.
+// Folders explorer view — a folder node's direct documents, fetched lazily on first open and
+// cached client-side by the caller (folder-explorer.tsx) so re-opening never re-fetches.
 export async function listFolderDocumentsAction(
   folderId: string | null,
   pagination: { page?: number; pageSize?: DocumentPageSize } = {}
